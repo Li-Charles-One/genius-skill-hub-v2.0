@@ -1,0 +1,4 @@
+interface:
+  display_name: "WePlaning Project Memory"
+  short_description: "Maintain WePlaning v2.2 project collaboration memory."
+  default_prompt: "Use WePlaning to initialize, resume, close, hand off, or migrate project memory for this repository."

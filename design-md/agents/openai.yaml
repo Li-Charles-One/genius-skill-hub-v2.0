@@ -1,0 +1,4 @@
+interface:
+  display_name: "DESIGN.md"
+  short_description: "Apply brand design systems to projects"
+  default_prompt: "Use $design-md to fetch or apply a brand DESIGN.md file for this project, then follow the design system while updating the UI."

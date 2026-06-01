@@ -1,0 +1,73 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate skill metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          skills = sorted(Path(".").glob("**/SKILL.md"))
+          if not skills:
+              raise SystemExit("No SKILL.md files found")
+          for skill in skills:
+              text = skill.read_text(encoding="utf-8")
+              if not text.startswith("---\n"):
+                  raise SystemExit(f"{skill}: missing YAML frontmatter")
+              end = text.find("\n---", 4)
+              if end == -1:
+                  raise SystemExit(f"{skill}: frontmatter not closed")
+              frontmatter = text[4:end]
+              for key in ("name:", "description:"):
+                  if key not in frontmatter:
+                      raise SystemExit(f"{skill}: missing {key}")
+              print(f"valid metadata: {skill}")
+          PY
+
+      - name: Check WePlaning scripts syntax
+        run: |
+          find weplaning-project-memory-skill/weplaning-project-memory/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
+
+      - name: Smoke test WePlaning lifecycle
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          scripts="weplaning-project-memory-skill/weplaning-project-memory/scripts"
+
+          session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Smoke" --goal "Validate WePlaning scripts" --agent CI --adapter GitHubActions --os linux | tail -n1)"
+          node "$scripts/check-memory.cjs" "$root"
+          node "$scripts/session-list.cjs" "$root"
+
+          work="$(node "$scripts/new-session.cjs" "$root" --role editor --summary "CI work session" --goal "Exercise scripts" --agent CI --adapter GitHubActions --os linux --short-id work | tail -n1)"
+          node "$scripts/sync-before-write.cjs" "$root" --session "$work"
+          node "$scripts/register-agent.cjs" "$root" --session "$work" --agent CI --adapter GitHubActions --os linux --tool node --skill weplaning-project-memory
+          node "$scripts/append-change.cjs" "$root" --session "$work" --agent CI --changed "CI smoke change" --file ".agent-memory/CHANGES.md" --verification "append-change passed"
+          node "$scripts/merge-session.cjs" "$root" --session "$work" --agent CI
+          node "$scripts/repair-memory.cjs" "$root" --agent CI
+          node "$scripts/handoff.cjs" "$root" --session "$work" --tools "node" --commands "GitHub Actions smoke" --merge "already merged" >/tmp/handoff.txt
+          test -s /tmp/handoff.txt
+          node "$scripts/check-memory.cjs" "$root"
+
+      - name: Smoke test WePlaning repair
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          scripts="weplaning-project-memory-skill/weplaning-project-memory/scripts"
+
+          session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Repair" --goal "Validate repair" --agent CI --adapter GitHubActions --os linux | tail -n1)"
+          rm "$root/.agent-memory/sessions/$session.md"
+          node "$scripts/repair-memory.cjs" "$root" --dry-run
+          node "$scripts/repair-memory.cjs" "$root" --agent CI
+          node "$scripts/check-memory.cjs" "$root"

@@ -1,0 +1,23 @@
+﻿{
+  "skill_name": "skill-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想创建一个技能，用来自动备份我的代码到 GitHub",
+      "expected_output": "应该触发 brainstorming 技能，引导用户明确需求，然后创建 SKILL.md 文件",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "帮我优化这个技能的描述，让它更容易被触发",
+      "expected_output": "应该触发 skill-creator 的描述优化功能",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我想测试一下我的技能效果如何",
+      "expected_output": "应该触发 skill-creator 的评估功能，创建测试用例并运行",
+      "files": []
+    }
+  ]
+}
