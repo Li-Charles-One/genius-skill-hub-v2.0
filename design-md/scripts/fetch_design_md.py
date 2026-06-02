@@ -1,5 +1,5 @@
-﻿#!/usr/bin/env python3
-"""Fetch a DESIGN.md from awesome-design-md GitHub repo."""
+#!/usr/bin/env python3
+"""Fetch a DESIGN.md from awesome-design-md GitHub repo (fork-first, upstream fallback)."""
 import sys
 import urllib.request
 import os
@@ -22,25 +22,30 @@ BRANDS = {
     "sanity": "sanity", "clickhouse": "clickhouse", "composio": "composio",
     "cal": "cal", "intercom": "intercom", "zapier": "zapier",
     "airtable": "airtable", "clay": "clay", "minimax": "minimax",
-    "mistral": "mistral.ai", "voltagent": "voltagent", "openai": "openai",
+    "mistral": "mistral.ai", "voltagent": "voltagent",
     "binance": "binance", "kraken": "kraken", "mastercard": "mastercard",
     "meta": "meta", "vodafone": "vodafone", "renault": "renault",
     "bugatti": "bugatti", "bmw-m": "bmw-m",
+    "dell-1996": "dell-1996", "hp": "hp", "slack": "slack",
 }
 
-BASE_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md"
+# Primary: your fork. If unavailable, fall back to upstream.
+FORK_URL = "https://raw.githubusercontent.com/Li-Charles-One/awesome-design-md/main/design-md"
+UPSTREAM_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md"
 
 def fetch(brand: str, output: str = "DESIGN.md"):
     slug = BRANDS.get(brand.lower(), brand.lower())
-    url = f"{BASE_URL}/{slug}/DESIGN.md"
-    try:
-        urllib.request.urlretrieve(url, output)
-        size = os.path.getsize(output)
-        print(f"✅ Downloaded {brand} → {output} ({size} bytes)")
-    except Exception as e:
-        print(f"❌ Failed to fetch '{brand}': {e}")
-        print(f"   URL: {url}")
-        sys.exit(1)
+    urls = [f"{FORK_URL}/{slug}/DESIGN.md", f"{UPSTREAM_URL}/{slug}/DESIGN.md"]
+    for url in urls:
+        try:
+            urllib.request.urlretrieve(url, output)
+            size = os.path.getsize(output)
+            print(f"✅ Downloaded {brand} → {output} ({size} bytes)")
+            return
+        except Exception:
+            continue
+    print(f"❌ Failed to fetch '{brand}' from both fork and upstream")
+    sys.exit(1)
 
 def list_brands():
     print("Available brands:")
