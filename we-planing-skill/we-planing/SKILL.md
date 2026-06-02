@@ -24,30 +24,54 @@ The first time you use WePlaning on a project (or when the user asks to "remembe
 **Create a `priority: high` project memory** using the Agent's `remember` tool (or equivalent). This ensures every future session gets the discipline rules BEFORE it even invokes the skill.
 
 Memory name: `weplaning-auto-discipline`
-Memory content: the three mandatory rules below (check-memory on every write, merge-session on closeout, TOOLS.md update before merge). Write them as imperative Agent instructions, not suggestions.
+Memory content: keep it MINIMAL — one rule only. The skill file (loaded via `/skill we-planing` or `run_skill`) is the single authoritative source. The memory is just a bootstrap trigger:
+
+> "Before any write to `.agent-memory/`, invoke `/skill we-planing` (or `run_skill we-planing`) to load the full protocol. The skill is the sole source of truth — do not rely on memory alone for procedure."
+
+Do NOT duplicate the full ruleset into the memory. Duplication creates fork points where Agent follows stale memory over updated skill.
 
 Then ALSO follow the rules in this SKILL.md when the skill is invoked. The memory is the safety net; the skill is the playbook.
 
 ### On every memory write
 
-After ANY write to `.agent-memory/` (CURRENT.md edit, session update, CHANGES.md append, TOOLS.md edit):
+After ANY write to `.agent-memory/` (CURRENT.md edit, session update, CHANGES.md append, TOOLS.md edit), you MUST run:
 
 ```bash
 node <skill-dir>/scripts/check-memory.cjs <project-root>
 ```
 
-If it fails → run `repair-memory.cjs` first, then re-check. Do NOT report success until the gate passes.
+The output MUST contain `WePlaning memory check passed.` before you proceed to ANY other task. If you do NOT see that exact string:
+
+1. STOP immediately — do NOT start another task, do NOT report success.
+2. Run `repair-memory.cjs`, then re-run `check-memory.cjs`.
+3. Repeat until you see `passed`.
+4. Only then may you continue.
+
+This is NOT optional. Skipping check-memory after a write is a protocol violation.
 
 ### On session closeout
 
-When a session produces durable changes (files edited, decisions made, state changed):
+When a session produces durable changes, you MUST close it properly. Skipping any step is a protocol violation.
+
+**Preferred (1 step):** Use `safe-edit.cjs` which runs the entire pipeline atomically:
+
+```bash
+node <skill-dir>/scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" --file <path> --verification "<cmd>"
+```
+
+If `safe-edit.cjs` exits 0, all steps passed. If it exits non-zero, fix the reported failure and re-run.
+
+**Manual fallback (6 steps):** Only when safe-edit cannot express your intent:
 
 1. Run `pre-close-check.cjs` — scans for TOOLS.md unknowns, CHANGES.md unknowns, mainline drift.
-2. Fix any warnings: update TOOLS.md, re-run append-change with --file/--verification.
-3. Update `TOOLS.md` — fill in ALL tools actually used this session (not "unknown").
-4. Run `merge-session.cjs` — this syncs THREADS.md, CURRENT.md, WePlaning.md automatically.
-5. Run `check-memory.cjs` — confirm all invariants hold.
-6. Only then report "memory updated successfully."
+   - If it reports warnings, you MUST fix them before proceeding.
+2. Update `TOOLS.md` — fill in ALL tools actually used this session. No field may remain "unknown".
+3. Run `append-change.cjs` with `--file` and `--verification` — missing either is a failure.
+4. Run `merge-session.cjs` — syncs THREADS.md, CURRENT.md, WePlaning.md.
+5. Run `check-memory.cjs` — the output MUST contain `passed`.
+6. Only when `check-memory.cjs` outputs `passed` may you report "memory updated successfully."
+
+If check-memory fails after merge, you MUST repair and re-check — do NOT report success until it passes.
 
 ### Before starting any new session
 
@@ -64,6 +88,30 @@ Prior sessions without this discipline caused:
 - Session files not reflecting actual closeout state
 
 The scripts make all of this automatic. The Agent just needs to CALL them.
+
+### 🔍 Output Auditability (MUST)
+
+After running ANY of these scripts, you MUST display the status to the user in your response:
+
+- `check-memory.cjs`
+- `merge-session.cjs`
+- `append-change.cjs`
+- `safe-edit.cjs`
+- `pre-close-check.cjs`
+
+Format:
+
+```
+✅ check-memory — passed
+```
+
+or
+
+```
+❌ check-memory — FAILED: Mainline mismatch: CURRENT.md=X, THREADS.md=Y
+```
+
+The user sees these indicators in the chat. If a check fails and you do not display it, the user cannot hold you accountable. If you skip displaying status, it is a protocol violation.
 
 ## Bundled Scripts
 
@@ -85,10 +133,12 @@ node scripts/sync-before-write.cjs <project-root> --session <session-id>
 node scripts/handoff.cjs <project-root> --session <session-id>
 node scripts/pre-close-check.cjs <project-root> [--session <id>] [--fix]
 node scripts/sync-skill-package.cjs --source <skill-dir> --target <skill-dir>
+node scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" [options]
 ```
 
 Use scripts first for:
 
+- **closing and merging a session safely** — prefer `safe-edit.cjs` (single atomic pipeline);
 - initializing Minimal Mode memory;
 - creating session files and `THREADS.md` entries;
 - appending standard `CHANGES.md` entries;
