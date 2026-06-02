@@ -130,7 +130,7 @@
 | Element | Style |
 |---------|-------|
 | **整体** | 全宽（页面宽度）。无外边框。 |
-| **表头行** | `bg-primary`（`#000000`）背景。`text-primary`（`#ffffff`）文字，12pt，weight 500。上下 padding 12px，左右 16px。 |
+| **表头行** | `border`（`#222222`）背景。`text-primary`（`#ffffff`）文字，12pt，weight 500。上下 padding 12px，左右 16px。 |
 | **数据行** | 白底。`#000000` 文字，12pt，weight 300。上下 padding 10px，左右 16px。 |
 | **行分隔** | 仅底部 1px `border`（`#222222`）。无竖线。 |
 | **分类行** | `accent-dim`（`rgba(0,168,255,0.08)`）背景。`accent` 文字，12pt，weight 600。 |
@@ -169,7 +169,7 @@
 
 | Property | Value |
 |----------|-------|
-| Fill | `bg-primary` (`#000000`) |
+| Fill | `border` (`#222222`) |
 | Font | `text-primary` (`#ffffff`), 12pt, weight 500 |
 | Letter Spacing | 2px（通过字符间距设置） |
 | Alignment | 左对齐 |
@@ -359,7 +359,7 @@
 | Element | Style |
 |---------|-------|
 | Background | `bg-card` (`#111111`) with 1px `border` (`#222222`), 8px radius |
-| Header row | `bg-primary` (`#000000`), white 12pt weight 500 |
+| Header row | `border` (`#222222`), white 12pt weight 500 |
 | Data rows | `#111111` bg. `#ffffff` text, 11pt weight 300. 底部 1px `#222222` |
 | Category row | `accent-dim` bg, `accent` text |
 | Totals | 顶部 2px `accent`, `accent` text, bold |
