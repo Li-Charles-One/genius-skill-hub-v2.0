@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>极简商务 — Document Brand Preview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono&display=swap');
+
+  :root {
+    --primary: #1a1a2e;
+    --secondary: #16213e;
+    --accent: #e94560;
+    --background: #ffffff;
+    --surface: #f5f5f7;
+    --text-primary: #1a1a2e;
+    --text-secondary: #6b7280;
+    --border: #e5e7eb;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'Inter', sans-serif;
+    font-size: 11pt;
+    line-height: 1.35;
+    color: var(--text-primary);
+    background: #f0f0f0;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* Section */
+  .section {
+    background: var(--background);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 32px;
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 24px 32px 0;
+  }
+
+  .section-header h2 {
+    font-family: 'DM Serif Display', 'Noto Sans SC', serif;
+    font-size: 20pt;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 4px;
+  }
+
+  .section-header .divider {
+    width: 60px;
+    height: 3px;
+    background: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .section-header .desc {
+    font-size: 9pt;
+    color: var(--text-secondary);
+    font-weight: 300;
+  }
+
+  .section-body {
+    padding: 24px 32px 32px;
+  }
+
+  /* Color Swatches */
+  .swatch-grid {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    flex: 0 0 auto;
+    text-align: center;
+  }
+
+  .swatch-box {
+    width: 80px;
+    height: 56px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+
+  .swatch-label {
+    font-size: 8pt;
+    color: var(--text-secondary);
+    font-weight: 300;
+  }
+
+  .swatch-hex {
+    font-size: 8pt;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+  }
+
+  /* Typography Samples */
+  .type-sample {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .type-sample:last-child { border-bottom: none; }
+
+  .type-h1 { font-family: 'DM Serif Display', 'Noto Sans SC', serif; font-size: 28pt; font-weight: 700; color: var(--primary); line-height: 1.2; }
+  .type-h2 { font-family: 'Noto Sans SC', sans-serif; font-size: 20pt; font-weight: 700; color: var(--primary); line-height: 1.25; }
+  .type-h3 { font-family: 'Noto Sans SC', sans-serif; font-size: 16pt; font-weight: 600; color: var(--primary); line-height: 1.3; border-bottom: 0.5pt solid var(--border); padding-bottom: 6px; }
+  .type-h4 { font-family: 'Noto Sans SC', sans-serif; font-size: 14pt; font-weight: 500; color: var(--secondary); line-height: 1.3; }
+  .type-body { font-family: 'Noto Sans SC', 'Inter', sans-serif; font-size: 11pt; font-weight: 400; color: var(--text-primary); line-height: 1.35; }
+  .type-caption { font-family: 'Noto Sans SC', 'Inter', sans-serif; font-size: 9pt; font-weight: 300; color: var(--text-secondary); line-height: 1.4; }
+  .type-code { font-family: 'JetBrains Mono', monospace; font-size: 10pt; font-weight: 400; color: var(--secondary); background: var(--surface); padding: 2px 6px; border-radius: 3px; }
+
+  .type-meta {
+    font-size: 8pt;
+    color: var(--text-secondary);
+    font-weight: 300;
+    margin-top: 2px;
+  }
+
+  /* DOCX Preview */
+  .docx-page {
+    background: white;
+    width: 100%;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 72px 72px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid var(--border);
+    font-family: 'Noto Sans SC', 'Inter', sans-serif;
+  }
+
+  .docx-page .doc-title {
+    font-family: 'DM Serif Display', 'Noto Sans SC', serif;
+    font-size: 28pt;
+    font-weight: 700;
+    color: var(--primary);
+    text-align: center;
+    margin-top: 120px;
+    margin-bottom: 16px;
+    line-height: 1.2;
+  }
+
+  .docx-page .doc-subtitle {
+    font-size: 14pt;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 60px;
+  }
+
+  .docx-page .doc-date {
+    font-size: 10pt;
+    color: var(--text-secondary);
+    text-align: right;
+    margin-top: 200px;
+  }
+
+  .docx-page .doc-org {
+    font-size: 10pt;
+    color: var(--text-secondary);
+    margin-top: 8px;
+  }
+
+  .docx-page h1 {
+    font-family: 'DM Serif Display', 'Noto Sans SC', serif;
+    font-size: 20pt; font-weight: 700; color: var(--primary);
+    margin-top: 18pt; margin-bottom: 6pt; line-height: 1.25;
+  }
+
+  .docx-page h2 {
+    font-size: 16pt; font-weight: 600; color: var(--primary);
+    border-bottom: 0.5pt solid var(--border);
+    padding-bottom: 6pt; margin-top: 12pt; margin-bottom: 6pt; line-height: 1.3;
+  }
+
+  .docx-page h3 {
+    font-size: 14pt; font-weight: 500; color: var(--secondary);
+    margin-top: 8pt; margin-bottom: 4pt; line-height: 1.3;
+  }
+
+  .docx-page p {
+    font-size: 11pt; line-height: 1.35; color: var(--text-primary);
+    margin-bottom: 6pt; text-align: justify;
+  }
+
+  .docx-page ul {
+    margin-left: 36px; margin-bottom: 6pt;
+  }
+
+  .docx-page ul li {
+    font-size: 11pt; line-height: 1.35; color: var(--text-primary);
+  }
+
+  .docx-page ul li::marker { color: var(--accent); font-size: 8pt; }
+
+  /* DOCX Table */
+  .docx-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12pt 0;
+  }
+
+  .docx-table thead th {
+    background: var(--secondary);
+    color: white;
+    font-weight: 600;
+    font-size: 11pt;
+    padding: 4pt 6pt;
+    text-align: left;
+    border: 0.5pt solid var(--border);
+  }
+
+  .docx-table tbody td {
+    padding: 4pt 6pt;
+    font-size: 11pt;
+    color: var(--text-primary);
+    border: 0.5pt solid var(--border);
+  }
+
+  .docx-table tbody tr:nth-child(even) td {
+    background: var(--surface);
+  }
+
+  .docx-table tfoot td {
+    padding: 4pt 6pt;
+    font-size: 11pt;
+    font-weight: 600;
+    color: var(--primary);
+    border-top: 1.5pt solid var(--accent);
+  }
+
+  /* Header/Footer */
+  .docx-header, .docx-footer {
+    font-size: 9pt;
+    color: var(--text-secondary);
+    font-weight: 300;
+    padding: 8px 72px;
+  }
+
+  .docx-header {
+    border-bottom: 0.5pt solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .docx-footer {
+    border-top: 0.5pt solid var(--border);
+    text-align: right;
+  }
+
+  /* XLSX Preview */
+  .xlsx-preview {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: 'Noto Sans SC', 'Inter', sans-serif;
+  }
+
+  .xlsx-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11pt;
+  }
+
+  .xlsx-preview thead th {
+    background: var(--secondary);
+    color: white;
+    font-weight: 600;
+    font-size: 11pt;
+    padding: 5pt 8pt;
+    text-align: left;
+    border-bottom: 1pt solid var(--accent);
+    white-space: nowrap;
+  }
+
+  .xlsx-preview thead th.number { text-align: right; }
+
+  .xlsx-preview tbody td {
+    padding: 4pt 8pt;
+    border: 0.5pt solid var(--border);
+    font-size: 11pt;
+    color: var(--text-primary);
+  }
+
+  .xlsx-preview tbody td.number {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10pt;
+  }
+
+  .xlsx-preview tbody tr:nth-child(even) td {
+    background: var(--surface);
+  }
+
+  .xlsx-preview tfoot td {
+    padding: 5pt 8pt;
+    font-weight: 600;
+    font-size: 11pt;
+    border-top: 1.5pt solid var(--accent);
+    background: var(--secondary);
+    color: white;
+  }
+
+  .xlsx-preview tfoot td.number {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .xlsx-print {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 6px;
+    display: flex;
+    gap: 16px;
+    font-size: 9pt;
+    color: var(--text-secondary);
+  }
+
+  .xlsx-print-header {
+    font-size: 8pt;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 0.5pt solid var(--border);
+  }
+
+  /* PPTX Preview */
+  .pptx-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .pptx-slide {
+    aspect-ratio: 16 / 9;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    position: relative;
+    overflow: hidden;
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  /* Cover Slide */
+  .slide-cover {
+    padding: 16% 8% 6% 8%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .slide-cover .title {
+    font-size: 2.6vw;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+
+  .slide-cover .accent-bar {
+    width: 40%;
+    height: 4px;
+    background: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .slide-cover .subtitle {
+    font-size: 1.3vw;
+    color: var(--text-secondary);
+  }
+
+  .slide-cover .meta {
+    position: absolute;
+    bottom: 5%;
+    font-size: 0.8vw;
+    color: var(--text-secondary);
+  }
+
+  .slide-cover .meta.left { left: 8%; }
+  .slide-cover .meta.right { right: 8%; }
+
+  /* Content Slide */
+  .slide-content {
+    padding: 5% 8% 6% 8%;
+  }
+
+  .slide-content .slide-title {
+    font-size: 1.9vw;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 8px;
+  }
+
+  .slide-content .slide-rule {
+    width: 100%;
+    height: 0.5px;
+    background: var(--border);
+    margin-bottom: 16px;
+  }
+
+  .slide-content .body-text {
+    font-size: 1.1vw;
+    color: var(--text-primary);
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+
+  .slide-content ul {
+    margin-left: 18px;
+    list-style: none;
+  }
+
+  .slide-content ul li {
+    font-size: 1.1vw;
+    color: var(--text-primary);
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+
+  .slide-content ul li::before {
+    content: "•";
+    color: var(--accent);
+    font-size: 0.7vw;
+    margin-right: 8px;
+  }
+
+  /* Section Divider */
+  .slide-divider {
+    background: var(--secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .slide-divider .section-num {
+    font-size: 4.5vw;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .slide-divider .section-title {
+    font-size: 2.3vw;
+    font-weight: 700;
+    color: white;
+  }
+
+  .slide-divider .section-rule {
+    width: 25%;
+    height: 2px;
+    background: var(--accent);
+  }
+
+  /* TOC Slide */
+  .slide-toc {
+    padding: 5% 8% 6% 8%;
+  }
+
+  .slide-toc .toc-title {
+    font-size: 1.9vw;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 8px;
+  }
+
+  .slide-toc .toc-rule {
+    width: 40px;
+    height: 2px;
+    background: var(--accent);
+    margin-bottom: 20px;
+  }
+
+  .slide-toc .toc-item {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+
+  .slide-toc .toc-num {
+    font-size: 1.4vw;
+    font-weight: 700;
+    color: var(--accent);
+    width: 2.5vw;
+    flex-shrink: 0;
+  }
+
+  .slide-toc .toc-text {
+    font-size: 1.1vw;
+    color: var(--primary);
+    flex: 1;
+  }
+
+  .slide-toc .toc-page {
+    font-size: 0.9vw;
+    color: var(--text-secondary);
+  }
+
+  /* PPTX Table in slide */
+  .pptx-table-wrap {
+    margin-top: 12px;
+  }
+
+  .pptx-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9vw;
+  }
+
+  .pptx-table-wrap th {
+    background: var(--secondary);
+    color: white;
+    font-weight: 600;
+    padding: 3px 6px;
+    text-align: left;
+    border: 0.5pt solid var(--border);
+  }
+
+  .pptx-table-wrap td {
+    padding: 3px 6px;
+    border: 0.5pt solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .pptx-table-wrap tr:nth-child(even) td {
+    background: var(--surface);
+  }
+
+  /* Responsive */
+  .pptx-grid { grid-template-columns: 1fr 1fr; }
+
+  @media (max-width: 800px) {
+    .pptx-grid { grid-template-columns: 1fr; }
+    .pptx-slide { aspect-ratio: 16/9; }
+    .slide-cover .title { font-size: 4.5vw; }
+    .slide-cover .subtitle { font-size: 2.5vw; }
+    .slide-content .slide-title { font-size: 3.5vw; }
+    .slide-content .body-text, .slide-content ul li { font-size: 2vw; }
+    .slide-divider .section-num { font-size: 8vw; }
+    .slide-divider .section-title { font-size: 5vw; }
+  }
+
+  .label-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .label-tag {
+    font-size: 8pt;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .label-tag.active {
+    background: var(--accent);
+    color: white;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ===== DESIGN TOKENS ===== -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Design Tokens</h2>
+      <div class="divider"></div>
+      <div class="desc">色彩 · 字体 · 间距</div>
+    </div>
+    <div class="section-body">
+
+      <h3 style="margin-bottom:12px; font-size:14pt; font-weight:600; color:var(--primary);">Colors</h3>
+      <div class="swatch-grid">
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--primary)"></div>
+          <div class="swatch-label">primary</div>
+          <div class="swatch-hex">#1a1a2e</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--secondary)"></div>
+          <div class="swatch-label">secondary</div>
+          <div class="swatch-hex">#16213e</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--accent)"></div>
+          <div class="swatch-label">accent</div>
+          <div class="swatch-hex">#e94560</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--background); border:1px solid #ddd;"></div>
+          <div class="swatch-label">background</div>
+          <div class="swatch-hex">#ffffff</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--surface)"></div>
+          <div class="swatch-label">surface</div>
+          <div class="swatch-hex">#f5f5f7</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--text-secondary)"></div>
+          <div class="swatch-label">text-secondary</div>
+          <div class="swatch-hex">#6b7280</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-box" style="background:var(--border)"></div>
+          <div class="swatch-label">border</div>
+          <div class="swatch-hex">#e5e7eb</div>
+        </div>
+      </div>
+
+      <h3 style="margin: 24px 0 12px; font-size:14pt; font-weight:600; color:var(--primary);">Typography</h3>
+      <div class="type-sample">
+        <div class="type-h1">文档标题 Document Title</div>
+        <div class="type-meta">DM Serif Display / Noto Sans SC Bold · 700 · 28pt · line-height 1.2</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-h2">一级标题 Heading 1</div>
+        <div class="type-meta">Noto Sans SC Bold · 700 · 20pt · line-height 1.25</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-h3">二级标题 Heading 2 — 底部带分割线</div>
+        <div class="type-meta">Noto Sans SC Medium · 600 · 16pt · 0.5pt border-bottom · line-height 1.3</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-h4">三级标题 Heading 3</div>
+        <div class="type-meta">Noto Sans SC Medium · 500 · 14pt · color: secondary · line-height 1.3</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-body">正文 Body Text — 中文排版，两端对齐，段落间距 6pt。极简商务的核心在于让阅读者忘记设计的存在，只感受到内容的层次。每一处留白都是刻意的，每一个色块都有确切的职责。</div>
+        <div class="type-meta">Noto Sans SC Regular / Inter · 400 · 11pt · line-height 1.35</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-caption">说明 / 脚注 Caption — 这是辅助信息，用更浅的颜色和更小的字号与正文区分。</div>
+        <div class="type-meta">Noto Sans SC Light · 300 · 9pt · color: text-secondary · line-height 1.4</div>
+      </div>
+      <div class="type-sample">
+        <span class="type-code">const revenue = 12_345_678;</span>
+        <div class="type-meta">JetBrains Mono / Consolas · 400 · 10pt · background: surface · line-height 1.4</div>
+      </div>
+
+      <h3 style="margin: 24px 0 12px; font-size:14pt; font-weight:600; color:var(--primary);">Spacing</h3>
+      <div style="display:flex; gap:24px; font-size:10pt; color:var(--text-secondary);">
+        <div>页边距: <strong style="color:var(--primary)">2.54 cm</strong></div>
+        <div>段落间距: <strong style="color:var(--primary)">6pt</strong></div>
+        <div>行高: <strong style="color:var(--primary)">1.35</strong></div>
+        <div>表格内边距: <strong style="color:var(--primary)">4pt / 6pt</strong></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== DOCX PREVIEW ===== -->
+  <div class="section">
+    <div class="section-header">
+      <h2>minimax-docx</h2>
+      <div class="divider"></div>
+      <div class="desc">A4 · 2.54cm 页边距 · OpenXML SDK</div>
+    </div>
+    <div class="section-body" style="background:#e8e8e8; padding:32px; border-radius:0 0 8px 8px;">
+      <div class="docx-page">
+
+        <!-- Cover -->
+        <div class="doc-title">2026 年第一季度<br>业务运营报告</div>
+        <div class="doc-subtitle">极简商务主题 · 文档品牌系统演示</div>
+        <div class="doc-date">2026 年 6 月 2 日</div>
+        <div class="doc-org">Genius Agent · 战略发展部</div>
+
+        <div style="margin-top: 60px;">
+          <h1>执行摘要</h1>
+
+          <p>本报告基于 2026 年第一季度运营数据，从收入、成本、客户增长三个维度进行系统性分析。整体业务态势稳健，核心指标均优于去年同期。以下为详细数据分解与策略建议。</p>
+
+          <h2>收入分析</h2>
+
+          <h3>按产品线拆分</h3>
+
+          <p>第一季度总营收为 ¥12,345,678，同比增长 18.3%。其中 SaaS 订阅收入占比 62%，企业定制服务占比 28%，其他收入占比 10%。以下表格展示了各产品线的详细数据：</p>
+
+          <table class="docx-table">
+            <thead>
+              <tr>
+                <th>产品线</th>
+                <th style="text-align:right">Q1 营收</th>
+                <th style="text-align:right">占比</th>
+                <th style="text-align:right">同比增长</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SaaS 订阅</td>
+                <td style="text-align:right">¥7,654,320</td>
+                <td style="text-align:right">62.0%</td>
+                <td style="text-align:right">+22.1%</td>
+              </tr>
+              <tr>
+                <td>企业定制</td>
+                <td style="text-align:right">¥3,456,789</td>
+                <td style="text-align:right">28.0%</td>
+                <td style="text-align:right">+15.7%</td>
+              </tr>
+              <tr>
+                <td>咨询服务</td>
+                <td style="text-align:right">¥987,654</td>
+                <td style="text-align:right">8.0%</td>
+                <td style="text-align:right">+8.2%</td>
+              </tr>
+              <tr>
+                <td>其他</td>
+                <td style="text-align:right">¥246,915</td>
+                <td style="text-align:right">2.0%</td>
+                <td style="text-align:right">−3.5%</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>合计</td>
+                <td style="text-align:right">¥12,345,678</td>
+                <td style="text-align:right">100%</td>
+                <td style="text-align:right">+18.3%</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <h2>策略建议</h2>
+
+          <p>基于以上数据分析，我们提出以下建议：</p>
+
+          <ul>
+            <li>加大 SaaS 产品线的研发投入，巩固核心收入来源</li>
+            <li>企业定制服务重点拓展金融和医疗垂直行业</li>
+            <li>优化成本结构，目标将毛利率从 68% 提升至 72%</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== XLSX PREVIEW ===== -->
+  <div class="section">
+    <div class="section-header">
+      <h2>minimax-xlsx</h2>
+      <div class="divider"></div>
+      <div class="desc">A4 纵向 · 表头冻结 · 隔行变色 · 打印布局</div>
+    </div>
+    <div class="section-body">
+      <div class="xlsx-preview">
+        <table>
+          <thead>
+            <tr>
+              <th>月份</th>
+              <th>产品线</th>
+              <th style="text-align:right" class="number">收入 (¥)</th>
+              <th style="text-align:right" class="number">成本 (¥)</th>
+              <th style="text-align:right" class="number">毛利 (¥)</th>
+              <th style="text-align:right" class="number">毛利率</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>2026-01</td><td>SaaS 订阅</td>
+              <td class="number">2,551,440</td><td class="number">765,432</td>
+              <td class="number">1,786,008</td><td class="number">70.0%</td>
+            </tr>
+            <tr>
+              <td>2026-01</td><td>企业定制</td>
+              <td class="number">1,152,263</td><td class="number">460,905</td>
+              <td class="number">691,358</td><td class="number">60.0%</td>
+            </tr>
+            <tr>
+              <td>2026-02</td><td>SaaS 订阅</td>
+              <td class="number">2,551,440</td><td class="number">740,000</td>
+              <td class="number">1,811,440</td><td class="number">71.0%</td>
+            </tr>
+            <tr>
+              <td>2026-02</td><td>企业定制</td>
+              <td class="number">1,152,263</td><td class="number">450,000</td>
+              <td class="number">702,263</td><td class="number">60.9%</td>
+            </tr>
+            <tr>
+              <td>2026-03</td><td>SaaS 订阅</td>
+              <td class="number">2,551,440</td><td class="number">720,000</td>
+              <td class="number">1,831,440</td><td class="number">71.8%</td>
+            </tr>
+            <tr>
+              <td>2026-03</td><td>企业定制</td>
+              <td class="number">1,152,263</td><td class="number">440,000</td>
+              <td class="number">712,263</td><td class="number">61.8%</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="text-align:right">Q1 合计</td>
+              <td class="number">¥11,111,109</td>
+              <td class="number">¥3,576,337</td>
+              <td class="number">¥7,534,772</td>
+              <td class="number">67.8%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="xlsx-print">
+        <div>
+          <div class="xlsx-print-header">打印设置</div>
+          <div>纸张：A4 纵向</div>
+          <div>页眉：Q1 收入分析</div>
+        </div>
+        <div>
+          <div class="xlsx-print-header">&nbsp;</div>
+          <div>页脚：1 / N</div>
+          <div>重复标题行：开启</div>
+        </div>
+        <div>
+          <div class="xlsx-print-header">格式</div>
+          <div>数字：¥#,##0</div>
+          <div>百分比：0.0%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PPTX PREVIEW ===== -->
+  <div class="section">
+    <div class="section-header">
+      <h2>pptx-generator</h2>
+      <div class="divider"></div>
+      <div class="desc">16:9 · PptxGenJS · 四类幻灯片布局</div>
+    </div>
+    <div class="section-body">
+      <div class="pptx-grid">
+
+        <!-- Cover -->
+        <div class="pptx-slide slide-cover">
+          <div class="title">2026 Q1<br>业务运营报告</div>
+          <div class="accent-bar"></div>
+          <div class="subtitle">极简商务主题 · 品牌统一输出</div>
+          <div class="meta left">Genius Agent</div>
+          <div class="meta right">2026.06.02</div>
+        </div>
+
+        <!-- TOC -->
+        <div class="pptx-slide slide-toc">
+          <div class="toc-title">目录</div>
+          <div class="toc-rule"></div>
+          <div class="toc-item">
+            <span class="toc-num">01</span>
+            <span class="toc-text">执行摘要</span>
+            <span class="toc-page">03</span>
+          </div>
+          <div class="toc-item">
+            <span class="toc-num">02</span>
+            <span class="toc-text">收入分析</span>
+            <span class="toc-page">05</span>
+          </div>
+          <div class="toc-item">
+            <span class="toc-num">03</span>
+            <span class="toc-text">成本结构</span>
+            <span class="toc-page">08</span>
+          </div>
+          <div class="toc-item">
+            <span class="toc-num">04</span>
+            <span class="toc-text">策略建议</span>
+            <span class="toc-page">11</span>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="pptx-slide slide-content">
+          <div class="slide-title">收入分析 · 按产品线</div>
+          <div class="slide-rule"></div>
+          <div class="body-text">第一季度总营收 ¥12.35M，同比增长 18.3%。SaaS 订阅仍是核心收入引擎，占比 62%。</div>
+          <div class="pptx-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>产品线</th>
+                  <th style="text-align:right">Q1 营收</th>
+                  <th style="text-align:right">占比</th>
+                  <th style="text-align:right">YoY</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>SaaS 订阅</td>
+                  <td style="text-align:right">¥7.65M</td>
+                  <td style="text-align:right">62%</td>
+                  <td style="text-align:right">+22%</td>
+                </tr>
+                <tr>
+                  <td>企业定制</td>
+                  <td style="text-align:right">¥3.46M</td>
+                  <td style="text-align:right">28%</td>
+                  <td style="text-align:right">+16%</td>
+                </tr>
+                <tr>
+                  <td>咨询服务</td>
+                  <td style="text-align:right">¥0.99M</td>
+                  <td style="text-align:right">8%</td>
+                  <td style="text-align:right">+8%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul style="margin-top:10px;">
+            <li>SaaS 订阅续费率 94%，客户留存健康</li>
+            <li>企业定制客单价同比提升 12%</li>
+          </ul>
+        </div>
+
+        <!-- Section Divider -->
+        <div class="pptx-slide slide-divider">
+          <div class="section-num">03</div>
+          <div class="section-title">策略建议</div>
+          <div class="section-rule"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
