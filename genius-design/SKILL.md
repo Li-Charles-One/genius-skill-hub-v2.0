@@ -1,8 +1,8 @@
 ---
-name: design-md
+name: genius-design
 description: Use when user wants to apply a specific brand style, reverse-engineer a website's design, or generate on-brand UI. Two workflows: (A) pick from 73 pre-built brand DESIGN.md templates, or (B) reverse-engineer any live website's CSS into a fresh DESIGN.md. Trigger keywords: 逆向, 品牌, UI设计, 网页开发, reverse engineer, brand, design system, 风格.
 ---
-# DESIGN.md — Brand Design Systems for AI
+# Genius Design — Brand Design Systems for AI
 
 Two ways to get a design system into your project.
 
