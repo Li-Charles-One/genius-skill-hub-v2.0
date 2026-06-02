@@ -21,15 +21,17 @@ One theme file. Three MiniMax skills. Zero design decisions at generation time.
 | **Target** | Web UI, landing pages, React components | Word documents, Excel, PowerPoint, PDF |
 | **Consumed by** | `frontend-design`, Claude Code, Codex | `minimax-docx`, `minimax-xlsx`, `pptx-generator`, `pdf` |
 | **Format** | Google DESIGN.md spec (colors, typography, spacing, components, motion) | Document Brand spec (colors, typography, spacing + format-specific rules per skill) |
-| **Catalog** | 71+ brands (Apple, Stripe, Vercel…) | 10 document themes (1 complete, 9 planned) |
+| **Catalog** | 71+ brands (Apple, Stripe, Vercel…) | 10 document themes (2 complete, 8 planned) |
 
 ## Architecture
 
 ```
 document-brand/
-├── SKILL.md              ← This file — catalog + usage guide
+├── SKILL.md                 ← This file — catalog + usage guide
+├── preview.html             ← Visual preview of all themes
 └── themes/
-    └── minimal-business.md   ← 🆕 Theme #1 — complete brand definition
+    ├── minimal-business.md  ← Theme #1 — 极简商务 (white + red accent)
+    └── editorial-dark.md    ← Theme #2 — 编辑级暗夜 (black + blue accent)
 
 (More themes added here as they are designed)
 ```
@@ -40,8 +42,8 @@ Each theme file is self-contained. The downstream MiniMax skill reads the theme,
 
 | # | Theme | File | Style | Best For |
 |---|-------|------|-------|----------|
-| 1 | 极简商务 | `themes/minimal-business.md` | Black/white + single accent | Reports, contracts, whitepapers |
-| 2 | 科技蓝调 | *planned* | Deep blue + cyan | Tech proposals, API docs, SaaS |
+| 1 | 极简商务 | `themes/minimal-business.md` | White + red accent, traditional | Reports, contracts, whitepapers |
+| 2 | 编辑级暗夜 | `themes/editorial-dark.md` | Black + blue accent, editorial | Premium proposals, pitch decks, keynotes |
 | 3 | 学术经典 | *planned* | Burgundy + ivory + navy | Papers, research, courseware |
 | 4 | 金融专业 | *planned* | Deep green + gold + gray | Financial reports, investment decks |
 | 5 | 创意时尚 | *planned* | Morandi muted tones | Brand books, creative proposals |
