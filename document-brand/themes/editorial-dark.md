@@ -40,16 +40,16 @@
 
 | Role | Font Stack | Weight | Size | Line Height | Letter Spacing |
 |------|-----------|--------|------|-------------|----------------|
-| 封面大标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 48–96pt | 1.05 | -2px |
-| 一级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 32–48pt | 1.2 | -1px |
-| 二级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 600 | 16pt | 1.3 | 0 |
-| 三级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 500 | 14pt | 1.3 | 0 |
-| 正文 | Noto Sans SC, Inter, PingFang SC, sans-serif | 300 | 13pt | 1.8 | 0 |
-| 小号正文 | Noto Sans SC, Inter, PingFang SC, sans-serif | 400 | 12pt | 1.6 | 0 |
-| 说明/脚注 | Noto Sans SC, Inter, PingFang SC, sans-serif | 400 | 11pt | 1.6 | 1px |
-| 标签/元信息 | Noto Sans SC, Inter, PingFang SC, sans-serif | 500 | 10pt | 1.4 | 2–4px |
-| 数据/代码 | JetBrains Mono, Consolas, monospace | 400 | 12pt | 1.5 | 0 |
-| 数字展示 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 36–48pt | 1.0 | -1px |
+| 封面大标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 48–72pt | 1.05 | -2px |
+| 一级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 26–36pt | 1.2 | -1px |
+| 二级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 600 | 14pt | 1.3 | 0 |
+| 三级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 500 | 12pt | 1.3 | 0 |
+| 正文 | Noto Sans SC, Inter, PingFang SC, sans-serif | 300 | 10pt | 2.0 | 0 |
+| 小号正文 | Noto Sans SC, Inter, PingFang SC, sans-serif | 400 | 9pt | 1.7 | 0 |
+| 说明/脚注 | Noto Sans SC, Inter, PingFang SC, sans-serif | 400 | 8pt | 1.6 | 0.5px |
+| 标签/元信息 | Noto Sans SC, Inter, PingFang SC, sans-serif | 500 | 7pt | 1.4 | 3px |
+| 数据/代码 | JetBrains Mono, Consolas, monospace | 400 | 9pt | 1.5 | 0 |
+| 数字展示 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 28–40pt | 1.0 | -1px |
 
 ### Spacing
 
@@ -267,17 +267,17 @@
 全屏 #000000
 ┌──────────────────────────────────────┐
 │                                      │
-│  [TAG LINE]                         │  ← 10pt, accent, letter-spacing 4px
-│                                      │     y = 24%, x = 48px
-│  [TITLE]                            │  ← 72pt, weight 200, #ffffff
+│  [TAG LINE]                         │  ← 7pt, accent, letter-spacing 3px
+│                                      │     y = 28%, x = 60px
+│  [TITLE]                            │  ← 56pt, weight 200, #ffffff
 │                                      │     letter-spacing -2px, line-height 1.05
-│  ──                                 │  ← accent 分割线, 64px wide, 1px
+│  ──                                 │  ← accent 分割线, 48px wide, 1px
 │                                      │
-│  [Subtitle]                         │  ← 18pt, weight 300, #999999
+│  [Subtitle]                         │  ← 11pt, weight 300, #999999
 │                                      │     line-height 1.8, max 2 lines
 │                                      │
 │                                      │
-│  [Date]                  [Author]   │  ← 11pt, #555555, bottom 48px
+│  [Date]                  [Author]   │  ← 8pt, #555555, bottom 60px
 └──────────────────────────────────────┘
 ```
 
@@ -287,14 +287,14 @@
 全屏 #000000
 ┌──────────────────────────────────────┐
 │  ──                                 │  ← accent 分割线, 48px
-│  目录                               │  ← 10pt, accent, letter-spacing 4px
+│  目录                               │  ← 7pt, accent, letter-spacing 3px
 │                                      │
-│  01  [Section]           ······ 03  │  ← Number: 48pt, weight 200, accent
-│  02  [Section]           ······ 05  │     Label: 16pt, weight 500, #ffffff
-│  03  [Section]           ······ 08  │     Page num: 13pt, #555555, right
+│  01  [Section]           ······ 03  │  ← Number: 40pt, weight 200, accent
+│  02  [Section]           ······ 05  │     Label: 13pt, weight 500, #ffffff
+│  03  [Section]           ······ 08  │     Page num: 9pt, #555555, right
 │  04  [Section]           ······ 12  │     Dotted leader between
 │  05  [Section]           ······ 15  │
-│                                      │     y = 20%, items start at y = 35%
+│                                      │     y = 20%, items start at y = 38%
 └──────────────────────────────────────┘
 ```
 
@@ -305,9 +305,9 @@
 ┌──────────────────────────────────────┐
 │                                      │
 │                                      │
-│              02                      │  ← 96pt, weight 200, accent
-│          [Section Title]             │  ← 36pt, weight 200, #ffffff
-│              ───                     │  ← accent 分割线, 2px × 80px, 居中
+│              02                      │  ← 80pt, weight 200, accent
+│          [Section Title]             │  ← 26pt, weight 200, #ffffff
+│              ───                     │  ← accent 分割线, 1px × 64px, 居中
 │                                      │
 │                                      │
 └──────────────────────────────────────┘
@@ -318,15 +318,15 @@
 ```
 全屏 #000000
 ┌──────────────────────────────────────┐
-│  ──                                 │  ← accent 分割线, 48px, x = 48px
-│  02  章节标签                        │  ← 10pt, accent, letter-spacing 4px
+│  ──                                 │  ← accent 分割线, 48px, x = 60px
+│  02  章节标签                        │  ← 7pt, accent, letter-spacing 3px
 │                                      │
-│  [Slide Title]                      │  ← 40pt, weight 200, #ffffff
+│  [Slide Title]                      │  ← 28pt, weight 200, #ffffff
 │                                      │     letter-spacing -1px
 │                                      │
-│  [Body text body text body text     │  ← 16pt, weight 300, #999999
-│   body text body text body text     │     line-height 1.8
-│   body text body text.]             │     max-width: 80% slide width
+│  [Body text body text body text     │  ← 10pt, weight 300, #999999
+│   body text body text body text     │     line-height 2.0
+│   body text body text.]             │     max-width: 72% slide width
 │                                      │
 │  — Point one                        │  ← 14pt, weight 400, #ffffff
 │  — Point two                        │     短线标记, accent 色
@@ -347,10 +347,10 @@
 │  ┌──────────┐ ┌──────────┐ ┌──────┐ │
 │  │ 50×      │ │ 0%       │ │ v8   │ │  ← #111111 背景
 │  │ 更多迭代 │ │ 零废料   │ │ 正确 │ │     #222222 边框
-│  │          │ │          │ │ 答案 │ │     8px 圆角
-│  │ desc...  │ │ desc...  │ │ desc │ │     数字: 48pt weight 200 accent
-│  └──────────┘ └──────────┘ └──────┘ │     标题: 16pt weight 600 #ffffff
-│                                      │     描述: 13pt #999999
+│  │          │ │          │ │ 答案 │ │     6px 圆角
+│  │ desc...  │ │ desc...  │ │ desc │ │     数字: 32pt weight 200 accent
+│  └──────────┘ └──────────┘ └──────┘ │     标题: 11pt weight 600 #ffffff
+│                                      │     描述: 8pt #777777
 └──────────────────────────────────────┘
 ```
 
@@ -359,11 +359,11 @@
 | Element | Style |
 |---------|-------|
 | Background | `bg-card` (`#111111`) with 1px `border` (`#222222`), 8px radius |
-| Header row | `border` (`#222222`), white 12pt weight 500 |
-| Data rows | `#111111` bg. `#ffffff` text, 11pt weight 300. 底部 1px `#222222` |
-| Category row | `accent-dim` bg, `accent` text |
-| Totals | 顶部 2px `accent`, `accent` text, bold |
-| Cell padding | 10px top/bottom, 14px left/right |
+| Header row | `border` (`#222222`), white 9pt weight 500 |
+| Data rows | `#111111` bg. `#ffffff` text, 8pt weight 300. 底部 1px `#222222` |
+| Category row | `accent-dim` bg, `accent` text, 8pt |
+| Totals | 顶部 2px `accent`, `accent` text, 9pt bold |
+| Cell padding | 12px top/bottom, 16px left/right |
 
 #### Charts
 
