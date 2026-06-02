@@ -13,6 +13,7 @@ When this skill activates, **immediately ask the user**:
 > 你想要哪种方式？
 > - **A. 用现成模板** — 从 73 个品牌里选一个（Stripe, Apple, Linear, Vercel...）
 > - **B. 逆向网站** — 给我一个网址，我抓取它的 CSS 然后自动生成 DESIGN.md
+> - **C. 我不知道参考谁** — 告诉我产品类型（如「体育用品」「医疗器械」），我用 UI UX Pro Max 推理出推荐的设计方案
 
 Then route to the matching workflow below. If the user has already provided a URL, go straight to Workflow B.
 
@@ -274,6 +275,64 @@ Write the generated DESIGN.md to `./DESIGN.md` in the project root. Tell the use
 - Interactive states (hover, focus, active) are inferred from class name patterns, not directly observed.
 - The `branding` format is a best-effort AI analysis; always spot-check against the raw HTML.
 - For highly dynamic SPAs, increase `--wait-for` or use `firecrawl interact`.
+
+---
+
+## Workflow C: Generate from product type (via UI UX Pro Max)
+
+When the user doesn't know what brand to reference or what style fits their product.
+
+### Step 1: Ask what they're building
+
+Get a short description: industry, product type, target audience. Examples:
+- 「医疗 SaaS 平台，给医生用的管理后台」
+- 「运动品牌电商，卖跑鞋和健身装备」
+- 「儿童教育 App，面向家长」
+
+### Step 2: Run UI UX Pro Max design system generator
+
+```bash
+python3 skills/ui-ux-pro-max/scripts/search.py "<product description>" --design-system -f markdown
+```
+
+If the skill is installed elsewhere, find `search.py` under the community-skill-hub path or the upstream repo.
+
+This outputs a complete design recommendation:
+- **Layout pattern** (hero-centric, dashboard-grid, etc.)
+- **UI style** (glassmorphism, minimalism, soft UI, etc.)
+- **Color palette** (primary, background, accent, text with hex values)
+- **Typography pairing** (display + body fonts with Google Fonts URL)
+- **Key effects** (shadows, transitions, interactions)
+- **Anti-patterns to avoid** (industry-specific don'ts)
+
+### Step 3: Convert to DESIGN.md
+
+Take the UI UX Pro Max output and translate it into a standard DESIGN.md file:
+
+```
+UI UX Pro Max output          →  DESIGN.md
+─────────────────────────────────────────
+Style: "Soft UI Evolution"    →  Overview section (design atmosphere)
+Primary: #E8B4B8             →  colors.primary in YAML front matter
+Typography: Cormorant / Montserrat → typography section
+Key effects: soft shadows     →  Components section (button/card patterns)
+Anti-patterns: no neon        →  Do's and Don'ts section
+```
+
+### Step 4: Save + apply
+
+Write the generated DESIGN.md to `./DESIGN.md`. Tell the user the key design decisions and offer to refine anything they don't like. Then suggest calling `frontend-design` to build the actual UI.
+
+### Example flow
+
+```
+User: "我要做个宠物医院的管理系统，不知道长什么样"
+  ↓
+Step 1: 识别 → 医疗 + 宠物 + 管理后台
+Step 2: search.py "veterinary clinic management dashboard" --design-system
+Step 3: 输出 → Soft UI, 暖绿配奶油白, M PLUS Rounded 1c + Inter
+Step 4: 写成 DESIGN.md, 建议 frontend-design 实现
+```
 
 ---
 
