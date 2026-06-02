@@ -141,48 +141,84 @@ If you have both `DESIGN.md` and custom CSS/tokens, the agent may conflict. Keep
 
 When the user provides a URL or asks to reverse-engineer a site's design. Uses Firecrawl CLI — handles JS-rendered SPAs, extracts branding info natively.
 
-### Step 1: Scrape with Firecrawl
-
-Run TWO parallel scrapes for maximum design data:
+### Step 1: Scrape with Firecrawl (one command, all formats)
 
 ```bash
-# Scrape A: raw HTML for component patterns + spacing analysis
-firecrawl scrape "<url>" --format rawHtml --wait-for 3000 -o .firecrawl/raw.html
-
-# Scrape B: branding extraction (colors, fonts, logos, tone)
-firecrawl scrape "<url>" --format branding --wait-for 3000 -o .firecrawl/branding.json
+firecrawl scrape "<url>" \
+  --format rawHtml,branding,screenshot \
+  --only-main-content \
+  --wait-for 3000 \
+  -o .firecrawl/design-data.json \
+  --json --pretty
 ```
 
-For SPAs or interactive pages, add more wait time:
+| Flag | Purpose |
+|---|---|
+| `rawHtml` | Full rendered HTML — extract class names, inline styles, component structure |
+| `branding` | Firecrawl's AI brand extraction — colors, fonts, tone, logos |
+| `screenshot` | Visual reference — verify extracted tokens match the actual page |
+| `--only-main-content` | Strip nav/footer noise, focus on the design system body |
+| `--wait-for 3000` | Wait for JS frameworks to hydrate. Bump to 5000 for heavy SPAs |
+| `--json --pretty` | Structured output for parsing |
+
+After the scrape, do a quick grep on the raw HTML to spot recurring patterns:
+
 ```bash
-firecrawl scrape "<url>" --format rawHtml,branding --wait-for 5000 -o .firecrawl/design-data.json
+# Find the dominant font
+grep -oP "font-family:\s*[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
+
+# Find border-radius patterns
+grep -oP "border-radius:\s*\d+px" .firecrawl/design-data.json | sort | uniq -c | sort -rn
+
+# Find box-shadow levels
+grep -oP "box-shadow:\s*[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
+
+# Find all hex colors used
+grep -oP "#[0-9a-fA-F]{3,8}" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -15
 ```
 
-If the page requires login or interaction, scrape first then use `firecrawl interact`:
+If the page requires login or interaction:
 ```bash
 firecrawl scrape "<url>"
 firecrawl interact --prompt "Click the login button, then fill credentials"
+firecrawl scrape "<url>" --format rawHtml,branding,screenshot --only-main-content --wait-for 3000 -o .firecrawl/design-data.json --json --pretty
 ```
 
 ### Step 2: Extract design tokens
 
-**From `branding` format** (Firecrawl's built-in brand extraction):
-- Primary / accent / background / text colors with hex values
-- Font families and type scale
-- Logo URLs and brand tone description
+Work through each dimension systematically:
 
-**From `rawHtml` format** (cross-reference for component patterns):
-- Buttons: border-radius, padding, hover state from inline styles and class names
-- Cards: shadow patterns, border, rounding from repeated container styles
-- Inputs: border color, focus ring, height
-- Navigation: sticky behavior, background, link spacing
-- Section gaps: padding/margin between major layout blocks
+**Colors** — cross-reference `branding` output with hex grep results:
+- Map every recurring hex to a semantic role. A color that appears on every `<button>` = primary CTA. The most common text color = ink.
+- Count occurrences to separate signal from noise (one-off colors are likely errors)
+- Identify the color system: monochrome + single accent? multi-accent? gradient-driven?
 
-**Semantic mapping** — don't just dump hex values. Assign roles:
-- `#0064E0` → "Primary CTA blue, used for all purchase buttons"
-- `#1C1E21` → "Body text ink, never pure black"
-- `#F1F4F7` → "Soft surface background for cards"
-- `14px / 1.5` → "Default body copy, comfortable reading rhythm"
+**Typography** — from `branding` output + font-family grep:
+- Dominant font family (body) vs accent font (headings)
+- Build the scale: what sizes appear? Look for ratios (1.25x, 1.33x, 1.5x between levels)
+- Weight pattern: bold for headings, regular for body? Or light-and-airy?
+- Line-height: is it tight (1.1-1.2 for headings) or comfortable (1.5-1.6 for body)?
+
+**Spacing** — from `rawHtml`:
+- Section gaps: look for `padding-top`, `padding-bottom`, `margin-bottom` on large containers
+- Card padding: the most common `padding` value inside card-like containers
+- Button padding: `padding` on `<button>` or `.btn-*` elements
+- Grid: detect if the site uses a consistent grid (8px, 10px, 12px base unit)
+
+**Components** — from `rawHtml`, grep for recurring class name patterns:
+- Buttons: dominant border-radius, min-height, padding. Note variants (solid vs outline vs ghost)
+- Cards: shadow formula, border style, rounding. Is there a single pattern or a hierarchy?
+- Inputs: border color, border-radius, height. Focus ring color/style if visible
+- Navigation: is it sticky? What background? What's the link spacing?
+
+**Shapes & Elevation** — from `rawHtml`:
+- Border-radius: the 2-3 most common values → map to sm/md/lg
+- Shadows: count distinct box-shadow values → build elevation scale
+- Border style: are borders common? What color and width?
+
+**Semantic mapping** — the critical step. Every extracted value gets a role:
+- Don't: `blue: #0064E0`
+- Do: `Primary CTA (#0064E0) — all purchase buttons, signup CTAs, active nav links`
 
 ### Step 3: Write the DESIGN.md
 
