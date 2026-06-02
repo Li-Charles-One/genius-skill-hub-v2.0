@@ -16,6 +16,8 @@ When this skill activates, **immediately ask the user**:
 
 Then route to the matching workflow below. If the user has already provided a URL, go straight to Workflow B.
 
+**配合 `frontend-design` skill**：genius-design 负责产出 DESIGN.md（设计规范），frontend-design 负责照着 DESIGN.md 生成高设计质量的前端代码。两者配合使用：先用 genius-design 确定品牌规则，再调用 frontend-design 执行实现。
+
 ---
 
 ## Workflow A: Use a pre-built brand template
