@@ -107,9 +107,9 @@
 
 | Style ID | Font | Size | Color | Weight | Spacing | Extra |
 |----------|------|------|-------|--------|---------|-------|
-| `Heading1` | 一级标题 typography | 32pt | `#000000` | 200 | 120px before, 16px after | Letter-spacing -1px。左对齐。 |
-| `Heading2` | 二级标题 typography | 16pt | `#000000` | 600 | 48px before, 8px after | 无下划线。左对齐。 |
-| `Heading3` | 三级标题 typography | 14pt | `#000000` | 500 | 32px before, 8px after | 左对齐。 |
+| `Heading1` | 一级标题 typography | 32pt | `#000000` | 200 | 120px before, 16px after | Letter-spacing 1px。左对齐。 |
+| `Heading2` | 二级标题 typography | 16pt | `#000000` | 600 | 48px before, 8px after | Letter-spacing 0.5px。左对齐。 |
+| `Heading3` | 三级标题 typography | 14pt | `#000000` | 500 | 32px before, 8px after | Letter-spacing 0.5px。左对齐。 |
 
 每章节入口：
 ```
@@ -122,7 +122,7 @@
 ### Body Text
 
 - 默认段落：13pt，weight 300，`#000000`，行高 1.8。无首行缩进。
-- **段落间不用段后间距**——用一整行空行（¶）分隔。这是编辑级排版的标志：段落是一个个呼吸单元。
+- **段落间距**：段后 6pt，不用整行空行。段落之间靠段后间距区分，保持紧凑的编辑节奏。
 - 行内强调用 `accent` 色（`#00a8ff`），不用加粗。
 
 ### Tables
@@ -132,7 +132,7 @@
 | **整体** | 全宽（页面宽度）。无外边框。 |
 | **表头行** | `border`（`#222222`）背景。`text-primary`（`#ffffff`）文字，12pt，weight 500。上下 padding 12px，左右 16px。 |
 | **数据行** | 白底。`#000000` 文字，12pt，weight 300。上下 padding 10px，左右 16px。 |
-| **行分隔** | 仅底部 1px `border`（`#222222`）。无竖线。 |
+| **行分隔** | 每个单元格四边 1px `border`（`#e8e8e8`）。表头用 `#333`。 |
 | **分类行** | `accent-dim`（`rgba(0,168,255,0.08)`）背景。`accent` 文字，12pt，weight 600。 |
 | **合计行** | 顶部 2px `accent`。`accent` 文字，13pt，weight 600。 |
 | **数字列** | 右对齐。tabular-nums。 |
@@ -174,7 +174,7 @@
 | Letter Spacing | 2px（通过字符间距设置） |
 | Alignment | 左对齐 |
 | Height | 32pt |
-| Bottom Border | 2px `accent` (`#00a8ff`) |
+| Bottom Border | 2px `accent` (`#00a8ff`)。其余三边 1px `#333`。 |
 | Auto-filter | 启用 |
 
 ### Data Zone
@@ -184,7 +184,7 @@
 | Fill | 白底 (`#ffffff`) |
 | Font | `#000000`, 12pt, weight 300 |
 | Row Height | 24pt |
-| Borders | 仅底部：1px `#eeeeee`（极浅灰，比 `border` 更淡）。无竖线。 |
+| Borders | 四边 1px `#e0e0e0`。每个单元格都有边框——xlsx 必须有清晰的网格线。 |
 | Alignment | 文本左对齐，数字右对齐，日期居中 |
 
 ### Category Rows (分类行)
