@@ -125,13 +125,22 @@ def analyze_image(
     # Build message content
     content = []
 
-    # Handle URL vs local file — prefer base64 for reliability
+    # All images → base64 (most reliable, no URL download issues)
     if image_input.startswith(("http://", "https://")):
-        # Try URL first, but warn about potential failures
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": image_input}
-        })
+        # Download first, then base64 encode
+        try:
+            img_resp = httpx.get(image_input, timeout=15, follow_redirects=True)
+            img_resp.raise_for_status()
+            content_type = img_resp.headers.get("content-type", "image/png")
+            if "/" not in content_type:
+                content_type = "image/png"
+            b64_data = base64.b64encode(img_resp.content).decode("utf-8")
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{content_type};base64,{b64_data}"}
+            })
+        except Exception as e:
+            raise RuntimeError(f"Failed to download image from URL: {e}")
     else:
         b64_data, media_type = encode_image(image_input)
         content.append({

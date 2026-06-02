@@ -122,6 +122,8 @@ echo 'ARK_API_KEY=your-key' > /path/to/genius-vision/scripts/.env
 ### API Provider
 Default: 火山引擎 Ark (doubao-seed-2.0-lite)
 
+**⚠️ Volcengine Ark 端点陷阱**：coding 端点用 `/api/coding/v3`，不要用 `/api/v3`（会 404）。
+
 | Env Variable | Description | Default |
 |---|---|---|
 | `ARK_API_KEY` | Volcengine Ark API key | (required) |
@@ -140,7 +142,7 @@ Set via `VISION_MODEL` env or pass `--model` flag.
 
 ## Pitfalls
 
-1. **URL images may fail**: Volcengine Ark server has limited access to external URLs (especially Google, Twitter, etc.). Prefer local files (auto base64-encoded) or Chinese-accessible URLs.
+1. **All images are base64-encoded**: Both local files and URLs are sent as base64 for maximum reliability. URL images are downloaded first, then encoded.
 2. **Image size**: Max 10MB. Resize large images before sending.
 3. **SVG files**: Not directly supported. Convert to PNG first.
 4. **API key required**: Must have valid `ARK_API_KEY`. No fallback.
