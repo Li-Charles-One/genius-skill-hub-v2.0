@@ -38,13 +38,13 @@ jobs:
 
       - name: Check WePlaning scripts syntax
         run: |
-          find weplaning-project-memory-skill/weplaning-project-memory/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
+          find we-planing-skill/we-planing/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
 
       - name: Smoke test WePlaning lifecycle
         run: |
           set -euo pipefail
           root="$(mktemp -d)"
-          scripts="weplaning-project-memory-skill/weplaning-project-memory/scripts"
+          scripts="we-planing-skill/we-planing/scripts"
 
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Smoke" --goal "Validate WePlaning scripts" --agent CI --adapter GitHubActions --os linux | tail -n1)"
           node "$scripts/check-memory.cjs" "$root"
@@ -52,7 +52,7 @@ jobs:
 
           work="$(node "$scripts/new-session.cjs" "$root" --role editor --summary "CI work session" --goal "Exercise scripts" --agent CI --adapter GitHubActions --os linux --short-id work | tail -n1)"
           node "$scripts/sync-before-write.cjs" "$root" --session "$work"
-          node "$scripts/register-agent.cjs" "$root" --session "$work" --agent CI --adapter GitHubActions --os linux --tool node --skill weplaning-project-memory
+          node "$scripts/register-agent.cjs" "$root" --session "$work" --agent CI --adapter GitHubActions --os linux --tool node --skill we-planing
           node "$scripts/append-change.cjs" "$root" --session "$work" --agent CI --changed "CI smoke change" --file ".agent-memory/CHANGES.md" --verification "append-change passed"
           node "$scripts/merge-session.cjs" "$root" --session "$work" --agent CI
           node "$scripts/repair-memory.cjs" "$root" --agent CI
@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           root="$(mktemp -d)"
-          scripts="weplaning-project-memory-skill/weplaning-project-memory/scripts"
+          scripts="we-planing-skill/we-planing/scripts"
 
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Repair" --goal "Validate repair" --agent CI --adapter GitHubActions --os linux | tail -n1)"
           rm "$root/.agent-memory/sessions/$session.md"

@@ -16,7 +16,7 @@ This repository is the source hub for reusable skills, local skill mirrors, and 
 | genius-skill-creator | `genius-skill-creator/` | Create, repair, validate, evaluate, and optimize skills. |
 | github-cli | `github-cli/` | Use GitHub CLI for repo, auth, PR, issue, Actions, and API work. |
 | mcp-builder | `mcp-builder/` | Build MCP servers for external APIs or services. |
-| weplaning-project-memory | `weplaning-project-memory-skill/weplaning-project-memory/` | WePlaning v2.2 project memory with lifecycle scripts and cross-Agent sync helpers. |
+| we-planing | `we-planing-skill/we-planing/` | WePlaning v2.2 project memory with lifecycle scripts and cross-Agent sync helpers. |
 | writing-plans | `writing-plans/` | Write implementation plans before multi-step coding work. |
 
 ## Validation
@@ -27,5 +27,5 @@ Run the same lightweight checks locally before pushing meaningful skill changes:
 
 ```powershell
 git status --short
-node weplaning-project-memory-skill/weplaning-project-memory/scripts/check-memory.cjs <project-root>
+node we-planing-skill/we-planing/scripts/check-memory.cjs <project-root>
 ```
