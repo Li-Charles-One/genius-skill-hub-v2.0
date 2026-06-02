@@ -1,1 +1,199 @@
-[…shrunk: 26460 chars, 552 lines — tool already responded, see result]
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>编辑级暗夜 — Document Brand 预览</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=Noto+Sans+SC:wght@200;300;400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans SC','Inter',sans-serif;background:#e8e8e8;color:#000;padding:40px;}
+h2{font-size:20px;font-weight:600;margin-bottom:16px;color:#111;}
+.wrap{max-width:1100px;margin:0 auto;}
+.theme-tag{display:inline-block;background:#00a8ff;color:#fff;padding:4px 16px;border-radius:4px;font-size:11px;letter-spacing:2px;margin-bottom:8px;}
+.theme-name{font-size:36px;font-weight:200;letter-spacing:-1px;margin-bottom:24px;}
+
+/* Color Swatches */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:40px;}
+.swatch{border-radius:8px;overflow:hidden;border:1px solid #ddd;}
+.swatch-color{height:64px;}
+.swatch-info{padding:10px 12px;background:#fff;font-size:11px;}
+.swatch-info .hex{font-weight:600;font-size:13px;}
+.swatch-info .role{color:#999;margin-top:2px;}
+
+/* Sections */
+.section{background:#fff;border-radius:8px;padding:32px;margin-bottom:20px;border:1px solid #e0e0e0;}
+
+/* Typography */
+.type-row{display:flex;align-items:baseline;padding:10px 0;border-bottom:1px solid #f0f0f0;}
+.type-row:last-child{border:none;}
+.type-label{width:120px;font-size:10px;color:#999;letter-spacing:1px;text-transform:uppercase;flex-shrink:0;}
+.type-sample{flex:1;}
+
+/* DOCX Page Mockup */
+.docx-page{background:#fff;border:1px solid #ddd;box-shadow:0 2px 12px rgba(0,0,0,0.08);padding:48px;margin:0 auto;max-width:680px;min-height:800px;position:relative;}
+.docx-page .tag{font-size:10px;color:#00a8ff;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px;}
+.docx-page .title{font-size:48px;font-weight:200;letter-spacing:-2px;line-height:1.05;margin-bottom:16px;color:#000;}
+.docx-page .divider{width:48px;height:1px;background:#00a8ff;margin-bottom:16px;}
+.docx-page .subtitle{font-size:16px;font-weight:300;color:#999;line-height:1.8;margin-bottom:120px;}
+.docx-page h3{font-size:32px;font-weight:200;letter-spacing:-1px;color:#000;margin:80px 0 16px;}
+.docx-page p{font-size:13px;font-weight:300;line-height:1.8;color:#000;margin-bottom:0;}
+.docx-page .blank-line{height:23px;}
+
+/* Table Mockup */
+.table-wrap{border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{background:#000;color:#fff;font-weight:500;text-align:left;padding:12px 16px;font-size:12px;letter-spacing:1px;border-bottom:2px solid #00a8ff;}
+.tbl td{padding:10px 16px;border-bottom:1px solid #eee;font-weight:300;}
+.tbl tr:nth-child(even) td{background:#fafafa;}
+.tbl .cat-row td{background:#f0f7ff;color:#00a8ff;font-weight:600;font-size:12px;}
+.tbl .total-row td{font-weight:600;color:#00a8ff;border-top:2px solid #00a8ff;}
+
+/* PPT Slides */
+.slides{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;}
+.slide{flex-shrink:0;width:320px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;position:relative;border:1px solid #333;}
+.slide-cover{background:#000;display:flex;flex-direction:column;justify-content:center;padding:32px;}
+.slide-cover .s-tag{font-size:8px;color:#00a8ff;letter-spacing:3px;margin-bottom:16px;}
+.slide-cover .s-title{font-size:36px;font-weight:200;color:#fff;letter-spacing:-1px;line-height:1.05;}
+.slide-cover .s-bar{width:40px;height:1px;background:#00a8ff;margin:12px 0;}
+.slide-cover .s-sub{font-size:11px;font-weight:300;color:#999;line-height:1.6;}
+.slide-content{background:#000;padding:28px 32px;display:flex;flex-direction:column;}
+.slide-content .s-divider{width:40px;height:1px;background:#00a8ff;margin-bottom:8px;}
+.slide-content .s-label{font-size:7px;color:#00a8ff;letter-spacing:3px;margin-bottom:4px;}
+.slide-content .s-ctitle{font-size:24px;font-weight:200;color:#fff;letter-spacing:-0.5px;margin-bottom:12px;}
+.slide-content .s-body{font-size:10px;font-weight:300;color:#999;line-height:1.8;flex:1;}
+.slide-content .s-points{font-size:9px;color:#fff;line-height:2;}
+.slide-divider{background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.slide-divider .s-num{font-size:64px;font-weight:200;color:#00a8ff;line-height:1;}
+.slide-divider .s-sec{font-size:20px;font-weight:200;color:#fff;margin:8px 0;}
+.slide-divider .s-line{width:48px;height:2px;background:#00a8ff;}
+.slide-label{font-size:9px;color:#999;text-align:center;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="theme-tag">THEME 02</div>
+<div class="theme-name">编辑级暗夜 Editorial Dark</div>
+
+<!-- Colors -->
+<div class="section">
+<h2>🎨 色板</h2>
+<div class="swatches">
+<div class="swatch"><div class="swatch-color" style="background:#000"></div><div class="swatch-info"><div class="hex">#000000</div><div class="role">bg-primary · 封面/PPT 底色</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#0a0a0a"></div><div class="swatch-info"><div class="hex">#0a0a0a</div><div class="role">bg-secondary · 分隔页</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#111111"></div><div class="swatch-info"><div class="hex">#111111</div><div class="role">bg-card · 卡片底色</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#161616"></div><div class="swatch-info"><div class="hex">#161616</div><div class="role">surface · 表格隔行</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#222222"></div><div class="swatch-info"><div class="hex">#222222</div><div class="role">border · 分割线</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#00a8ff"></div><div class="swatch-info"><div class="hex">#00a8ff</div><div class="role">accent · 唯一强调色</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#999"></div><div class="swatch-info"><div class="hex">#999999</div><div class="role">text-secondary</div></div></div>
+<div class="swatch"><div class="swatch-color" style="background:#555"></div><div class="swatch-info"><div class="hex">#555555</div><div class="role">text-muted</div></div></div>
+</div>
+</div>
+
+<!-- Typography -->
+<div class="section">
+<h2>🔤 字体阶梯</h2>
+<div class="type-row"><div class="type-label">Hero · 200</div><div class="type-sample" style="font-size:72px;font-weight:200;letter-spacing:-2px;line-height:1.05">大标题 Display</div></div>
+<div class="type-row"><div class="type-label">H1 · 200</div><div class="type-sample" style="font-size:32px;font-weight:200;letter-spacing:-1px">一级标题 Heading One</div></div>
+<div class="type-row"><div class="type-label">H2 · 600</div><div class="type-sample" style="font-size:16px;font-weight:600">二级标题 Heading Two</div></div>
+<div class="type-row"><div class="type-label">H3 · 500</div><div class="type-sample" style="font-size:14px;font-weight:500">三级标题 Heading Three</div></div>
+<div class="type-row"><div class="type-label">Body · 300</div><div class="type-sample" style="font-size:13px;font-weight:300;line-height:1.8">正文段落，行高 1.8。段与段之间不设段后间距，用一整行空行呼吸。——这是编辑级排版的标志。</div></div>
+<div class="type-row"><div class="type-label">Small · 400</div><div class="type-sample" style="font-size:12px;font-weight:400;line-height:1.6">小号正文用于次要信息、表格数据、列表内容</div></div>
+<div class="type-row"><div class="type-label">Caption · 400</div><div class="type-sample" style="font-size:11px;font-weight:400;letter-spacing:1px;line-height:1.6;color:#999">说明文字 · 脚注 · 元信息 · 页码</div></div>
+<div class="type-row"><div class="type-label">Label · 500</div><div class="type-sample" style="font-size:10px;font-weight:500;letter-spacing:4px;color:#00a8ff">TAG LINE · 章节标签 · 分类标识</div></div>
+</div>
+
+<!-- DOCX Page -->
+<div class="section">
+<h2>📄 DOCX 页面模拟</h2>
+<div class="docx-page">
+<div class="tag">PROPOSAL</div>
+<div class="title">季度业务<br>回顾报告</div>
+<div class="divider"></div>
+<div class="subtitle">2026 Q2 · 三大业务线全面超预期，核心指标同比增长 42%。</div>
+
+<h3>市场分析</h3>
+<p>本季度国内市场营收达到 8,200 万元，环比增长 18%。海外市场首次突破 1,000 万美元大关，标志着国际化战略进入收获期。</p>
+<div class="blank-line"></div>
+<p>竞争格局方面，前三名市场份额合计 67%，较上季度下降 5 个百分点——腰部品牌正在加速分化。我们的差异化策略（<span style="color:#00a8ff">AI 驱动的个性化推荐</span>）在 18-35 岁用户群中获得了显著优势。</p>
+
+<div style="margin-top:40px">
+<div class="table-wrap">
+<table class="tbl">
+<tr><th>渠道</th><th>营收（万元）</th><th>环比</th><th>同比</th></tr>
+<tr><td>线上直营</td><td style="text-align:right">4,820</td><td style="text-align:right;color:#00a8ff">+22%</td><td style="text-align:right">+35%</td></tr>
+<tr><td>经销商</td><td style="text-align:right">2,150</td><td style="text-align:right">+8%</td><td style="text-align:right">+12%</td></tr>
+<tr><td>海外</td><td style="text-align:right">1,230</td><td style="text-align:right;color:#00a8ff">+31%</td><td style="text-align:right">+68%</td></tr>
+<tr class="cat-row"><td colspan="4">线下渠道</td></tr>
+<tr><td>直营门店</td><td style="text-align:right">680</td><td style="text-align:right">+5%</td><td style="text-align:right">+9%</td></tr>
+<tr><td>合作零售</td><td style="text-align:right">420</td><td style="text-align:right">+3%</td><td style="text-align:right">-2%</td></tr>
+<tr class="total-row"><td>合计</td><td style="text-align:right">9,300</td><td style="text-align:right">+18%</td><td style="text-align:right">+28%</td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+<!-- PPT Slides -->
+<div class="section">
+<h2>📽️ PPT 幻灯片</h2>
+<div class="slides">
+<div>
+<div class="slide slide-cover">
+<div class="s-tag">QUARTERLY REVIEW</div>
+<div class="s-title">Q2 业务<br>回顾</div>
+<div class="s-bar"></div>
+<div class="s-sub">三大业务线全面超预期<br>核心指标同比增长 42%</div>
+</div>
+<div class="slide-label">封面</div>
+</div>
+<div>
+<div class="slide slide-content">
+<div class="s-divider"></div>
+<div class="s-label">01 市场分析</div>
+<div class="s-ctitle">竞争格局正在<br>加速分化</div>
+<div class="s-body">前三名市场份额合计 67%，较上季度下降 5 个百分点。腰部品牌差异化策略在年轻用户群中获得了显著优势。</div>
+<div class="s-points">
+<span style="color:#00a8ff">—</span> 线上直营环比 +22%<br>
+<span style="color:#00a8ff">—</span> 海外市场首次突破千万美元<br>
+<span style="color:#00a8ff">—</span> AI 推荐引擎贡献 31% 增量
+</div>
+</div>
+<div class="slide-label">内容页</div>
+</div>
+<div>
+<div class="slide slide-divider">
+<div class="s-num">02</div>
+<div class="s-sec">产品战略</div>
+<div class="s-line"></div>
+</div>
+<div class="slide-label">章节分隔</div>
+</div>
+</div>
+</div>
+
+<!-- XLSX Table -->
+<div class="section">
+<h2>📊 XLSX 表格</h2>
+<div class="table-wrap">
+<table class="tbl">
+<tr><th>月份</th><th>营收</th><th>成本</th><th>利润</th><th>利润率</th></tr>
+<tr><td>2026-01</td><td style="text-align:right">¥2,850,000</td><td style="text-align:right">¥1,920,000</td><td style="text-align:right">¥930,000</td><td style="text-align:right">32.6%</td></tr>
+<tr><td>2026-02</td><td style="text-align:right">¥2,430,000</td><td style="text-align:right">¥1,680,000</td><td style="text-align:right">¥750,000</td><td style="text-align:right">30.9%</td></tr>
+<tr><td>2026-03</td><td style="text-align:right">¥3,120,000</td><td style="text-align:right">¥2,050,000</td><td style="text-align:right">¥1,070,000</td><td style="text-align:right">34.3%</td></tr>
+<tr class="cat-row"><td colspan="5">Q1 合计</td></tr>
+<tr><td>Q1</td><td style="text-align:right">¥8,400,000</td><td style="text-align:right">¥5,650,000</td><td style="text-align:right">¥2,750,000</td><td style="text-align:right">32.7%</td></tr>
+<tr><td>2026-04</td><td style="text-align:right">¥3,450,000</td><td style="text-align:right">¥2,220,000</td><td style="text-align:right">¥1,230,000</td><td style="text-align:right">35.7%</td></tr>
+<tr><td>2026-05</td><td style="text-align:right">¥3,280,000</td><td style="text-align:right">¥2,100,000</td><td style="text-align:right">¥1,180,000</td><td style="text-align:right">36.0%</td></tr>
+<tr><td>2026-06</td><td style="text-align:right">¥3,610,000</td><td style="text-align:right">¥2,280,000</td><td style="text-align:right">¥1,330,000</td><td style="text-align:right">36.8%</td></tr>
+<tr class="cat-row"><td colspan="5">Q2 合计</td></tr>
+<tr class="total-row"><td>Q2</td><td style="text-align:right">¥10,340,000</td><td style="text-align:right">¥6,600,000</td><td style="text-align:right">¥3,740,000</td><td style="text-align:right">36.2%</td></tr>
+<tr class="total-row" style="font-size:14px"><td>上半年</td><td style="text-align:right">¥18,740,000</td><td style="text-align:right">¥12,250,000</td><td style="text-align:right">¥6,490,000</td><td style="text-align:right">34.6%</td></tr>
+</table>
+</div>
+</div>
+
+</div>
+</body>
+</html>
