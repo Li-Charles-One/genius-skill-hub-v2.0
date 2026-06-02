@@ -30,18 +30,23 @@ document-brand/
 ├── SKILL.md                 ← This file — catalog + usage guide
 ├── preview.html             ← Visual preview
 └── themes/
-    └── editorial-dark.md    ← Theme #1 — 编辑级暗夜 (black + blue accent)
+    └── editorial-dark/      ← Theme #1 — 编辑级暗夜 (black + blue accent)
+        ├── tokens.md        ← Shared design tokens (colors, typography, spacing)
+        ├── docx-template.md ← minimax-docx instructions
+        ├── xlsx-template.md ← minimax-xlsx instructions
+        ├── pptx-template.md ← pptx-generator instructions
+        └── pdf-template.md  ← pdf instructions
 
 (More themes added here as they are designed)
 ```
 
-Each theme file is self-contained. The downstream MiniMax skill reads the theme, extracts the parameters for its format, and applies them.
+Each theme is a **directory** with shared design tokens in `tokens.md` and one template file per output format. The agent reads only the two files it needs — `tokens.md` + the format template — never the whole catalog.
 
 ## Brand Theme Catalog
 
-| # | Theme | File | Style | Best For |
-|---|-------|------|-------|----------|
-| 1 | 编辑级暗夜 | `themes/editorial-dark.md` | Black + blue accent, editorial | Premium proposals, pitch decks, keynotes |
+| # | Theme | Directory | Style | Best For |
+|---|-------|-----------|-------|----------|
+| 1 | 编辑级暗夜 | `themes/editorial-dark/` | Black + blue accent, editorial | Premium proposals, pitch decks, keynotes |
 | 2 | 极简商务 | *planned* | White + red accent, traditional | Reports, contracts, whitepapers |
 | 3 | 金融专业 | *planned* | Deep green + gold + gray | Financial reports, investment decks |
 | 4 | 创意时尚 | *planned* | Morandi muted tones | Brand books, creative proposals |
@@ -62,62 +67,44 @@ User says:
 
 Or the agent defaults to **极简商务** when no brand is specified.
 
-### Step 2: Agent reads the theme file
+### Step 2: Agent reads TWO files — no more
 
-The agent opens `themes/{theme}.md` and extracts:
+For any given task, the agent reads exactly two files:
 
-- **Colors** — hex values for primary, secondary, accent, background, surface, text, border
-- **Typography** — font families, weights, sizes for each heading level and body
-- **Spacing** — margins, line height, cell padding
-- **Skill-specific rules** — detailed guidance for the MiniMax skill being used
+1. `themes/{theme}/tokens.md` — colors, typography, spacing (shared by all formats)
+2. `themes/{theme}/{format}-template.md` — format-specific instructions
+
+```
+Task: "Generate a Word report"  → tokens.md + docx-template.md
+Task: "Build a financial model" → tokens.md + xlsx-template.md
+Task: "Create a pitch deck"     → tokens.md + pptx-template.md
+Task: "Export as PDF"           → tokens.md + pdf-template.md
+```
+
+This keeps context minimal — the agent never loads unrelated format instructions.
 
 ### Step 3: Agent applies to the MiniMax skill
 
-Each theme file contains dedicated sections for each MiniMax skill. The agent reads only the section relevant to the task:
-
-```
-Task: "Generate a Word report"    → Read the ## minimax-docx section
-Task: "Build a financial model"   → Read the ## minimax-xlsx section
-Task: "Create a pitch deck"       → Read the ## pptx-generator section
-Task: "Export as PDF"             → Read the ## pdf section
-```
+The format template contains concrete, actionable rules written for the specific MiniMax skill pipeline. Apply them directly.
 
 ### Step 4: Consistent output
 
 All documents in the same project use the same theme. A pitch deck, its financial model, and the follow-up report all share one brand identity — no manual coordination needed.
 
-## Theme File Structure
+## Theme Directory Structure
 
-Every theme file follows this schema:
+Every theme directory follows this structure:
 
-```markdown
-# {Theme Name}
-
-> {One-line description of the visual character}
-
-## Design Tokens
-
-### Colors
-[Table of color tokens with hex values and roles]
-
-### Typography
-[Table of font families, weights, and sizes per role]
-
-### Spacing
-[Table of spacing tokens]
-
-## minimax-docx
-[Format-specific rules: title page, heading styles, tables, headers/footers, lists]
-
-## minimax-xlsx
-[Format-specific rules: header row, data zone, alternate rows, totals, print layout]
-
-## pptx-generator
-[Format-specific rules: slide layouts, cover, TOC, content, section divider, charts]
-
-## pdf
-[Format-specific rules: page size, font embedding, metadata]
 ```
+themes/{theme}/
+├── tokens.md          ← Design tokens: colors, typography, spacing (shared by all formats)
+├── docx-template.md   ← minimax-docx: title page, heading styles, tables, lists
+├── xlsx-template.md   ← minimax-xlsx: header row, data zone, totals, charts, print
+├── pptx-template.md   ← pptx-generator: slide layouts, color mapping, design checklist
+└── pdf-template.md    ← pdf: page size, font embedding, print notes
+```
+
+**Why split?** When generating a docx, the agent only needs tokens + docx-template — loading xlsx and pptx rules wastes context. One format, two files, zero noise.
 
 ## Integration with MiniMax Skills
 
@@ -125,48 +112,45 @@ Every theme file follows this schema:
 
 When creating or editing a .docx with MiniMax's OpenXML SDK pipeline:
 
-1. Read the theme's `## minimax-docx` section
-2. Apply heading styles using the theme's typography tokens in the SDK's style system
+1. Read `tokens.md` + `docx-template.md`
+2. Apply heading styles using the typography tokens
 3. Set page margins and paragraph spacing from the Spacing tokens
-4. Use the `assets/styles/` template that best matches the theme's character, or build styles programmatically
-5. For tables, apply the header/body/alternate-row color rules
+4. For tables, apply the header/body/alternate-row color rules from the template
 
 ### minimax-xlsx
 
 When creating or editing a spreadsheet with MiniMax's XML workflow:
 
-1. Read the theme's `## minimax-xlsx` section
+1. Read `tokens.md` + `xlsx-template.md`
 2. Apply header row styling (fill color, font, freeze pane) via the unpack→edit→pack pipeline
-3. Set column widths, number formats, and print layout per theme rules
-4. Use `style_audit.py` to verify consistency
-5. For charts, use the theme's chart color palette
+3. Set column widths, number formats, and print layout per template rules
+4. For charts, use the template's chart color palette
 
 ### pptx-generator
 
 When creating a presentation with PptxGenJS:
 
-1. Read the theme's `## pptx-generator` section
-2. Use the theme's color tokens in place of the default design system palette
-3. Apply the slide layout rules (cover, TOC, content, divider) with theme-specific sizing and positioning
-4. Reference `references/design-system.md` for the underlying PptxGenJS mechanics, but override colors and fonts from the theme
+1. Read `tokens.md` + `pptx-template.md`
+2. Use the PptxGenJS color mapping from the template
+3. Apply slide layout rules (cover, TOC, content, divider) with template-specific sizing
 
 ### pdf
 
 When processing or creating PDFs:
 
-1. Read the theme's `## pdf` section
+1. Read `tokens.md` + `pdf-template.md`
 2. Apply page geometry and font embedding rules
 3. For PDFs generated from docx, the docx rules already carry through
 
 ## Custom Themes
 
-To create a new theme, copy `themes/minimal-business.md` and fill in all sections. The schema is:
+To create a new theme, copy an existing theme directory (e.g. `themes/editorial-dark/`) and fill in all files:
 
-1. **Design Tokens** — colors, typography, spacing (same structure for every theme)
-2. **minimax-docx** — rules that make sense for the OpenXML SDK pipeline
-3. **minimax-xlsx** — rules that work with the XML unpack→edit→pack workflow
-4. **pptx-generator** — rules compatible with PptxGenJS
-5. **pdf** — page geometry and embedding rules
+1. **tokens.md** — colors, typography, spacing (same structure for every theme)
+2. **docx-template.md** — rules that make sense for the OpenXML SDK pipeline
+3. **xlsx-template.md** — rules that work with the XML unpack→edit→pack workflow
+4. **pptx-template.md** — rules compatible with PptxGenJS
+5. **pdf-template.md** — page geometry and embedding rules
 
 Every rule should be **actionable**: not "use a professional look" but "header row: `#16213e` fill, white bold 11pt, frozen pane".
 
