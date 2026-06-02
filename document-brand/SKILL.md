@@ -42,7 +42,7 @@ Each theme file is self-contained. The downstream MiniMax skill reads the theme,
 | # | Theme | File | Style | Best For |
 |---|-------|------|-------|----------|
 | 1 | 编辑级暗夜 | `themes/editorial-dark.md` | Black + blue accent, editorial | Premium proposals, pitch decks, keynotes |
-| 2 | 学术经典 | *planned* | Burgundy + ivory + navy | Papers, research, courseware |
+| 2 | 极简商务 | *planned* | White + red accent, traditional | Reports, contracts, whitepapers |
 | 3 | 金融专业 | *planned* | Deep green + gold + gray | Financial reports, investment decks |
 | 4 | 创意时尚 | *planned* | Morandi muted tones | Brand books, creative proposals |
 | 5 | 温暖人文 | *planned* | Earth tones + cream | Newsletters, training, culture |
@@ -50,7 +50,7 @@ Each theme file is self-contained. The downstream MiniMax skill reads the theme,
 | 7 | 互联网快消 | *planned* | High-saturation contrast | Marketing plans, event decks |
 | 8 | 医疗健康 | *planned* | Teal + white + soft green | Medical reports, SOPs |
 | 9 | 暗夜奢华 | *planned* | Pure black + gold/white | Premium proposals, CEO letters |
-| 10 | 极简商务 | *planned* | White + red accent, traditional | Reports, contracts, whitepapers |
+| 10 | 学术经典 | *planned* | Burgundy + ivory + navy | Papers, research, courseware |
 
 ## How to Use
 
