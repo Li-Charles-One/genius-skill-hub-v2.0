@@ -139,59 +139,60 @@ If you have both `DESIGN.md` and custom CSS/tokens, the agent may conflict. Keep
 
 ## Workflow B: Reverse-engineer a live website
 
-When the user provides a URL or asks to reverse-engineer a site's design.
+When the user provides a URL or asks to reverse-engineer a site's design. Uses Firecrawl CLI — handles JS-rendered SPAs, extracts branding info natively.
 
-### Step 1: Fetch the page
+### Step 1: Scrape with Firecrawl
 
-Use `web_fetch` to download the target URL. Capture:
-- The full visible text content
-- Inline CSS (`<style>` blocks and `style=""` attributes visible in the fetched text)
-- Class names visible in the HTML structure
+Run TWO parallel scrapes for maximum design data:
+
+```bash
+# Scrape A: raw HTML for component patterns + spacing analysis
+firecrawl scrape "<url>" --format rawHtml --wait-for 3000 -o .firecrawl/raw.html
+
+# Scrape B: branding extraction (colors, fonts, logos, tone)
+firecrawl scrape "<url>" --format branding --wait-for 3000 -o .firecrawl/branding.json
+```
+
+For SPAs or interactive pages, add more wait time:
+```bash
+firecrawl scrape "<url>" --format rawHtml,branding --wait-for 5000 -o .firecrawl/design-data.json
+```
+
+If the page requires login or interaction, scrape first then use `firecrawl interact`:
+```bash
+firecrawl scrape "<url>"
+firecrawl interact --prompt "Click the login button, then fill credentials"
+```
 
 ### Step 2: Extract design tokens
 
-From the fetched content, identify and extract:
+**From `branding` format** (Firecrawl's built-in brand extraction):
+- Primary / accent / background / text colors with hex values
+- Font families and type scale
+- Logo URLs and brand tone description
 
-**Colors** — semantic roles, not just hex values:
-- Primary / brand color (CTAs, links, accent elements)
-- Background (page background, card surfaces)
-- Text / ink (headings, body copy)
-- Secondary text (captions, metadata)
-- Border / hairline (dividers, input borders)
-- Success / warning / error (if present)
+**From `rawHtml` format** (cross-reference for component patterns):
+- Buttons: border-radius, padding, hover state from inline styles and class names
+- Cards: shadow patterns, border, rounding from repeated container styles
+- Inputs: border color, focus ring, height
+- Navigation: sticky behavior, background, link spacing
+- Section gaps: padding/margin between major layout blocks
 
-**Typography** — build a hierarchy:
-- Font family (headings vs body)
-- Size scale: Display → H1 → H2 → H3 → Body → Caption
-- Weight patterns (bold headings? light body?)
-- Line-height and letter-spacing trends
-
-**Spacing & Layout**:
-- Section gaps (padding between major blocks)
-- Card padding
-- Button padding
-- Container max-width
-
-**Components** — describe the patterns:
-- Buttons (border-radius, padding, hover effects)
-- Cards (shadow, border, rounding)
-- Inputs (border style, focus ring)
-- Navigation (sticky? background? link spacing)
-
-**Shapes & Elevation**:
-- Border-radius scale (sm / md / lg)
-- Shadow levels (card shadow, modal overlay)
-- Border styles
+**Semantic mapping** — don't just dump hex values. Assign roles:
+- `#0064E0` → "Primary CTA blue, used for all purchase buttons"
+- `#1C1E21` → "Body text ink, never pure black"
+- `#F1F4F7` → "Soft surface background for cards"
+- `14px / 1.5` → "Default body copy, comfortable reading rhythm"
 
 ### Step 3: Write the DESIGN.md
 
-Output a complete DESIGN.md file following Google's spec format:
+Output a complete DESIGN.md file following Google's YAML+Markdown spec. The `branding` output gives you the token values; the `rawHtml` output gives you the component patterns. Combine both into:
 
 ```markdown
 ---
 version: alpha
 name: <site-name>-design-analysis
-description: <one-sentence site description + design vibe>
+description: <one-sentence site description + design vibe from branding output>
 colors:
   primary: "#xxxxxx"
   background: "#xxxxxx"
@@ -200,30 +201,26 @@ colors:
 typography:
   display: { fontFamily: "...", fontSize: "...", fontWeight: ... }
   h1: { ... }
-  h2: { ... }
   body: { ... }
-  caption: { ... }
 rounded:
   sm: "..."
   md: "..."
-  lg: "..."
 spacing:
   sm: "..."
   md: "..."
-  lg: "..."
 ---
 
 ## Overview
 <2-3 sentences describing the visual atmosphere>
 
 ## Colors
-<table with semantic name | hex | role>
+<semantic name | hex | role table>
 
 ## Typography
-<table with level | font | size | weight | line-height>
+<level | font | size | weight | line-height table>
 
 ## Components
-<button, card, input, nav patterns>
+<button, card, input, nav patterns with states>
 
 ## Do's and Don'ts
 <3-5 guardrails derived from observed patterns>
@@ -231,13 +228,14 @@ spacing:
 
 ### Step 4: Save + apply
 
-Write the generated DESIGN.md to the project root, then tell the user it's ready. The agent will automatically reference it for subsequent UI generation.
+Write the generated DESIGN.md to `./DESIGN.md` in the project root. Tell the user it's ready and what the key design decisions are (primary color, font stack, vibe).
 
-### Limitations (be transparent)
+### Limitations
 
-- `web_fetch` only captures server-rendered HTML and inline styles. External stylesheets, JS-driven styles, and CSS custom properties are often missed.
-- The extracted DESIGN.md will be a **best-effort approximation** — less precise than the hand-authored files in Workflow A.
-- Always tell the user what was confidently extracted vs what was guessed.
+- Firecrawl extracts computed styles — matches what users see, not necessarily internal design tokens.
+- Interactive states (hover, focus, active) are inferred from class name patterns, not directly observed.
+- The `branding` format is a best-effort AI analysis; always spot-check against the raw HTML.
+- For highly dynamic SPAs, increase `--wait-for` or use `firecrawl interact`.
 
 ---
 
