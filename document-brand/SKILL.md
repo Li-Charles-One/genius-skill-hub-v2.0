@@ -27,20 +27,20 @@ One theme file. Three MiniMax skills. Zero design decisions at generation time.
 
 ```
 document-brand/
-├── SKILL.md                 ← This file — catalog + usage guide
+├── SKILL.md                 ← Catalog + usage guide
 ├── preview.html             ← Visual preview
 └── themes/
     └── editorial-dark/      ← Theme #1 — 编辑级暗夜 (black + blue accent)
-        ├── tokens.md        ← Shared design tokens (colors, typography, spacing)
-        ├── docx-template.md ← minimax-docx instructions
-        ├── xlsx-template.md ← minimax-xlsx instructions
-        ├── pptx-template.md ← pptx-generator instructions
-        └── pdf-template.md  ← pdf instructions
+        ├── tokens.md        ← Design tokens: colors, typography, spacing
+        ├── docx-template.md ← Token → OpenXML parameter mapping
+        ├── xlsx-template.md ← Token → xlsx XML parameter mapping
+        ├── pptx-template.md ← Token → PptxGenJS parameter mapping
+        └── pdf-template.md  ← Token → PDF parameter mapping
 
 (More themes added here as they are designed)
 ```
 
-Each theme is a **directory** with shared design tokens in `tokens.md` and one template file per output format. The agent reads only the two files it needs — `tokens.md` + the format template — never the whole catalog.
+**Two files per task**: design intent lives in `tokens.md`. Engineering mapping lives in `{format}-template.md` — pure parameter tables, no design prose, no execution instructions. The downstream skill (minimax-docx / xlsx / pptx-generator) reads both and decides HOW to execute.
 
 ## Brand Theme Catalog
 
@@ -93,18 +93,18 @@ All documents in the same project use the same theme. A pitch deck, its financia
 
 ## Theme Directory Structure
 
-Every theme directory follows this structure:
+Every theme directory:
 
 ```
 themes/{theme}/
-├── tokens.md          ← Design tokens: colors, typography, spacing (shared by all formats)
-├── docx-template.md   ← minimax-docx: title page, heading styles, tables, lists
-├── xlsx-template.md   ← minimax-xlsx: header row, data zone, totals, charts, print
-├── pptx-template.md   ← pptx-generator: slide layouts, color mapping, design checklist
-└── pdf-template.md    ← pdf: page size, font embedding, print notes
+├── tokens.md          ← Design tokens: colors, typography, spacing
+├── docx-template.md   ← Token → OpenXML parameter mapping
+├── xlsx-template.md   ← Token → xlsx XML parameter mapping
+├── pptx-template.md   ← Token → PptxGenJS parameter mapping
+└── pdf-template.md    ← Token → PDF parameter mapping
 ```
 
-**Why split?** When generating a docx, the agent only needs tokens + docx-template — loading xlsx and pptx rules wastes context. One format, two files, zero noise.
+**Separation of concerns**: `tokens.md` = design intent (WHAT). `{format}-template.md` = engineering mapping (HOW to encode it in the format's native parameters). The downstream skill owns execution — document-brand provides the parameter values, not the execution plan.
 
 ## Integration with MiniMax Skills
 
