@@ -17,6 +17,17 @@ For adapting WePlaning to non-Codex Agents, read `AGENT-INSTRUCTIONS.md`. It req
 
 These rules are NOT advisory. The Agent MUST execute them; skipping any is a protocol violation.
 
+### P0: ONCE per project — inject rules into system prompt
+
+The first time you use WePlaning on a project (or when the user asks to "remember the rules"):
+
+**Create a `priority: high` project memory** using the Agent's `remember` tool (or equivalent). This ensures every future session gets the discipline rules BEFORE it even invokes the skill.
+
+Memory name: `weplaning-auto-discipline`
+Memory content: the three mandatory rules below (check-memory on every write, merge-session on closeout, TOOLS.md update before merge). Write them as imperative Agent instructions, not suggestions.
+
+Then ALSO follow the rules in this SKILL.md when the skill is invoked. The memory is the safety net; the skill is the playbook.
+
 ### On every memory write
 
 After ANY write to `.agent-memory/` (CURRENT.md edit, session update, CHANGES.md append, TOOLS.md edit):
@@ -31,10 +42,12 @@ If it fails → run `repair-memory.cjs` first, then re-check. Do NOT report succ
 
 When a session produces durable changes (files edited, decisions made, state changed):
 
-1. Update `TOOLS.md` — fill in ALL tools actually used this session (not "unknown").
-2. Run `merge-session.cjs` — this syncs THREADS.md, CURRENT.md, WePlaning.md automatically.
-3. Run `check-memory.cjs` — confirm all invariants hold.
-4. Only then report "memory updated successfully."
+1. Run `pre-close-check.cjs` — scans for TOOLS.md unknowns, CHANGES.md unknowns, mainline drift.
+2. Fix any warnings: update TOOLS.md, re-run append-change with --file/--verification.
+3. Update `TOOLS.md` — fill in ALL tools actually used this session (not "unknown").
+4. Run `merge-session.cjs` — this syncs THREADS.md, CURRENT.md, WePlaning.md automatically.
+5. Run `check-memory.cjs` — confirm all invariants hold.
+6. Only then report "memory updated successfully."
 
 ### Before starting any new session
 
@@ -70,6 +83,7 @@ node scripts/session-list.cjs <project-root>
 node scripts/register-agent.cjs <project-root> --session <session-id> --agent "<name>" --adapter "<adapter>"
 node scripts/sync-before-write.cjs <project-root> --session <session-id>
 node scripts/handoff.cjs <project-root> --session <session-id>
+node scripts/pre-close-check.cjs <project-root> [--session <id>] [--fix]
 node scripts/sync-skill-package.cjs --source <skill-dir> --target <skill-dir>
 ```
 
@@ -85,6 +99,7 @@ Use scripts first for:
 - registering Agent capability into `TOOLS.md`;
 - checking that an Agent is writing from the latest mainline;
 - generating handoff packets;
+- scanning for pre-close issues (unknown TOOLS/CHANGES fields, mainline drift);
 - syncing a changed skill package to a local Skill Hub or mirror;
 - running the consistency gate.
 

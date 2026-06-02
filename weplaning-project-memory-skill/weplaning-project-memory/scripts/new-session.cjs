@@ -4,8 +4,10 @@ const fs = require("fs");
 const path = require("path");
 const {
   activeCount,
+  appendTableRow,
   generateSessionId,
   parseArgs,
+  readMemory,
   readThreads,
   renderSessionMd,
   required,
@@ -15,6 +17,7 @@ const {
   updateWePlaning,
   usage,
   utcNow,
+  writeMemory,
   writeSession,
   writeThreads,
 } = require("./weplaning-utils.cjs");
@@ -112,6 +115,25 @@ threads.rows.push({
   summary,
 });
 writeThreads(root, threads, started);
+
+// Auto-insert a TOOLS.md row for the new session.
+try {
+  const toolsText = readMemory(root, "TOOLS.md");
+  const updated = appendTableRow(toolsText, "## Agent Sessions", [
+    sessionId,
+    agent,
+    os,
+    adapter,
+    "unknown",
+    "unknown",
+    "unknown",
+    summary,
+  ]);
+  writeMemory(root, "TOOLS.md", updated);
+} catch (err) {
+  // Non-fatal: TOOLS.md insert can fail if heading is missing or format differs.
+  console.warn(`Warning: Could not auto-insert TOOLS.md row: ${err.message}`);
+}
 updateWePlaning(root, {
   updated: started,
   updatedBy: agent,

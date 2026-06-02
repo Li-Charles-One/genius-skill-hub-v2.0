@@ -59,6 +59,15 @@ function list(items, fallback) {
   return values.map((item) => `  - ${item}`).join("\n");
 }
 
+if (!files.length) {
+  console.warn("Warning: --file not provided. CHANGES.md entry will show Files touched: unknown.");
+  console.warn("  Tip: node append-change.cjs ... --file path/to/file1 --file path/to/file2");
+}
+if (!verification.length) {
+  console.warn("Warning: --verification not provided. CHANGES.md entry will show Verification: unknown.");
+  console.warn("  Tip: node append-change.cjs ... --verification \"ls -la backup/\"");
+}
+
 const entry = `
 ## ${changeId}
 - Session: ${sessionId}
