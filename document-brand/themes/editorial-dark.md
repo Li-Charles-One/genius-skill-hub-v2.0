@@ -36,20 +36,27 @@
 
 ### Typography
 
-字体栈与参考网页完全一致：
+字体栈与参考网页完全一致。**重要**：Noto Sans SC 是可变字体，必须按字重选择具体变体名，否则 Word 只会渲染 Regular。
 
-| Role | Font Stack | Weight | Size | Line Height | Letter Spacing |
+| Role | Font (CJK) | Weight | Size | Line Height | Letter Spacing |
 |------|-----------|--------|------|-------------|----------------|
-| 封面大标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 48–72pt | 1.05 | -2px |
-| 一级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 26–36pt | 1.2 | -1px |
-| 二级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 600 | 14pt | 1.3 | 0 |
-| 三级标题 | Noto Sans SC, Inter, PingFang SC, sans-serif | 500 | 12pt | 1.3 | 0 |
-| 正文 | Noto Sans SC, Inter, PingFang SC, sans-serif | 300 | 10pt | 2.0 | 0 |
-| 小号正文 | Noto Sans SC, Inter, PingFang SC, sans-serif | 400 | 9pt | 1.7 | 0 |
-| 说明/脚注 | Noto Sans SC, Inter, PingFang SC, sans-serif | 400 | 8pt | 1.6 | 0.5px |
-| 标签/元信息 | Noto Sans SC, Inter, PingFang SC, sans-serif | 500 | 7pt | 1.4 | 3px |
-| 数据/代码 | JetBrains Mono, Consolas, monospace | 400 | 9pt | 1.5 | 0 |
-| 数字展示 | Noto Sans SC, Inter, PingFang SC, sans-serif | 200 | 28–40pt | 1.0 | -1px |
+| 封面大标题 | Noto Sans SC Thin | 200 | 36–56pt | 1.05 | -2px |
+| 一级标题 | Noto Sans SC Thin | 200 | 22–32pt | 1.2 | 1px |
+| 二级标题 | Noto Sans SC Medium | 600 | 14pt | 1.3 | 0.5px |
+| 三级标题 | Noto Sans SC Medium | 500 | 12pt | 1.3 | 0.5px |
+| 正文 | Noto Sans SC Light | 300 | 10pt | 2.0 | 0 |
+| 小号正文 | Noto Sans SC | 400 | 9pt | 1.7 | 0 |
+| 说明/脚注 | Noto Sans SC | 400 | 8pt | 1.6 | 0.5px |
+| 标签/元信息 | Noto Sans SC Medium | 500 | 7pt | 1.4 | 3px |
+| 数据/代码 | JetBrains Mono | 400 | 9pt | 1.5 | 0 |
+| 数字展示 | Noto Sans SC Thin | 200 | 28–40pt | 1.0 | -1px |
+
+> **字重映射**（OpenXML / PptxGenJS 中指定字体名时用）：
+> - weight ≤200 → `Noto Sans SC Thin`
+> - weight 300 → `Noto Sans SC Light`
+> - weight 400 → `Noto Sans SC`（Regular）
+> - weight 500-600 → `Noto Sans SC Medium`
+> - weight ≥700 → `Noto Sans SC` + Bold
 
 ### Spacing
 
@@ -57,7 +64,7 @@
 |-------|-------|
 | 页边距 | 48px / 1.27cm（比传统 1 inch 窄，更现代） |
 | 段落间距 | 段后 6pt，不用整行空行。段落之间靠段后间距区分 |
-| 正文行高 | 1.8（松散、可呼吸） |
+| 正文行高 | 2.0（松散、可呼吸） |
 | 标题上间距 | 120px（docx 封面）/ 32px（正文内） |
 | 标题下间距 | 16px |
 | 表格单元格内边距 | 上下 12px，左右 16px |
@@ -81,25 +88,21 @@
 ```
 ┌──────────────────────────────────────┐
 │                                      │
-│  [Tag line]                          │  ← 10pt, accent, letter-spacing 4px
+│  [Tag line]                          │  ← 7pt, accent, letter-spacing 3px
 │                                      │
-│  [TITLE]                             │  ← 48pt, weight 200, text-primary
-│  ──                                  │  ← 48px accent 分割线
+│  [TITLE]                             │  ← 36pt, Noto Sans SC Thin, black
+│  ──                                  │  ← accent 分割线（bottom-border 段落，右缩进）
 │                                      │
-│  [Subtitle]                          │  ← 16pt, weight 300, text-secondary
+│  [Subtitle]                          │  ← 10pt, Noto Sans SC Light, text-secondary
 │                                      │
-│                                      │
-│                         [Date]       │  ← 11pt, text-muted
-│  [Author / Org]                      │  ← 11pt, text-muted
 └──────────────────────────────────────┘
 ```
 
-- 整页 `bg-primary`（`#000000`）背景——在 docx 中通过 Insert > Shapes 全页黑色矩形实现。
-- 标签行：y = page height × 30%，10pt，`accent`，letter-spacing 4px，全大写或中文标签。
-- 标题：y 紧随标签，48pt（可缩放到 96pt），weight 200（极细），letter-spacing -2px。不超过两行。行高 1.05。
-- 分割线：标题下方 24px。`accent` 色，48px 宽，1px 高。
-- 副标题：分割线下方 16px。16pt，weight 300，`text-secondary`，最多三行，行高 1.8。
-- 底部信息：页面底边距 48px 处。左侧作者，右侧日期。11pt，`text-muted`。
+- 标签行：y ≈ 30%，7pt，`accent`，letter-spacing 3px。
+- 标题：y 紧随标签，36pt，Noto Sans SC Thin。不超过两行。行高 1.05。
+- 分割线：标题下方，`accent` 色。实现方式：空段落 + bottom-border + 右缩进（不做成全宽线）。
+- 副标题：分割线下方，10pt，Noto Sans SC Light，`text-secondary`，最多三行，行高 1.8。
+- 封面不需要日期和署名——保持干净。如需元信息，放到正文页的页脚或副标题中。
 
 ### Heading Styles (正文页)
 
@@ -121,7 +124,7 @@
 
 ### Body Text
 
-- 默认段落：13pt，weight 300，`#000000`，行高 1.8。无首行缩进。
+- 默认段落：10pt，Noto Sans SC Light，`#000000`，行高 2.0。无首行缩进。
 - **段落间距**：段后 6pt，不用整行空行。段落之间靠段后间距区分，保持紧凑的编辑节奏。
 - 行内强调用 `accent` 色（`#00a8ff`），不用加粗。
 
@@ -129,12 +132,12 @@
 
 | Element | Style |
 |---------|-------|
-| **整体** | 全宽（页面宽度）。无外边框。 |
-| **表头行** | `border`（`#222222`）背景。`text-primary`（`#ffffff`）文字，12pt，weight 500。上下 padding 12px，左右 16px。 |
-| **数据行** | 白底。`#000000` 文字，12pt，weight 300。上下 padding 10px，左右 16px。 |
-| **行分隔** | 每个单元格四边 1px `border`（`#e8e8e8`）。表头用 `#333`。 |
-| **分类行** | `accent-dim`（`rgba(0,168,255,0.08)`）背景。`accent` 文字，12pt，weight 600。 |
-| **合计行** | 顶部 2px `accent`。`accent` 文字，13pt，weight 600。 |
+| **整体** | 全宽（页面宽度）。所有单元格四边有 1px 边框。 |
+| **表头行** | `#222222` 背景。`#ffffff` 文字，9pt，Noto Sans SC Medium。padding 上下 60 DXA，左右 120 DXA。 |
+| **数据行** | 白底。`#000000` 文字，9pt，Noto Sans SC Light。padding 上下 60 DXA，左右 120 DXA。 |
+| **行分隔** | 每个单元格四边 1px `#e8e8e8`。表头边框用 `#333`，底部 2px `accent`。 |
+| **分类行** | `#f4f9ff` 背景。`accent` 文字，9pt，Noto Sans SC Medium。合并整行为一列。 |
+| **合计行** | 顶部 2px `accent`。`accent` 文字，10pt，Noto Sans SC Medium。 |
 | **数字列** | 右对齐。tabular-nums。 |
 | **文本列** | 左对齐。 |
 
@@ -378,7 +381,7 @@
 
 - [ ] 所有幻灯背景为 `#000000` 或 `#0a0a0a`
 - [ ] 内容页顶部无装饰线——仅标签 + 标题，纯粹干净
-- [ ] 章节标签 10pt accent letter-spacing 4px
+- [ ] 章节标签 7pt, accent, letter-spacing 3px
 - [ ] 标题 weight 200（极细），非粗体
 - [ ] 正文 weight 300，`#999999`，行高 1.8
 - [ ] 数字展示用 weight 200 + accent 色
