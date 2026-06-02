@@ -13,6 +13,45 @@ Read `references/weplaning-v2.2-protocol.md` only when you need exact schema det
 
 For adapting WePlaning to non-Codex Agents, read `AGENT-INSTRUCTIONS.md`. It requires identifying the target Agent and discovering its real tool surface before mapping protocol operations.
 
+## 🚨 MANDATORY Discipline (MUST — not "should")
+
+These rules are NOT advisory. The Agent MUST execute them; skipping any is a protocol violation.
+
+### On every memory write
+
+After ANY write to `.agent-memory/` (CURRENT.md edit, session update, CHANGES.md append, TOOLS.md edit):
+
+```bash
+node <skill-dir>/scripts/check-memory.cjs <project-root>
+```
+
+If it fails → run `repair-memory.cjs` first, then re-check. Do NOT report success until the gate passes.
+
+### On session closeout
+
+When a session produces durable changes (files edited, decisions made, state changed):
+
+1. Update `TOOLS.md` — fill in ALL tools actually used this session (not "unknown").
+2. Run `merge-session.cjs` — this syncs THREADS.md, CURRENT.md, WePlaning.md automatically.
+3. Run `check-memory.cjs` — confirm all invariants hold.
+4. Only then report "memory updated successfully."
+
+### Before starting any new session
+
+1. Read `WePlaning.md`, `CURRENT.md`, `THREADS.md`, recent `CHANGES.md`, and `TOOLS.md`.
+2. Run `new-session.cjs` to create the session file.
+3. Update `TOOLS.md` with this session's Agent capabilities.
+
+### Why this is mandatory
+
+Prior sessions without this discipline caused:
+- Mainline drift (CURRENT.md content from session X, mainline pointer still on session Y)
+- TOOLS.md staling ("unknown" tools, outdated session notes)
+- CHANGES.md with `unknown` files and verification
+- Session files not reflecting actual closeout state
+
+The scripts make all of this automatic. The Agent just needs to CALL them.
+
 ## Bundled Scripts
 
 Prefer bundled scripts for routine memory operations. They reduce token use and prevent Markdown drift.
