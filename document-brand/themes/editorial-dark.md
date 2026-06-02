@@ -286,8 +286,8 @@
 ```
 全屏 #000000
 ┌──────────────────────────────────────┐
-│  ──                                 │  ← accent 分割线, 48px
-│  目录                               │  ← 7pt, accent, letter-spacing 3px
+│                                      │
+│  目录                               │  ← 7pt, accent, letter-spacing 3px, y = 8%
 │                                      │
 │  01  [Section]           ······ 03  │  ← Number: 40pt, weight 200, accent
 │  02  [Section]           ······ 05  │     Label: 13pt, weight 500, #ffffff
@@ -318,8 +318,8 @@
 ```
 全屏 #000000
 ┌──────────────────────────────────────┐
-│  ──                                 │  ← accent 分割线, 48px, x = 60px
-│  02  章节标签                        │  ← 7pt, accent, letter-spacing 3px
+│                                      │
+│  02  章节标签                        │  ← 7pt, accent, letter-spacing 3px, x = 60px, y = 8%
 │                                      │
 │  [Slide Title]                      │  ← 28pt, weight 200, #ffffff
 │                                      │     letter-spacing -1px
@@ -342,7 +342,8 @@
 ```
 全屏 #000000
 ┌──────────────────────────────────────┐
-│  ──  03  关键数据                    │
+│                                      │
+│  03  关键数据                        │  ← 7pt, accent, letter-spacing 3px, x = 60px, y = 8%
 │                                      │
 │  ┌──────────┐ ┌──────────┐ ┌──────┐ │
 │  │ 50×      │ │ 0%       │ │ v8   │ │  ← #111111 背景
