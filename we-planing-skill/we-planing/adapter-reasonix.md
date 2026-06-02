@@ -3,7 +3,7 @@
 Agent: Reasonix Code (deepseek-v4-pro)
 Environment: Reasonix CLI / sandbox
 OS: (detected at runtime)
-Integration format: Native skill in `.reasonix/skills/weplaning-project-memory/`
+Integration format: Native skill in `.reasonix/skills/we-planing/`
 Verified capabilities: Full — all protocol operations mappable.
 
 ## Capability Map

@@ -190,13 +190,13 @@ Last updated: ${now}
 
 | Session ID | Agent | OS | Adapter | Tools | MCP | Skills | Notes |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| ${sessionId} | ${agent} | ${os} | ${adapter} | unknown | unknown | weplaning-project-memory | Bootstrapped WePlaning |
+| ${sessionId} | ${agent} | ${os} | ${adapter} | unknown | unknown | we-planing | Bootstrapped WePlaning |
 
 ## Skills
 
 | Skill | Session ID | Version | Purpose | Location | Trigger |
 |:--|:--|:--|:--|:--|:--|
-| weplaning-project-memory | ${sessionId} | 2.2+scripts | Maintain project collaboration memory | unknown | memory/resume/handoff requests |
+| we-planing | ${sessionId} | 2.2+scripts | Maintain project collaboration memory | unknown | memory/resume/handoff requests |
 
 ## Constraints
 - Secrets, API keys, tokens, private MCP credentials, cookies, and passwords MUST NOT be recorded.

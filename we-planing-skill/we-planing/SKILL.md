@@ -1,5 +1,5 @@
 ---
-name: weplaning-project-memory
+name: we-planing
 description: Maintain WePlaning v2.2 project collaboration memory. Use when the user asks to initialize, resume, continue, close, summarize, hand off, audit, migrate, or repair `.agent-memory/` project memory; when managing multi-Agent or multi-session project state; or when updating required files such as `CURRENT.md`, `THREADS.md`, `CHANGES.md`, `TOOLS.md`, `sessions/`, plus optional indexes/context such as `DECISIONS.md`, `DONE.md`, `PROJECT.md`, or `notes/`.
 ---
 
