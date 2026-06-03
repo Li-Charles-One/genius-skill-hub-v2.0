@@ -5,9 +5,10 @@ Genius Vision — Universal image & video analysis via doubao (豆包) vision AP
 Usage:
     python vision.py <file_path_or_url> <mode> [--output json|text] [--model MODEL]
 
-Image modes:  describe, ocr, ui-review, chart-data, object-detect
+Image modes:  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes:  video-summary, video-ocr, video-review
 Auto-detect:  .mp4/.mov/.avi/.mkv/.webm → video; otherwise → image
+Compare:     python vision.py img1.png compare --compare-with img2.png
 
 Environment:
     ARK_API_KEY    — Volcengine Ark API key (required)
@@ -58,6 +59,13 @@ PROMPTS = {
         "List all distinct objects, people, animals, and activities in this image. "
         "For each, describe what it is, its approximate location (top-left, center, "
         "bottom-right, etc.), and any notable attributes."
+    ),
+    "compare": (
+        "Compare these two images. List:\n"
+        "(1) What is the same in both images\n"
+        "(2) What is different between them\n"
+        "(3) If applicable, which version is better and why\n"
+        "Be specific and objective."
     ),
     # ── Video prompts ──────────────────────────────────────────────
     "video-summary": (
@@ -163,11 +171,14 @@ def analyze_media(
     model: str = None,
     api_key: str = None,
     base_url: str = None,
+    compare_with: str = None,
 ) -> str:
     """Analyze an image or video using doubao vision API.
 
     Auto-detects video by file extension. Videos use video_url type;
     images use image_url type. Both are base64-encoded for reliability.
+
+    For 'compare' mode, pass a second image via compare_with.
     """
     api_key = api_key or load_api_key()
     if not api_key:
@@ -209,6 +220,14 @@ def analyze_media(
         content.append({
             "type": media_type_name,
             media_type_name: {"url": f"data:{media_type};base64,{b64_data}"}
+        })
+
+    # Second image for compare mode
+    if mode == "compare" and compare_with:
+        b64_data2, media_type2 = encode_file(compare_with)
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{media_type2};base64,{b64_data2}"}
         })
 
     content.append({"type": "text", "text": prompt})
@@ -271,6 +290,11 @@ def main():
         default=None,
         help="API key override",
     )
+    parser.add_argument(
+        "--compare-with", "-c",
+        default=None,
+        help="Second image for 'compare' mode",
+    )
     args = parser.parse_args()
 
     try:
@@ -279,6 +303,7 @@ def main():
             mode=args.mode,
             model=args.model,
             api_key=args.api_key,
+            compare_with=args.compare_with,
         )
 
         if args.output == "json":

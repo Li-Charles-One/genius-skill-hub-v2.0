@@ -30,6 +30,7 @@ Universal image & video analysis skill for AI agents. Analyzes images and videos
 | `ui-review` | UI mockups, wireframes, design critique | Structured design review |
 | `chart-data` | Charts, graphs, data visualizations | Extracted data points |
 | `object-detect` | Identify objects, people, activities | Listed elements with locations |
+| `compare` | Two images side-by-side | Differences and similarities |
 
 ### Video Modes (auto-detected by extension)
 
@@ -81,6 +82,7 @@ python /path/to/scripts/vision.py <file_path_or_url> <mode> [--output json|text]
 - `ui-review` — design critique
 - `chart-data` — chart data extraction
 - `object-detect` — object identification
+- `compare` — side-by-side image comparison (requires `--compare-with`)
 
 ### Video Modes
 - `video-summary` — full video understanding with timeline
@@ -92,6 +94,7 @@ python /path/to/scripts/vision.py <file_path_or_url> <mode> [--output json|text]
 # Images
 python vision.py screenshot.png ui-review
 python vision.py document.jpg ocr --output json
+python vision.py before.png compare --compare-with after.png
 
 # Videos (auto-detected by .mp4/.mov/.avi/.mkv/.webm extension)
 python vision.py meeting.mp4 video-summary
