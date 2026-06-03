@@ -5,10 +5,13 @@ Genius Vision — Universal image & video analysis via doubao (豆包) vision AP
 Usage:
     python vision.py <file_path_or_url> <mode> [--output json|text] [--model MODEL]
 
-Image modes:  describe, ocr, ui-review, chart-data, object-detect, compare
-Video modes:  video-summary, video-ocr, video-review
-Auto-detect:  .mp4/.mov/.avi/.mkv/.webm → video; otherwise → image
-Compare:     python vision.py img1.png compare --compare-with img2.png
+Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
+Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
+Auto-detect:      .mp4/.mov/.avi/.mkv/.webm → video; otherwise → image
+Compare:          python vision.py img1.png compare --compare-with img2.png
+
+For videos, ffprobe is used to get actual duration, which is injected into the
+prompt as ground truth and displayed in the output for verification.
 
 Environment:
     ARK_API_KEY    — Volcengine Ark API key (required)
@@ -19,6 +22,8 @@ import argparse
 import base64
 import json
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,6 +38,7 @@ except ImportError:
 # ── Prompts ──────────────────────────────────────────────────────────────
 
 PROMPTS = {
+    # ── Image prompts ──────────────────────────────────────────────
     "describe": (
         "Provide a detailed description of this image. Include: main subject, "
         "setting/background, colors/style, any text visible, notable objects, "
@@ -71,7 +77,7 @@ PROMPTS = {
     "video-summary": (
         "Provide a comprehensive summary of this video. Structure your response as:\n"
         "(1) Overall topic / what the video is about\n"
-        "(2) Timeline breakdown — key segments with timestamps (approximate)\n"
+        "(2) Timeline breakdown — key segments with timestamps\n"
         "(3) Key people, objects, or scenes shown\n"
         "(4) Any text or captions visible on screen\n"
         "(5) Audio/speech content if discernible\n"
@@ -95,15 +101,58 @@ PROMPTS = {
         "(5) Specific actionable suggestions for improvement\n"
         "Be constructive and detailed."
     ),
+    "video-frame-analysis": (
+        "Perform a detailed frame-by-frame / scene-by-scene analysis of this video.\n"
+        "For each distinct scene or shot change, provide:\n"
+        "- Timestamp range (e.g. 0:00–0:05)\n"
+        "- Visual description of the frame/scene\n"
+        "- Camera movement (pan, zoom, static, tracking, etc.)\n"
+        "- Any text or graphics on screen\n"
+        "- People/objects present and their actions\n"
+        "- Audio/speech content in that segment\n\n"
+        "After the timeline, provide a summary including:\n"
+        "- Total duration as analyzed\n"
+        "- Number of distinct scenes identified\n"
+        "- Overall production style and techniques used\n\n"
+        "Be thorough — aim to identify every meaningful scene or shot change."
+    ),
 }
 
 # ── File type detection ───────────────────────────────────────────────
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}
 
+
 def is_video(file_path: str) -> bool:
     """Detect if a local file is a video by extension."""
     return Path(file_path).suffix.lower() in VIDEO_EXTENSIONS
+
+
+# ── ffprobe duration ──────────────────────────────────────────────────
+
+def get_video_duration(file_path: str) -> float | None:
+    """Get video duration in seconds using ffprobe. Returns None on failure."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", file_path],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
+        pass
+    return None
+
+
+def format_duration(seconds: float) -> str:
+    """Format seconds to mm:ss or hh:mm:ss."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h > 0:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
 
 
 # ── API Call ──────────────────────────────────────────────────────────────
@@ -113,7 +162,6 @@ def load_api_key() -> str:
     key = os.environ.get("ARK_API_KEY")
     if key:
         return key
-    # Try .env file
     env_paths = [
         Path(__file__).parent / ".env",
         Path.home() / ".hermes" / ".env",
@@ -135,20 +183,13 @@ def encode_file(file_path: str) -> tuple[str, str]:
 
     suffix = path.suffix.lower()
     media_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-        ".bmp": "image/bmp",
-        ".mp4": "video/mp4",
-        ".mov": "video/quicktime",
-        ".avi": "video/x-msvideo",
-        ".mkv": "video/x-matroska",
-        ".webm": "video/webm",
-        ".flv": "video/x-flv",
-        ".wmv": "video/x-ms-wmv",
-        ".m4v": "video/mp4",
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif",
+        ".webp": "image/webp", ".bmp": "image/bmp",
+        ".mp4": "video/mp4", ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+        ".webm": "video/webm", ".flv": "video/x-flv",
+        ".wmv": "video/x-ms-wmv", ".m4v": "video/mp4",
     }
     media_type = media_types.get(suffix, "image/png")
 
@@ -156,7 +197,8 @@ def encode_file(file_path: str) -> tuple[str, str]:
     max_size = 50 * 1024 * 1024  # 50MB
     if file_size > max_size:
         raise ValueError(
-            f"File too large: {file_size / 1024 / 1024:.1f}MB (max {max_size / 1024 / 1024:.0f}MB). "
+            f"File too large: {file_size / 1024 / 1024:.1f}MB "
+            f"(max {max_size / 1024 / 1024:.0f}MB). "
             "Consider compressing or trimming the video."
         )
 
@@ -176,8 +218,9 @@ def analyze_media(
     """Analyze an image or video using doubao vision API.
 
     Auto-detects video by file extension. Videos use video_url type;
-    images use image_url type. Both are base64-encoded for reliability.
+    images use image_url type. Both are base64-encoded.
 
+    For videos, ffprobe duration is injected into the prompt as ground truth.
     For 'compare' mode, pass a second image via compare_with.
     """
     api_key = api_key or load_api_key()
@@ -192,15 +235,29 @@ def analyze_media(
     prompt = PROMPTS.get(mode, PROMPTS["describe"])
 
     # Detect media type
-    is_video_input = not media_input.startswith(("http://", "https://")) and is_video(media_input)
+    is_video_input = (
+        not media_input.startswith(("http://", "https://")) and is_video(media_input)
+    )
     media_type_name = "video_url" if is_video_input else "image_url"
-    timeout = 120 if is_video_input else 60  # videos take longer
+    timeout = 180 if is_video_input else 60
+
+    # For video: get ground-truth duration via ffprobe, inject into prompt
+    actual_duration = None
+    if is_video_input:
+        actual_duration = get_video_duration(media_input)
+        if actual_duration is not None:
+            dur_str = format_duration(actual_duration)
+            prompt = (
+                f"[VIDEO GROUND TRUTH — actual duration: {dur_str} "
+                f"({actual_duration:.1f}s), verified by ffprobe. "
+                f"Use this as your timing reference for all timestamps.]\n\n"
+                + prompt
+            )
 
     # Build message content
     content = []
 
     if media_input.startswith(("http://", "https://")):
-        # Remote URL — download first, then base64 encode
         try:
             resp = httpx.get(media_input, timeout=30, follow_redirects=True)
             resp.raise_for_status()
@@ -215,7 +272,6 @@ def analyze_media(
         except Exception as e:
             raise RuntimeError(f"Failed to download from URL: {e}")
     else:
-        # Local file
         b64_data, media_type = encode_file(media_input)
         content.append({
             "type": media_type_name,
@@ -239,9 +295,7 @@ def analyze_media(
     }
     payload = {
         "model": model,
-        "messages": [
-            {"role": "user", "content": content}
-        ],
+        "messages": [{"role": "user", "content": content}],
         "max_tokens": 4096,
     }
 
@@ -252,12 +306,39 @@ def analyze_media(
             json=payload,
         )
         if resp.status_code != 200:
-            error_body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"raw": resp.text}
-            error_msg = error_body.get("error", {}).get("message", resp.text[:300])
+            try:
+                error_body = resp.json()
+                error_msg = error_body.get("error", {}).get("message", resp.text[:300])
+            except Exception:
+                error_msg = resp.text[:300]
             raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
         data = resp.json()
 
-    return data["choices"][0]["message"]["content"]
+    result_text = data["choices"][0]["message"]["content"]
+
+    # Duration comparison footer for video modes
+    if is_video_input and actual_duration is not None:
+        footer_parts = [f"ffprobe 实测: **{format_duration(actual_duration)}**"]
+        # Try to extract claimed duration from response
+        dur_patterns = [
+            r'(?:total\s+)?duration[:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
+            r'总时长[：:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
+            r'(?:视频\s*)?时长[：:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
+        ]
+        claimed = None
+        for pat in dur_patterns:
+            m = re.search(pat, result_text, re.IGNORECASE)
+            if m:
+                claimed = f"{m.group(1)}:{m.group(2)}"
+                if m.group(3):
+                    claimed += f":{m.group(3)}"
+                break
+        if claimed:
+            footer_parts.append(f"豆包声称: `{claimed}`")
+        footer_parts.append("（以此为基准校验豆包时间戳准确性）")
+        result_text += "\n\n---\n⏱ **时长校验** — " + " | ".join(footer_parts)
+
+    return result_text
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────
@@ -272,7 +353,7 @@ def main():
         nargs="?",
         default="describe",
         choices=list(PROMPTS.keys()),
-        help="Analysis mode (default: describe; video modes: video-summary, video-ocr, video-review)",
+        help="Analysis mode",
     )
     parser.add_argument(
         "--output", "-o",
@@ -283,7 +364,7 @@ def main():
     parser.add_argument(
         "--model", "-m",
         default=None,
-        help="Model override (default: from env or doubao-seed-2.0-lite)",
+        help="Model override",
     )
     parser.add_argument(
         "--api-key", "-k",

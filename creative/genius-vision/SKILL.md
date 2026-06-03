@@ -39,6 +39,9 @@ Universal image & video analysis skill for AI agents. Analyzes images and videos
 | `video-summary` | Full video understanding | Timeline + key content + tone |
 | `video-ocr` | Extract text visible in video | Chronological text with timestamps |
 | `video-review` | Video/screen recording production critique | Structured review with suggestions |
+| `video-frame-analysis` | Frame-level / scene-by-scene breakdown | Per-scene timestamp + visual + audio detail |
+
+**Duration verification**: For all video modes, `ffprobe` automatically extracts actual duration, injects it as ground truth into the prompt, and appends a comparison footer to the output.
 
 ## Usage (Hermes Agent)
 
