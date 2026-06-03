@@ -1,18 +1,18 @@
 ---
 name: genius-vision
-description: "Use when user asks to analyze, describe, understand, review, OCR, extract text from, or interpret any image — screenshots, mockups, charts, documents, photos, design files, wireframes, diagrams. Triggers: analyze image, describe image, what's in this image, OCR, extract text, UI review, design review, screenshot, mockup, chart analysis, compare images, 看图, 识别文字, 图片分析, 审查设计, 截图分析."
-version: 1.0.0
+description: "Use when user asks to analyze, describe, understand, review, OCR, extract text from, or interpret any image or video — screenshots, mockups, charts, documents, photos, design files, wireframes, diagrams, video files, screen recordings, mp4. Triggers: analyze image, analyze video, describe image, what's in this image/video, OCR, extract text, UI review, design review, screenshot, mockup, chart analysis, video summary, 看图, 识别文字, 图片分析, 视频分析, 审查设计, 截图分析."
+version: 1.1.0
 author: Genius Agent
 license: MIT
 metadata:
   hermes:
-    tags: [vision, image, ocr, analysis, review, doubao, visual]
+    tags: [vision, image, video, ocr, analysis, review, doubao, visual]
     related_skills: []
 ---
 
 # Genius Vision
 
-Universal image analysis skill for AI agents. Analyzes images via doubao (豆包) vision API and returns structured results.
+Universal image & video analysis skill for AI agents. Analyzes images and videos via doubao (豆包) vision API and returns structured results. Video files are auto-detected by extension (.mp4/.mov/.avi/.mkv/.webm) and sent as native video_url — no ffmpeg frame extraction needed.
 
 ## Supported Environments
 
@@ -21,6 +21,8 @@ Universal image analysis skill for AI agents. Analyzes images via doubao (豆包
 
 ## Analysis Modes
 
+### Image Modes
+
 | Mode | Use case | Output |
 |------|----------|--------|
 | `describe` | General image understanding | Detailed description |
@@ -28,7 +30,14 @@ Universal image analysis skill for AI agents. Analyzes images via doubao (豆包
 | `ui-review` | UI mockups, wireframes, design critique | Structured design review |
 | `chart-data` | Charts, graphs, data visualizations | Extracted data points |
 | `object-detect` | Identify objects, people, activities | Listed elements with locations |
-| `compare` | Two images side-by-side | Differences and similarities |
+
+### Video Modes (auto-detected by extension)
+
+| Mode | Use case | Output |
+|------|----------|--------|
+| `video-summary` | Full video understanding | Timeline + key content + tone |
+| `video-ocr` | Extract text visible in video | Chronological text with timestamps |
+| `video-review` | Video/screen recording production critique | Structured review with suggestions |
 
 ## Usage (Hermes Agent)
 
@@ -60,24 +69,34 @@ vision_analyze(image_url="path/to/image.png", question="[mode prompt below]")
 
 ## Usage (Other Agents — Python Script)
 
-For agents without native vision tools, use the bundled script:
+For agents without native vision tools, use the bundled script. Auto-detects video by extension:
 
 ```bash
-python3 /path/to/scripts/vision.py <image_path> <mode> [--output json|text]
+python /path/to/scripts/vision.py <file_path_or_url> <mode> [--output json|text]
 ```
 
-### Modes
+### Image Modes
 - `describe` — general description
 - `ocr` — text extraction
 - `ui-review` — design critique
 - `chart-data` — chart data extraction
 - `object-detect` — object identification
 
+### Video Modes
+- `video-summary` — full video understanding with timeline
+- `video-ocr` — extract text visible in video
+- `video-review` — video/screen recording production critique
+
 ### Examples
 ```bash
-python3 vision.py screenshot.png ui-review
-python3 vision.py document.jpg ocr --output json
-python3 vision.py design_v2.png describe
+# Images
+python vision.py screenshot.png ui-review
+python vision.py document.jpg ocr --output json
+
+# Videos (auto-detected by .mp4/.mov/.avi/.mkv/.webm extension)
+python vision.py meeting.mp4 video-summary
+python vision.py screencast.mov video-review
+python vision.py presentation.mp4 video-ocr --output json
 ```
 
 ### Setup (Other Agents)
@@ -142,13 +161,15 @@ Set via `VISION_MODEL` env or pass `--model` flag.
 
 ## Pitfalls
 
-1. **All images are base64-encoded**: Both local files and URLs are sent as base64 for maximum reliability. URL images are downloaded first, then encoded.
+1. **All files are base64-encoded**: Both local files and URLs are sent as base64 for maximum reliability. URL files are downloaded first, then encoded.
 2. **Image size**: Max 10MB. Resize large images before sending.
-3. **SVG files**: Not directly supported. Convert to PNG first.
-4. **API key required**: Must have valid `ARK_API_KEY`. No fallback.
-5. **Chinese text**: doubao handles CJK natively — no special config needed.
-6. **Batch analysis**: Process images sequentially to avoid rate limits.
-7. **OCR accuracy**: For complex layouts, use `ocr` mode. `describe` mode summarizes text but doesn't extract verbatim.
+3. **Video size**: Max 50MB. Large videos may need compression or trimming before analysis.
+4. **SVG files**: Not directly supported. Convert to PNG first.
+5. **API key required**: Must have valid `ARK_API_KEY`. No fallback.
+6. **Chinese text**: doubao handles CJK natively — no special config needed.
+7. **Batch analysis**: Process files sequentially to avoid rate limits.
+8. **OCR accuracy**: For complex layouts, use `ocr` mode. `describe` mode summarizes text but doesn't extract verbatim.
+9. **Video timeout**: Video analysis can take up to 120s. The script sets a longer timeout for video files automatically.
 
 ## Verification
 

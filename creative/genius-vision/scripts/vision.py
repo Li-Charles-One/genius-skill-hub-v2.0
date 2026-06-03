@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Genius Vision — Universal image analysis via doubao (豆包) vision API.
+Genius Vision — Universal image & video analysis via doubao (豆包) vision API.
 
 Usage:
-    python3 vision.py <image_path_or_url> <mode> [--output json|text] [--model MODEL]
+    python vision.py <file_path_or_url> <mode> [--output json|text] [--model MODEL]
 
-Modes: describe, ocr, ui-review, chart-data, object-detect
+Image modes:  describe, ocr, ui-review, chart-data, object-detect
+Video modes:  video-summary, video-ocr, video-review
+Auto-detect:  .mp4/.mov/.avi/.mkv/.webm → video; otherwise → image
 
 Environment:
     ARK_API_KEY    — Volcengine Ark API key (required)
@@ -57,7 +59,43 @@ PROMPTS = {
         "For each, describe what it is, its approximate location (top-left, center, "
         "bottom-right, etc.), and any notable attributes."
     ),
+    # ── Video prompts ──────────────────────────────────────────────
+    "video-summary": (
+        "Provide a comprehensive summary of this video. Structure your response as:\n"
+        "(1) Overall topic / what the video is about\n"
+        "(2) Timeline breakdown — key segments with timestamps (approximate)\n"
+        "(3) Key people, objects, or scenes shown\n"
+        "(4) Any text or captions visible on screen\n"
+        "(5) Audio/speech content if discernible\n"
+        "(6) Overall tone, style, and production quality\n"
+        "Be detailed and chronological."
+    ),
+    "video-ocr": (
+        "Extract ALL text visible anywhere in this video, organized chronologically.\n"
+        "For each piece of text, note the approximate timestamp when it appears.\n"
+        "Include: presentation slides, captions, subtitles, signs, UI labels, logos, "
+        "watermarks, and any overlaid graphics text.\n"
+        "If no text is found, say so."
+    ),
+    "video-review": (
+        "You are a senior video production reviewer. Analyze this video or screen recording.\n"
+        "Return a structured review:\n"
+        "(1) Content & clarity — is the message clear and well-paced?\n"
+        "(2) Visual quality — composition, lighting, color, stability\n"
+        "(3) Audio quality — clarity, levels, background noise\n"
+        "(4) Editing & flow — transitions, pacing, engagement\n"
+        "(5) Specific actionable suggestions for improvement\n"
+        "Be constructive and detailed."
+    ),
 }
+
+# ── File type detection ───────────────────────────────────────────────
+
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}
+
+def is_video(file_path: str) -> bool:
+    """Detect if a local file is a video by extension."""
+    return Path(file_path).suffix.lower() in VIDEO_EXTENSIONS
 
 
 # ── API Call ──────────────────────────────────────────────────────────────
@@ -81,11 +119,11 @@ def load_api_key() -> str:
     return ""
 
 
-def encode_image(image_path: str) -> tuple[str, str]:
-    """Encode local image to base64. Returns (base64_data, media_type)."""
-    path = Path(image_path)
+def encode_file(file_path: str) -> tuple[str, str]:
+    """Encode local image or video to base64. Returns (base64_data, media_type)."""
+    path = Path(file_path)
     if not path.exists():
-        raise FileNotFoundError(f"Image not found: {image_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
 
     suffix = path.suffix.lower()
     media_types = {
@@ -95,22 +133,42 @@ def encode_image(image_path: str) -> tuple[str, str]:
         ".gif": "image/gif",
         ".webp": "image/webp",
         ".bmp": "image/bmp",
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".mkv": "video/x-matroska",
+        ".webm": "video/webm",
+        ".flv": "video/x-flv",
+        ".wmv": "video/x-ms-wmv",
+        ".m4v": "video/mp4",
     }
     media_type = media_types.get(suffix, "image/png")
+
+    file_size = path.stat().st_size
+    max_size = 50 * 1024 * 1024  # 50MB
+    if file_size > max_size:
+        raise ValueError(
+            f"File too large: {file_size / 1024 / 1024:.1f}MB (max {max_size / 1024 / 1024:.0f}MB). "
+            "Consider compressing or trimming the video."
+        )
 
     with open(path, "rb") as f:
         data = base64.b64encode(f.read()).decode("utf-8")
     return data, media_type
 
 
-def analyze_image(
-    image_input: str,
+def analyze_media(
+    media_input: str,
     mode: str = "describe",
     model: str = None,
     api_key: str = None,
     base_url: str = None,
 ) -> str:
-    """Analyze an image using doubao vision API."""
+    """Analyze an image or video using doubao vision API.
+
+    Auto-detects video by file extension. Videos use video_url type;
+    images use image_url type. Both are base64-encoded for reliability.
+    """
     api_key = api_key or load_api_key()
     if not api_key:
         raise ValueError("ARK_API_KEY not found. Set env var or create .env file.")
@@ -122,30 +180,35 @@ def analyze_image(
 
     prompt = PROMPTS.get(mode, PROMPTS["describe"])
 
+    # Detect media type
+    is_video_input = not media_input.startswith(("http://", "https://")) and is_video(media_input)
+    media_type_name = "video_url" if is_video_input else "image_url"
+    timeout = 120 if is_video_input else 60  # videos take longer
+
     # Build message content
     content = []
 
-    # All images → base64 (most reliable, no URL download issues)
-    if image_input.startswith(("http://", "https://")):
-        # Download first, then base64 encode
+    if media_input.startswith(("http://", "https://")):
+        # Remote URL — download first, then base64 encode
         try:
-            img_resp = httpx.get(image_input, timeout=15, follow_redirects=True)
-            img_resp.raise_for_status()
-            content_type = img_resp.headers.get("content-type", "image/png")
+            resp = httpx.get(media_input, timeout=30, follow_redirects=True)
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "image/png")
             if "/" not in content_type:
                 content_type = "image/png"
-            b64_data = base64.b64encode(img_resp.content).decode("utf-8")
+            b64_data = base64.b64encode(resp.content).decode("utf-8")
             content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{content_type};base64,{b64_data}"}
+                "type": media_type_name,
+                media_type_name: {"url": f"data:{content_type};base64,{b64_data}"}
             })
         except Exception as e:
-            raise RuntimeError(f"Failed to download image from URL: {e}")
+            raise RuntimeError(f"Failed to download from URL: {e}")
     else:
-        b64_data, media_type = encode_image(image_input)
+        # Local file
+        b64_data, media_type = encode_file(media_input)
         content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:{media_type};base64,{b64_data}"}
+            "type": media_type_name,
+            media_type_name: {"url": f"data:{media_type};base64,{b64_data}"}
         })
 
     content.append({"type": "text", "text": prompt})
@@ -163,7 +226,7 @@ def analyze_image(
         "max_tokens": 4096,
     }
 
-    with httpx.Client(timeout=60) as client:
+    with httpx.Client(timeout=timeout) as client:
         resp = client.post(
             f"{base_url}/chat/completions",
             headers=headers,
@@ -182,15 +245,15 @@ def analyze_image(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Genius Vision — Image analysis via doubao"
+        description="Genius Vision — Image & video analysis via doubao"
     )
-    parser.add_argument("image", help="Image path or URL")
+    parser.add_argument("file", help="Image/video path or URL")
     parser.add_argument(
         "mode",
         nargs="?",
         default="describe",
         choices=list(PROMPTS.keys()),
-        help="Analysis mode (default: describe)",
+        help="Analysis mode (default: describe; video modes: video-summary, video-ocr, video-review)",
     )
     parser.add_argument(
         "--output", "-o",
@@ -211,8 +274,8 @@ def main():
     args = parser.parse_args()
 
     try:
-        result = analyze_image(
-            args.image,
+        result = analyze_media(
+            args.file,
             mode=args.mode,
             model=args.model,
             api_key=args.api_key,
@@ -221,7 +284,7 @@ def main():
         if args.output == "json":
             output = json.dumps({
                 "mode": args.mode,
-                "image": args.image,
+                "file": args.file,
                 "result": result,
             }, ensure_ascii=False, indent=2)
         else:
