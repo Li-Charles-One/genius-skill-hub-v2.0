@@ -5,6 +5,23 @@ description: Maintain WePlaning v2.2 project collaboration memory. Use when the 
 
 # WePlaning
 
+## TL;DR — When in doubt, use `safe-edit`
+
+For 90% of write operations, this single command is enough:
+
+```bash
+node <skill-dir>/scripts/safe-edit.cjs <project-root> \
+  --session <id> --changed "<desc>" --file <path> --verification "<cmd>"
+```
+
+It runs the full closeout pipeline (`pre-close-check` → `TOOLS.md` update → `append-change` → `merge-session` → `check-memory`) with snapshot rollback on any failure. If it exits 0, memory is consistent.
+
+Use the rest of this file when:
+
+- You need read-only inspection (don't create a session — see "Read-only memory requests").
+- The task is bootstrapping, multi-Agent handoff, repair, or migration.
+- `safe-edit` reports a failure you need to diagnose manually.
+
 ## Overview
 
 Use WePlaning v2.2 as a lightweight, project-owned memory protocol for multi-Agent and multi-session collaboration. Keep the project mainline, session branches, change ledger, tool registry, and handoff context synchronized through `.agent-memory/`.
@@ -205,12 +222,12 @@ Default to Minimal Mode. Treat these files as the required collaboration surface
 
 ```text
 .agent-memory/
-+-- WePlaning.md       Signpost and snapshot
-+-- CURRENT.md         Accepted project mainline only
-+-- THREADS.md         Session tree and mainline pointer
-+-- CHANGES.md         Append-only change ledger
-+-- TOOLS.md           Tool/MCP/skill/script capability registry
-+-- sessions/          One Markdown file per Agent conversation
+├── WePlaning.md       Signpost and snapshot
+├── CURRENT.md         Accepted project mainline only
+├── THREADS.md         Session tree and mainline pointer
+├── CHANGES.md         Append-only change ledger
+├── TOOLS.md           Tool/MCP/skill/script capability registry
+└── sessions/          One Markdown file per Agent conversation
 ```
 
 Rules:
@@ -231,18 +248,18 @@ Minimal Mode is required and is the default. Upgrade only on explicit user reque
 Standard Mode adds:
 
 ```text
-+-- PROJECT.md         Stable project identity
-+-- notes/             Archived long-form outputs
+├── PROJECT.md         Stable project identity
+└── notes/             Archived long-form outputs
 ```
 
 Full Mode adds:
 
 ```text
-+-- DECISIONS.md       Optional decision index derived from CHANGES.md
-+-- DONE.md            Optional completed-work index derived from CHANGES.md
-+-- FUTURE.md          Plans, risks, debt
-+-- REFERENCES.md      Important paths and references
-+-- SCRIPTS.md         Project scripts and commands
+├── DECISIONS.md       Optional decision index derived from CHANGES.md
+├── DONE.md            Optional completed-work index derived from CHANGES.md
+├── FUTURE.md          Plans, risks, debt
+├── REFERENCES.md      Important paths and references
+└── SCRIPTS.md         Project scripts and commands
 ```
 
 Upgrade triggers:
