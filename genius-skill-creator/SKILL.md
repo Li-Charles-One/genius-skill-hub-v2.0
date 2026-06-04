@@ -171,7 +171,6 @@ Record important evidence in a reference file when it will affect future mainten
 - `references/openai_yaml.md`: `agents/openai.yaml` constraints.
 - `references/eval-workflow.md`: practical eval and trigger optimization workflow.
 - `references/consolidation-workflow.md`: merge/consolidate related skills.
-- `references/hermes-agent-skill-authoring.md`: Claude/Hermes-style skill authoring reference.
 - `evals/evals.json`: reusable eval prompts for creation, optimization, porting, trigger tuning, and audits.
 
 ## Final Response
