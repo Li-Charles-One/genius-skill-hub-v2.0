@@ -1,14 +1,23 @@
 ---
 name: brainstorming
-description: "Explore intent, requirements, and design before implementing complex features. Triggers on 3+ file changes or ambiguous multi-approach tasks. Skips automatically for clear-scope work."
-weight: heavy
+description: Explore intent, requirements, and design before implementing complex features. Use for ambiguous multi-approach tasks or when user asks to brainstorm/plan. Skips automatically for clear-scope work. Outputs design spec, then hands off to writing-plans for implementation planning.
+run_as: subagent
+model: deepseek-v4-flash
+allowed_tools:
+  - read_file
+  - search_content
+  - search_files
+  - directory_tree
+  - glob
+  - write_file
+  - run_command
 ---
 
 # Brainstorming Ideas Into Designs
 
 ## Relationship to writing-plans
 
-Brainstorming explores WHAT to build and WHY. Writing-plans defines HOW to build it. They are sequential: brainstorm first (if needed), then write-plan. If the user already knows what they want, skip brainstorming and go straight to /write-plan. Brainstorming should NOT produce implementation details 鈥?that's writing-plans' job.
+Brainstorming explores WHAT to build and WHY. Writing-plans defines HOW to build it. They are sequential: brainstorm first (if needed), then write-plan. If the user already knows what they want, skip brainstorming and go straight to /write-plan. Brainstorming should NOT produce implementation details —that's writing-plans' job.
 
 Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
 
@@ -16,18 +25,18 @@ Start by understanding the current project context, then ask questions one at a 
 
 <COMPLEXITY-GATE>
 **When to require a design phase** (BOTH conditions must be true):
-- Task touches 3+ files or introduces a new feature/component 鈥?AND 鈥?- The approach is ambiguous (multiple valid approaches with different trade-offs)
+- Task touches 3+ files or introduces a new feature/component —AND —- The approach is ambiguous (multiple valid approaches with different trade-offs)
 
 **Skip brainstorming when:**
 - Task is clear in intent even if it touches many files (e.g., "rename X to Y across the codebase")
 - Task touches 1-2 files with clear scope (bug fix, config change, simple addition)
-- There's one obvious approach 鈥?just do it
+- There's one obvious approach —just do it
 
 **Always brainstorm when:**
 - User explicitly asks to brainstorm or plan
 - Task has multiple valid approaches and the wrong choice would be costly to reverse
 
-**Use codebase-cartographer** to understand existing patterns before proposing designs 鈥?don't re-explore what's already mapped.
+**Use codebase-cartographer** to understand existing patterns before proposing designs —don't re-explore what's already mapped.
 </COMPLEXITY-GATE>
 
 ## Anti-Pattern: "Everything Needs A Design"
@@ -39,26 +48,26 @@ Only tasks with genuine complexity or ambiguity benefit from the design process.
 NOT every brainstorm needs 9 steps. Match depth to task size:
 
 ### Lite Brainstorm (most tasks that clear the complexity gate)
-For tasks where the design question is "which of 2-3 approaches?" 鈥?not "what are we building?"
+For tasks where the design question is "which of 2-3 approaches?" —not "what are we building?"
 
-1. **State the 2-3 approaches** 鈥?one sentence each with trade-off
-2. **Recommend one** 鈥?with a one-line reason
-3. **Get user pick** 鈥?then execute immediately
+1. **State the 2-3 approaches** —one sentence each with trade-off
+2. **Recommend one** —with a one-line reason
+3. **Get user pick** —then execute immediately
 
 Total: 1 message, ~30 seconds. No design doc, no spec review, no visual companion.
 
 ### Full Brainstorm (only for genuinely complex, multi-component features)
 Only use when the user explicitly asks to brainstorm OR the task involves a new system/architecture:
 
-1. **Explore project context** 鈥?check files, docs, recent commits
-2. **Offer visual companion** (if topic will involve visual questions) 鈥?this is its own message, not combined with a clarifying question. See the Visual Companion section below.
-3. **Ask clarifying questions** 鈥?one at a time, understand purpose/constraints/success criteria
-4. **Propose 2-3 approaches** 鈥?with trade-offs and your recommendation
-5. **Present design** 鈥?in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** 鈥?save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec review loop** 鈥?dispatch spec-document-reviewer subagent with precisely crafted review context (never your session history); fix issues and re-dispatch until approved (max 5 iterations, then surface to human)
-8. **User reviews written spec** 鈥?ask user to review the spec file before proceeding
-9. **Transition to implementation** 鈥?invoke writing-plans skill to create implementation plan
+1. **Explore project context** —check files, docs, recent commits
+2. **Offer visual companion** (if topic will involve visual questions) —this is its own message, not combined with a clarifying question. See the Visual Companion section below.
+3. **Ask clarifying questions** —one at a time, understand purpose/constraints/success criteria
+4. **Propose 2-3 approaches** —with trade-offs and your recommendation
+5. **Present design** —in sections scaled to their complexity, get user approval after each section
+6. **Write design doc** —save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+7. **Spec review loop** —dispatch spec-document-reviewer subagent with precisely crafted review context (never your session history); fix issues and re-dispatch until approved (max 5 iterations, then surface to human)
+8. **User reviews written spec** —ask user to review the spec file before proceeding
+9. **Transition to implementation** —invoke writing-plans skill to create implementation plan
 
 **Default to Lite.** Only escalate to Full when the user says "let's plan this out" or the task is genuinely architectural (new service, new data model, new integration pattern).
 
@@ -144,7 +153,7 @@ Wait for the user's response. If they request changes, make them and re-run the 
 
 ## Visual Companion
 
-A browser-based companion for showing mockups, diagrams, and visual options during brainstorming. Available as a tool 鈥?not a mode. Accepting the companion means it's available for questions that benefit from visual treatment; it does NOT mean every question goes through the browser.
+A browser-based companion for showing mockups, diagrams, and visual options during brainstorming. Available as a tool —not a mode. Accepting the companion means it's available for questions that benefit from visual treatment; it does NOT mean every question goes through the browser.
 
 **Offering the companion:** When you anticipate that upcoming questions will involve visual content (mockups, layouts, diagrams), offer it once for consent:
 
@@ -154,7 +163,7 @@ A browser-based companion for showing mockups, diagrams, and visual options duri
 
 **Per-question decision:** Even after the user accepts, decide FOR EACH QUESTION whether to use the browser or the terminal. The test: **would the user understand this better by seeing it than reading it?**
 
-- **Use the browser** for content that IS visual 鈥?mockups, wireframes, layout comparisons, architecture diagrams, side-by-side visual designs
-- **Use the terminal** for content that is text 鈥?requirements questions, conceptual choices, tradeoff lists, A/B/C/D text options, scope decisions
+- **Use the browser** for content that IS visual —mockups, wireframes, layout comparisons, architecture diagrams, side-by-side visual designs
+- **Use the terminal** for content that is text —requirements questions, conceptual choices, tradeoff lists, A/B/C/D text options, scope decisions
 
-A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question 鈥?use the terminal. "Which wizard layout works better?" is a visual question 鈥?use the browser.
+A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question —use the terminal. "Which wizard layout works better?" is a visual question —use the browser.

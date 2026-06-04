@@ -1,13 +1,13 @@
 ---
 name: genius-vision
-description: "Use when user asks to analyze, describe, understand, review, OCR, extract text from, or interpret any image or video — screenshots, mockups, charts, documents, photos, design files, wireframes, diagrams, video files, screen recordings, mp4. Triggers: analyze image, analyze video, describe image, what's in this image/video, OCR, extract text, UI review, design review, screenshot, mockup, chart analysis, video summary, 看图, 识别文字, 图片分析, 视频分析, 审查设计, 截图分析."
-version: 1.1.0
-author: Genius Agent
-license: MIT
-metadata:
-  hermes:
-    tags: [vision, image, video, ocr, analysis, review, doubao, visual]
-    related_skills: []
+description: Universal image & video analysis via doubao (豆包) vision API. Use when user asks to analyze, OCR, review, or describe any image or video file. Supports 6 image modes (describe, ocr, ui-review, chart-data, object-detect, compare) and 4 video modes (video-summary, video-ocr, video-review, video-frame-analysis). Triggers: analyze image, analyze video, OCR, extract text, UI review, screenshot, chart, video summary, 看图, 视频分析.
+version: 1.2.0
+run_as: subagent
+model: deepseek-v4-flash
+allowed_tools:
+  - run_command
+  - read_file
+  - write_file
 ---
 
 # Genius Vision
