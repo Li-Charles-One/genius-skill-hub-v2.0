@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linus Torvalds 代码审计报告 — {{PROJECT_NAME}}</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --fatal: #f85149;
+    --severe: #f0883e;
+    --fix: #d29922;
+    --suggest: #3fb950;
+    --arch: #a371f7;
+    --tag-bg: #1c2128;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    max-width: 960px; margin: 0 auto; padding: 48px 24px 96px;
+  }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.3px; }
+  h1 span { color: var(--fatal); }
+  h2 { font-size: 20px; font-weight: 600; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 16px; font-weight: 600; color: var(--accent); margin: 24px 0 8px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; font-size: 14px; color: var(--muted); }
+  .meta strong { color: var(--text); }
+  .quote {
+    border-left: 3px solid var(--fatal); padding: 12px 16px; margin: 16px 0;
+    background: var(--surface); border-radius: 0 6px 6px 0; font-style: italic; color: var(--muted);
+  }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 24px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; }
+  .stat .num { font-size: 36px; font-weight: 700; }
+  .stat .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .stat.fatal .num { color: var(--fatal); }
+  .stat.severe .num { color: var(--severe); }
+  .stat.fix .num { color: var(--fix); }
+  .stat.suggest .num { color: var(--suggest); }
+  .stat.arch .num { color: var(--arch); }
+  .section-desc { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+  .issue { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin: 16px 0; }
+  .issue.fatal { border-left: 4px solid var(--fatal); }
+  .issue.severe { border-left: 4px solid var(--severe); }
+  .issue.fix { border-left: 4px solid var(--fix); }
+  .issue.suggest { border-left: 4px solid var(--suggest); }
+  .issue.arch { border-left: 4px solid var(--arch); }
+  .issue-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .severity {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .severity-fatal { background: rgb(248 81 73 / 18%); color: var(--fatal); }
+  .severity-severe { background: rgb(240 136 62 / 18%); color: var(--severe); }
+  .severity-fix { background: rgb(210 153 34 / 18%); color: var(--fix); }
+  .severity-suggest { background: rgb(63 185 80 / 18%); color: var(--suggest); }
+  .severity-arch { background: rgb(163 113 247 / 18%); color: var(--arch); }
+  .issue-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .file { font-size: 12px; color: var(--muted); font-family: "SF Mono", "Fira Code", "Consolas", monospace; }
+  .issue-body p { font-size: 14px; margin: 8px 0; color: var(--text); }
+  .issue-body p strong { color: var(--accent); }
+  .code-block { margin: 12px 0; }
+  .code-block pre {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+    padding: 16px; overflow-x: auto;
+    font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+    font-size: 13px; line-height: 1.5;
+  }
+  .hl { color: var(--fatal); font-weight: 600; }
+  code {
+    font-family: "SF Mono", "Fira Code", "Consolas", monospace; font-size: 13px;
+    background: var(--tag-bg); padding: 1px 6px; border-radius: 4px;
+  }
+  .fix-note {
+    background: rgb(63 185 80 / 8%); border: 1px solid rgb(63 185 80 / 25%);
+    border-radius: 6px; padding: 10px 14px; margin-top: 12px; font-size: 13px;
+  }
+  .fix-note strong { color: var(--suggest); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  td.file-col { font-family: "SF Mono", "Fira Code", "Consolas", monospace; font-size: 12px; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+  footer {
+    margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--muted); text-align: center;
+  }
+  footer strong { color: var(--fatal); }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Linus Torvalds</span><br>代码审计报告</h1>
+  <div class="meta">
+    <div><strong>项目</strong><br>{{PROJECT_NAME}}</div>
+    <div><strong>审计日期</strong><br>{{AUDIT_DATE}}</div>
+    <div><strong>审计范围</strong><br>{{AUDIT_SCOPE}}</div>
+    <div><strong>总问题数</strong><br>{{TOTAL_ISSUES}} 条</div>
+    <div><strong>审计者</strong><br>Linus Torvalds (角色)</div>
+  </div>
+</header>
+
+<div class="quote">
+  "Talk is cheap. Show me the code. Backwards compatibility is not an excuse to keep broken shit."
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SEVERITY DISTRIBUTION -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>严重度分布</h2>
+<div class="stats">
+  <div class="stat fatal">
+    <div class="num">{{FATAL_COUNT}}</div>
+    <div class="label">🔴🔴🔴 致命</div>
+  </div>
+  <div class="stat severe">
+    <div class="num">{{SEVERE_COUNT}}</div>
+    <div class="label">🔴🔴 严重</div>
+  </div>
+  <div class="stat fix">
+    <div class="num">{{FIX_COUNT}}</div>
+    <div class="label">🔴 值得修</div>
+  </div>
+  <div class="stat suggest">
+    <div class="num">{{SUGGEST_COUNT}}</div>
+    <div class="label">🟡 建议</div>
+  </div>
+  <div class="stat arch">
+    <div class="num">{{ARCH_COUNT}}</div>
+    <div class="label">🏗️ 架构</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- FILE DISTRIBUTION -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>问题按文件分布</h2>
+<table>
+  <thead><tr><th>文件</th><th>问题数</th></tr></thead>
+  <tbody>
+    {{FILE_DISTRIBUTION_ROWS}}
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- FATAL ISSUES -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>🔴🔴🔴 致命问题 <span class="severity severity-fatal">FATAL</span></h2>
+<p class="section-desc">数据丢失、数据损坏、安全漏洞、欺骗用户的功能。</p>
+
+{{FATAL_ISSUES}}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SEVERE ISSUES -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>🔴🔴 严重问题 <span class="severity severity-severe">SEVERE</span></h2>
+<p class="section-desc">竞态条件、确定性资源泄漏、可复现崩溃路径、整类设备不可用。</p>
+
+{{SEVERE_ISSUES}}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- FIX ISSUES -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>🔴 值得修复 <span class="severity severity-fix">FIX</span></h2>
+<p class="section-desc">可能但不太可能的数据问题、无恢复路径的静默失败、误导性行为。</p>
+
+{{FIX_ISSUES}}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SUGGESTIONS -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>🟡 建议 <span class="severity severity-suggest">SUGGEST</span></h2>
+<p class="section-desc">真实但轻微：浪费的重渲染、缺失 UI 提示、脆弱的字符串比较。</p>
+
+{{SUGGEST_ISSUES}}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- ARCHITECTURE -->
+<!-- ═══════════════════════════════════════════ -->
+{{ARCHITECTURE_SECTION}}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SUMMARY -->
+<!-- ═══════════════════════════════════════════ -->
+<h2>总结</h2>
+<div class="summary-grid">
+  <div>
+    <table>
+      <thead><tr><th>严重度</th><th>数量</th><th>占比</th></tr></thead>
+      <tbody>
+        <tr><td>🔴🔴🔴 致命 (Bug)</td><td>{{FATAL_COUNT}}</td><td>{{FATAL_PCT}}%</td></tr>
+        <tr><td>🔴🔴 严重 (Bug)</td><td>{{SEVERE_COUNT}}</td><td>{{SEVERE_PCT}}%</td></tr>
+        <tr><td>🔴 值得修 (Bug)</td><td>{{FIX_COUNT}}</td><td>{{FIX_PCT}}%</td></tr>
+        <tr><td>🟡 建议 (Bug)</td><td>{{SUGGEST_COUNT}}</td><td>{{SUGGEST_PCT}}%</td></tr>
+        {{ARCH_SUMMARY_ROW}}
+        <tr style="font-weight:700"><td>合计</td><td>{{TOTAL_ISSUES}}</td><td>100%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    {{SUMMARY_VERDICT}}
+  </div>
+</div>
+
+<div class="quote">
+  {{CLOSING_QUOTE}}
+</div>
+
+<footer>
+  <strong>Linus Torvalds</strong> 代码审计报告 · {{AUDIT_DATE}} · {{PROJECT_NAME}}<br>
+  审计范围：{{AUDIT_SCOPE}}
+</footer>
+
+</body>
+</html>
