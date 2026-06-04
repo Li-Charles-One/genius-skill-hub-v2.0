@@ -38,13 +38,13 @@ jobs:
 
       - name: Check WePlaning scripts syntax
         run: |
-          find we-planing-skill/we-planing/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
+          find we-planing/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
 
       - name: Smoke test WePlaning lifecycle
         run: |
           set -euo pipefail
           root="$(mktemp -d)"
-          scripts="we-planing-skill/we-planing/scripts"
+          scripts="we-planing/scripts"
 
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Smoke" --goal "Validate WePlaning scripts" --agent CI --adapter GitHubActions --os linux | tail -n1)"
           node "$scripts/check-memory.cjs" "$root"
@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           root="$(mktemp -d)"
-          scripts="we-planing-skill/we-planing/scripts"
+          scripts="we-planing/scripts"
 
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Repair" --goal "Validate repair" --agent CI --adapter GitHubActions --os linux | tail -n1)"
           rm "$root/.agent-memory/sessions/$session.md"
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           root="$(mktemp -d)"
-          scripts="we-planing-skill/we-planing/scripts"
+          scripts="we-planing/scripts"
 
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Audit" --goal "Validate semantic audit" --agent CI --adapter GitHubActions --os linux | tail -n1)"
           node "$scripts/register-agent.cjs" "$root" --session "$session" --agent CI --adapter GitHubActions --os linux --tool node --mcp unavailable --skill we-planing
