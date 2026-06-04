@@ -118,12 +118,12 @@ Every Agent must understand Minimal Mode:
 
 ```text
 .agent-memory/
-+-- WePlaning.md
-+-- CURRENT.md
-+-- THREADS.md
-+-- CHANGES.md
-+-- TOOLS.md
-+-- sessions/
+├── WePlaning.md
+├── CURRENT.md
+├── THREADS.md
+├── CHANGES.md
+├── TOOLS.md
+└── sessions/
 ```
 
 Optional mode files:
