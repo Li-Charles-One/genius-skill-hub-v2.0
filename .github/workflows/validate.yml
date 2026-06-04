@@ -36,6 +36,62 @@ jobs:
               print(f"valid metadata: {skill}")
           PY
 
+      - name: Validate agent metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for file in sorted(Path(".").glob("**/agents/*.yaml")):
+              data = yaml.safe_load(file.read_text(encoding="utf-8"))
+              if not isinstance(data, dict):
+                  raise SystemExit(f"{file}: YAML root must be a mapping")
+              print(f"valid agent metadata: {file}")
+          PY
+
+      - name: Smoke test code audit report validator
+        run: |
+          set -euo pipefail
+          node --check genius-code-audit/scripts/validate-audit-report.cjs
+          report="$(mktemp)"
+          python - "$report" <<'PY'
+          import sys
+          from pathlib import Path
+
+          report = Path(sys.argv[1])
+          template = Path("genius-code-audit/assets/audit-report-template.html").read_text(encoding="utf-8")
+          values = {
+              "{{PROJECT_NAME}}": "ci-sample",
+              "{{AUDIT_DATE}}": "2026-06-04",
+              "{{AUDIT_MODE}}": "diff",
+              "{{AUDIT_SCOPE}}": "Diff: origin/main..HEAD",
+              "{{TOTAL_ISSUES}}": "1",
+              "{{FATAL_COUNT}}": "0",
+              "{{SEVERE_COUNT}}": "0",
+              "{{FIX_COUNT}}": "1",
+              "{{SUGGEST_COUNT}}": "0",
+              "{{ARCH_COUNT}}": "0",
+              "{{FATAL_PCT}}": "0",
+              "{{SEVERE_PCT}}": "0",
+              "{{FIX_PCT}}": "100",
+              "{{SUGGEST_PCT}}": "0",
+              "{{ARCH_PCT}}": "0",
+              "{{FILE_DISTRIBUTION_ROWS}}": "<tr><td class=\"file-col\">src/app.ts</td><td>1</td></tr>",
+              "{{FATAL_ISSUES}}": "",
+              "{{SEVERE_ISSUES}}": "",
+              "{{FIX_ISSUES}}": "<div class=\"issue fix\"><div class=\"issue-header\"><span class=\"severity severity-fix\">FIX</span><span class=\"issue-title\">Sample issue</span><span class=\"file\">src/app.ts:1</span></div><div class=\"issue-body\"><div class=\"code-block\"><pre>sample</pre></div><p><strong>Problem:</strong> Sample problem.</p><p><strong>Fix:</strong> Sample fix.</p></div></div>",
+              "{{SUGGEST_ISSUES}}": "",
+              "{{ARCHITECTURE_SECTION}}": "",
+              "{{ARCH_SUMMARY_ROW}}": "",
+              "{{SUMMARY_VERDICT}}": "<p>One issue found.</p>",
+              "{{CLOSING_QUOTE}}": "Fix the bug.",
+          }
+          for key, value in values.items():
+              template = template.replace(key, value)
+          report.write_text(template, encoding="utf-8")
+          PY
+          node genius-code-audit/scripts/validate-audit-report.cjs "$report"
+
       - name: Check WePlaning scripts syntax
         run: |
           find we-planing/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check

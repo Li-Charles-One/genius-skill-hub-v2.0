@@ -1,0 +1,31 @@
+{
+  "skill_name": "genius-code-audit",
+  "evals": [
+    {
+      "id": "diff-pr-review",
+      "prompt": "Review my current branch against origin/main and tell me what this PR could break.",
+      "expected_output": "Uses diff mode, reads changed files and callers, runs security quick scans, saves an HTML report, and mentions diff-mode scope limits.",
+      "files": []
+    },
+    {
+      "id": "full-security-audit",
+      "prompt": "Do a full security-focused code audit of this repo before release.",
+      "expected_output": "Uses full mode, maps project structure, inspects storage/data and error paths, runs security scans, and produces severity-classified HTML findings.",
+      "files": []
+    },
+    {
+      "id": "reasonix-runtime",
+      "prompt": "Use Reasonix to run genius-code-audit in full mode.",
+      "expected_output": "Uses agents/reasonix.yaml for model and allowed tool metadata while keeping shared workflow instructions from SKILL.md and references.",
+      "files": [
+        "agents/reasonix.yaml"
+      ]
+    },
+    {
+      "id": "casual-style-review-no-trigger",
+      "prompt": "Can you make the variable names prettier?",
+      "expected_output": "Does not use the full audit workflow unless the user explicitly asks for a serious audit.",
+      "files": []
+    }
+  ]
+}

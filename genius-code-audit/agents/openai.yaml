@@ -1,4 +1,5 @@
 interface:
   display_name: "Genius Code Audit"
-  short_description: "Linus Torvalds-style deep code audit — diff-based PR scan or full forensic review with HTML report"
-  default_prompt: "Use $genius-code-audit to perform a brutal-honest code audit. Supports --mode diff (fast git-diff PR review) and --mode full (deep multi-file call-chain tracing). Outputs a self-contained dark-theme HTML report with severity-classified findings."
+  short_description: "Diff or full code audit with HTML reports"
+  default_prompt: "Use $genius-code-audit to audit this repository in diff mode against origin/main and save the HTML report."
+  brand_color: "#F85149"
