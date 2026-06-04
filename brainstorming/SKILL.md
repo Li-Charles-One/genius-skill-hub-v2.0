@@ -2,7 +2,7 @@
 name: brainstorming
 description: Explore intent, requirements, and design before implementing complex features. Use for ambiguous multi-approach tasks or when user asks to brainstorm/plan. Skips automatically for clear-scope work. Outputs design spec, then hands off to writing-plans for implementation planning.
 run_as: subagent
-model: deepseek-v4-flash
+model: deepseek-v4-pro
 allowed_tools:
   - read_file
   - search_content
