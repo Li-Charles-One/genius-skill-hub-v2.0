@@ -425,6 +425,7 @@ module.exports = {
   replaceOrAppendTableRow,
   required,
   runCheck,
+  section,
   sessionPath,
   parseCurrentMd,
   parseSessionMd,

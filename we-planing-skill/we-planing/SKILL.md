@@ -23,6 +23,8 @@ The first time you use WePlaning on a project (or when the user asks to "remembe
 
 **Create a `priority: high` project memory** using the Agent's `remember` tool (or equivalent). This ensures every future session gets the discipline rules BEFORE it even invokes the skill.
 
+If the current Agent has no `remember` tool or equivalent persistent project-memory mechanism, do not invent one and do not block the task. State that persistent rule injection is unavailable in this Agent, then continue by following this SKILL.md for the current turn.
+
 Memory name: `weplaning-auto-discipline`
 Memory content: keep it MINIMAL — one rule only. The skill file (loaded via `/skill we-planing` or `run_skill`) is the single authoritative source. The memory is just a bootstrap trigger:
 
@@ -48,6 +50,19 @@ The output MUST contain `WePlaning memory check passed.` before you proceed to A
 4. Only then may you continue.
 
 This is NOT optional. Skipping check-memory after a write is a protocol violation.
+
+### Read-only memory requests
+
+When the user only asks to read, inspect, summarize, audit, or explain project memory, do NOT create a session and do NOT write `.agent-memory/`.
+
+For read-only work:
+
+1. Read `WePlaning.md`, `CURRENT.md`, `THREADS.md`, recent `CHANGES.md`, `TOOLS.md`, and relevant session files.
+2. Run `check-memory.cjs` when consistency matters.
+3. Run `audit-memory.cjs` when semantic drift matters, such as blocker contradictions or stale Based On.
+4. Report findings clearly without changing project state.
+
+Create a session only when the work will write `.agent-memory/`, change accepted project state, or produce durable handoff/closeout state.
 
 ### On session closeout
 
@@ -75,6 +90,8 @@ If check-memory fails after merge, you MUST repair and re-check — do NOT repor
 
 ### Before starting any new session
 
+Use this only for write-capable work. For read-only memory inspection, follow "Read-only memory requests" above.
+
 1. Read `WePlaning.md`, `CURRENT.md`, `THREADS.md`, recent `CHANGES.md`, and `TOOLS.md`.
 2. Run `new-session.cjs` to create the session file.
 3. Update `TOOLS.md` with this session's Agent capabilities.
@@ -98,6 +115,7 @@ After running ANY of these scripts, you MUST display the status to the user in y
 - `append-change.cjs`
 - `safe-edit.cjs`
 - `pre-close-check.cjs`
+- `audit-memory.cjs`
 
 Format:
 
@@ -132,6 +150,7 @@ node scripts/register-agent.cjs <project-root> --session <session-id> --agent "<
 node scripts/sync-before-write.cjs <project-root> --session <session-id>
 node scripts/handoff.cjs <project-root> --session <session-id>
 node scripts/pre-close-check.cjs <project-root> [--session <id>] [--fix]
+node scripts/audit-memory.cjs <project-root>
 node scripts/sync-skill-package.cjs --source <skill-dir> --target <skill-dir>
 node scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" [options]
 ```
@@ -150,6 +169,7 @@ Use scripts first for:
 - checking that an Agent is writing from the latest mainline;
 - generating handoff packets;
 - scanning for pre-close issues (unknown TOOLS/CHANGES fields, mainline drift);
+- auditing semantic drift that strict consistency checks cannot catch;
 - syncing a changed skill package to a local Skill Hub or mirror;
 - running the consistency gate.
 
@@ -392,6 +412,26 @@ If the gate fails:
 3. Repair any remaining inconsistent file(s), preserving human edits.
 4. Re-run the gate.
 5. Record the repair in `CHANGES.md` when it changes durable memory state.
+
+### Semantic Audit
+
+Use `audit-memory.cjs` for issues that can pass `check-memory.cjs` but still mislead another Agent:
+
+```bash
+node <skill-dir>/scripts/audit-memory.cjs <project-root>
+```
+
+It checks for common semantic drift, including:
+
+- `WePlaning.md` snapshot `Blocker` says `none` while `CURRENT.md` has real open blockers.
+- `CURRENT.md` `Open Blockers` mixes a real blocker with phrases such as "no blocker" or "无阻塞".
+- `CURRENT.md` `Based On` does not point at the current mainline.
+- The mainline session file still has placeholder result or next-step text.
+- `TOOLS.md` rows still contain `unknown`.
+
+Use this before handoff, after memory repairs, and whenever a user asks whether project memory is accurate. Treat findings as warnings unless the user asks you to repair them.
+
+The script exits non-zero when warnings are found so CI and `safe-edit`-style pipelines can detect semantic drift.
 
 ### Drift Check
 

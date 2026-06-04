@@ -16,7 +16,7 @@ Usage:
   node safe-edit.cjs <project-root> --session <id> --changed <text> [options]
 
 Runs the full closeout pipeline in one atomic call:
-  sync-before-write → check-memory(pre) → append-change → merge-session → check-memory(post)
+  sync-before-write → check-memory(pre) → pre-close-check → append-change → merge-session → check-memory(post)
 
 Options:
   --session <id>        Required. Session to close and merge.
@@ -77,7 +77,18 @@ if (!preCheckResult.ok) {
   process.exit(1);
 }
 
-// Step 3: append-change (with --no-check to avoid nested check)
+// Step 3: pre-close-check
+const preCloseResult = runStep("pre-close-check", path.join(scriptDir, "pre-close-check.cjs"), [
+  root,
+  "--session", sessionId,
+  "--no-check",
+]);
+if (!preCloseResult.ok || /warnings/i.test(preCloseResult.output)) {
+  console.error("❌ Pipeline aborted: pre-close-check reported warnings. Fill TOOLS.md fields, CHANGES.md metadata, or mainline drift first.");
+  process.exit(1);
+}
+
+// Step 4: append-change (with --no-check to avoid nested check)
 const appendArgv = [
   root,
   "--session", sessionId,
@@ -106,7 +117,7 @@ if (!appendResult.ok) {
   process.exit(1);
 }
 
-// Step 4: merge-session (unless --no-merge)
+// Step 5: merge-session (unless --no-merge)
 if (!args["no-merge"]) {
   const mergeResult = runStep("merge-session", path.join(scriptDir, "merge-session.cjs"), [
     root,
@@ -121,7 +132,7 @@ if (!args["no-merge"]) {
   console.log("⏭️  merge-session — SKIPPED (--no-merge)");
 }
 
-// Step 5: check-memory (post)
+// Step 6: check-memory (post)
 const postCheckResult = runStep("check-memory (post)", path.join(scriptDir, "check-memory.cjs"), [root]);
 if (!postCheckResult.ok) {
   console.error("❌ Pipeline aborted: post-check failed. Run repair-memory.cjs to fix.");

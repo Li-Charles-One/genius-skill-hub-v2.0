@@ -71,3 +71,29 @@ jobs:
           node "$scripts/repair-memory.cjs" "$root" --dry-run
           node "$scripts/repair-memory.cjs" "$root" --agent CI
           node "$scripts/check-memory.cjs" "$root"
+
+      - name: Smoke test WePlaning semantic audit
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          scripts="we-planing-skill/we-planing/scripts"
+
+          session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Audit" --goal "Validate semantic audit" --agent CI --adapter GitHubActions --os linux | tail -n1)"
+          node "$scripts/register-agent.cjs" "$root" --session "$session" --agent CI --adapter GitHubActions --os linux --tool node --mcp unavailable --skill we-planing
+          node "$scripts/audit-memory.cjs" "$root"
+
+          python - "$root" <<'PY'
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          current = root / ".agent-memory" / "CURRENT.md"
+          text = current.read_text(encoding="utf-8")
+          text = text.replace("## Open Blockers\nnone\n\n## Based On", "## Open Blockers\nNeeds manual browser authorization.\n\n## Based On")
+          current.write_text(text, encoding="utf-8")
+          PY
+
+          if node "$scripts/audit-memory.cjs" "$root"; then
+            echo "Expected semantic audit to fail on blocker drift"
+            exit 1
+          fi

@@ -28,4 +28,5 @@ Run the same lightweight checks locally before pushing meaningful skill changes:
 ```powershell
 git status --short
 node we-planing-skill/we-planing/scripts/check-memory.cjs <project-root>
+node we-planing-skill/we-planing/scripts/audit-memory.cjs <project-root>
 ```
