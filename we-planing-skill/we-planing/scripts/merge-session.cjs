@@ -3,6 +3,7 @@
 const path = require("path");
 const {
   activeCount,
+  allowNoCheck,
   extractField,
   parseArgs,
   readMemory,
@@ -28,11 +29,12 @@ Options:
   --agent <name>              Defaults to session Agent field
   --allow-branch              Allow merge when parent is not current mainline
   --no-current-update         Do not update CURRENT.md metadata
-  --no-check                  Skip consistency check
+  --no-check                  Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "merge-session.cjs");
 
 function updateBasedOn(text, sessionId, sessionText, now) {
   const marker = "## Based On\n";
@@ -68,6 +70,7 @@ const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);
 const now = args.time || utcNow();
 let threads = readThreads(root);
+const observedMainline = threads.mainline;
 let sessionText = readSession(root, sessionId);
 const parent = extractField(sessionText, "Parent session") || "unknown";
 const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
@@ -86,6 +89,14 @@ if (
 const row = threads.rows.find((item) => item.id === sessionId);
 if (!row) {
   console.error(`Session is not listed in THREADS.md: ${sessionId}`);
+  process.exit(1);
+}
+
+const currentThreads = readThreads(root);
+if (currentThreads.mainline !== observedMainline) {
+  console.error(
+    `Refusing to merge: THREADS.md mainline changed during merge. Observed=${observedMainline}, current=${currentThreads.mainline}. Re-read memory and retry.`,
+  );
   process.exit(1);
 }
 

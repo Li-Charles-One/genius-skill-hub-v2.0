@@ -2,6 +2,7 @@
 
 const path = require("path");
 const {
+  allowNoCheck,
   extractField,
   parseArgs,
   readMemory,
@@ -20,11 +21,12 @@ Options:
   --tools <text>     Tools used summary. Default: unknown
   --commands <text>  Commands/tests run summary. Default: unknown
   --merge <text>     Should merge to mainline. Default: unknown
-  --no-check         Skip consistency check
+  --no-check         Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "handoff.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 if (!args["no-check"]) runCheck(root, __dirname);

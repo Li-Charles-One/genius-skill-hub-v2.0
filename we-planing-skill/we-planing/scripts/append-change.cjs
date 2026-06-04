@@ -3,6 +3,7 @@
 const path = require("path");
 const {
   compactTimestamp,
+  allowNoCheck,
   extractField,
   parseArgs,
   readMemory,
@@ -29,11 +30,12 @@ Options:
   --file <path>           Repeat or separate with ";;"
   --verification <text>   Repeat or separate with ";;"
   --note <text>           Repeat or separate with ";;"
-  --no-check              Skip consistency check
+  --no-check              Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "append-change.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);
@@ -60,12 +62,14 @@ function list(items, fallback) {
 }
 
 if (!files.length) {
-  console.warn("Warning: --file not provided. CHANGES.md entry will show Files touched: unknown.");
-  console.warn("  Tip: node append-change.cjs ... --file path/to/file1 --file path/to/file2");
+  console.error("Missing required argument: --file");
+  console.error("  Tip: node append-change.cjs ... --file path/to/file1 --file path/to/file2");
+  process.exit(1);
 }
 if (!verification.length) {
-  console.warn("Warning: --verification not provided. CHANGES.md entry will show Verification: unknown.");
-  console.warn("  Tip: node append-change.cjs ... --verification \"ls -la backup/\"");
+  console.error("Missing required argument: --verification");
+  console.error("  Tip: node append-change.cjs ... --verification \"node scripts/check-memory.cjs .\"");
+  process.exit(1);
 }
 
 const entry = `

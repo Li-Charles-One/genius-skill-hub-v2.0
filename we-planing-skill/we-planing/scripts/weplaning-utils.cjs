@@ -67,7 +67,24 @@ function readFile(filePath) {
 
 function writeFile(filePath, text) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, normalizeNewlines(text), "utf8");
+  const normalized = normalizeNewlines(text);
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath);
+  const stamp = `${Date.now()}-${process.pid}`;
+  const tempPath = path.join(dir, `.${base}.${stamp}.tmp`);
+  const backupPath = path.join(dir, `${base}.bak`);
+
+  if (fs.existsSync(filePath)) {
+    fs.copyFileSync(filePath, backupPath);
+  }
+
+  try {
+    fs.writeFileSync(tempPath, normalized, "utf8");
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
+    throw error;
+  }
 }
 
 function memoryDir(root) {
@@ -83,8 +100,8 @@ function readMemory(root, relativePath) {
 }
 
 function writeMemory(root, relativePath, text) {
-  writeFile(memoryPath(root, relativePath), text);
   validateKnownMarkdown(relativePath, text);
+  writeFile(memoryPath(root, relativePath), text);
 }
 
 function utcNow() {
@@ -234,18 +251,25 @@ function validateKnownMarkdown(relativePath, text) {
       const before = parseCurrentMd(text);
       const after = parseCurrentMd(renderCurrentMd(before));
       for (const key of ["lastUpdated", "mainlineSession", "activeGoal"]) {
-        if (before[key] !== after[key]) console.warn(`Warning: CURRENT.md round-trip changed ${key}`);
+        if (before[key] !== after[key]) throw new Error(`CURRENT.md round-trip changed ${key}`);
       }
     } else if (relativePath.replace(/\\/g, "/").startsWith("sessions/")) {
       const before = parseSessionMd(text);
       const after = parseSessionMd(renderSessionMd(before));
       for (const key of ["sessionId", "agent", "role", "parentSession", "status"]) {
-        if (before[key] !== after[key]) console.warn(`Warning: ${relativePath} round-trip changed ${key}`);
+        if (before[key] !== after[key]) throw new Error(`${relativePath} round-trip changed ${key}`);
       }
     }
   } catch (error) {
-    console.warn(`Warning: ${relativePath} round-trip validation failed: ${error.message}`);
+    throw new Error(`${relativePath} round-trip validation failed: ${error.message}`);
   }
+}
+
+function allowNoCheck(args, scriptName) {
+  if (!args["no-check"]) return;
+  if (process.env.WEPLANING_INTERNAL_NO_CHECK === "1") return;
+  console.error(`${scriptName}: --no-check is internal-only. Run check-memory.cjs after writes instead.`);
+  process.exit(1);
 }
 
 function extractField(text, label) {
@@ -409,6 +433,7 @@ function runCheck(root, scriptDir) {
 module.exports = {
   activeCount,
   appendTableRow,
+  allowNoCheck,
   compactTimestamp,
   extractField,
   generateSessionId,
@@ -419,6 +444,7 @@ module.exports = {
   readMemory,
   readSession,
   readThreads,
+  parseThreads,
   renderCurrentMd,
   renderSessionMd,
   replaceField,

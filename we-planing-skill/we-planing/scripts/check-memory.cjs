@@ -2,6 +2,10 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  extractField,
+  parseThreads,
+} = require("./weplaning-utils.cjs");
 
 const root = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
 const memoryDir = path.join(root, ".agent-memory");
@@ -10,33 +14,10 @@ function readText(relativePath) {
   return fs.readFileSync(path.join(memoryDir, relativePath), "utf8");
 }
 
-function extractField(text, label) {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = text.match(new RegExp(`^${escaped}:\\s*(.+)$`, "m"));
-  return match ? match[1].trim() : null;
-}
-
 function extractSnapshotValue(text, key) {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = text.match(new RegExp(`^\\|\\s*${escaped}\\s*\\|\\s*([^|]+?)\\s*\\|`, "m"));
   return match ? match[1].trim() : null;
-}
-
-function parseThreadRows(text) {
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith("| ") && !line.includes(":--"))
-    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()))
-    .filter((cells) => cells.length >= 7 && cells[0] !== "Session ID")
-    .map((cells) => ({
-      id: cells[0],
-      parent: cells[1],
-      agent: cells[2],
-      os: cells[3],
-      role: cells[4],
-      status: cells[5],
-      summary: cells[6],
-    }));
 }
 
 const errors = [];
@@ -80,11 +61,12 @@ if (errors.length === 0) {
   }
 
   const currentMainline = extractField(current, "Mainline session");
-  const threadsMainline = extractField(threads, "Mainline session");
-  const lastMerged = extractField(threads, "Last merged session");
+  const parsedThreads = parseThreads(threads);
+  const threadsMainline = parsedThreads.mainline;
+  const lastMerged = parsedThreads.lastMerged;
   const snapshotMainline = extractSnapshotValue(weplaning, "Mainline session");
   const snapshotActive = extractSnapshotValue(weplaning, "Active sessions");
-  const threadRows = parseThreadRows(threads);
+  const threadRows = parsedThreads.rows;
   const mainlineRow = threadRows.find((row) => row.id === threadsMainline);
   const activeCount = threadRows.filter((row) => row.status === "active").length;
 

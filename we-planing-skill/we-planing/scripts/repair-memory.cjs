@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const {
   activeCount,
+  allowNoCheck,
   extractField,
   parseArgs,
   readMemory,
@@ -35,11 +36,12 @@ Repairs common WePlaning drift:
 Options:
   --agent <name>    Agent name for WePlaning.md Last updated by. Default: Codex
   --dry-run         Print intended repairs without writing
-  --no-check        Skip consistency check
+  --no-check        Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "repair-memory.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const now = args.time || utcNow();
@@ -84,27 +86,9 @@ if (row.status !== "merged") {
 let sessionText;
 const mainlineSessionPath = sessionPath(root, currentMainline);
 if (!fs.existsSync(mainlineSessionPath)) {
-  repairs.push(`session file rebuild: ${currentMainline}`);
-  sessionText = renderSessionMd({
-    sessionId: currentMainline,
-    agent: row.agent || "unknown",
-    adapter: "unknown",
-    os: row.os || "unknown",
-    role: row.role || "unknown",
-    parentSession: row.parent || "unknown",
-    status: "merged",
-    started: "unknown",
-    closed: now,
-    goal: "Reconstructed missing mainline session file.",
-    contextRead: "- unknown",
-    workNotes: "- Rebuilt by repair-memory.cjs.",
-    filesTouched: `- .agent-memory/sessions/${currentMainline}.md
-- .agent-memory/THREADS.md
-- .agent-memory/WePlaning.md`,
-    decisions: "- unknown",
-    result: "Minimal session file reconstructed.",
-    exactNextStep: "Review reconstructed session metadata.",
-  });
+  console.error(`Mainline session file missing: .agent-memory/sessions/${currentMainline}.md`);
+  console.error("Refusing automatic repair because CURRENT.md may point at a ghost session. Restore the session file or choose the correct mainline manually.");
+  process.exit(1);
 } else {
   sessionText = readSession(root, currentMainline);
 }

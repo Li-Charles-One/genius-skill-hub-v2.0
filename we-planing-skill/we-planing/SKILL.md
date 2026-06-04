@@ -68,7 +68,7 @@ Create a session only when the work will write `.agent-memory/`, change accepted
 
 When a session produces durable changes, you MUST close it properly. Skipping any step is a protocol violation.
 
-**Preferred (1 step):** Use `safe-edit.cjs` which runs the entire pipeline atomically:
+**Preferred (1 step):** Use `safe-edit.cjs` which runs the entire pipeline with snapshot rollback:
 
 ```bash
 node <skill-dir>/scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" --file <path> --verification "<cmd>"
@@ -141,7 +141,7 @@ Use from the skill directory:
 node scripts/check-memory.cjs <project-root>
 node scripts/init-memory.cjs <project-root> --project "<name>" --goal "<goal>"
 node scripts/new-session.cjs <project-root> --role <role> --summary "<summary>" --goal "<goal>"
-node scripts/append-change.cjs <project-root> --session <session-id> --changed "<change>"
+node scripts/append-change.cjs <project-root> --session <session-id> --changed "<change>" --file <path> --verification "<cmd>"
 node scripts/close-session.cjs <project-root> --session <session-id> --status <paused|abandoned|merged>
 node scripts/merge-session.cjs <project-root> --session <session-id>
 node scripts/repair-memory.cjs <project-root>
@@ -152,7 +152,7 @@ node scripts/handoff.cjs <project-root> --session <session-id>
 node scripts/pre-close-check.cjs <project-root> [--session <id>] [--fix]
 node scripts/audit-memory.cjs <project-root>
 node scripts/sync-skill-package.cjs --source <skill-dir> --target <skill-dir>
-node scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" [options]
+node scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" --file <path> --verification "<cmd>" [options]
 ```
 
 Use scripts first for:
@@ -324,7 +324,7 @@ At closeout:
 
 1. Prefer `scripts/close-session.cjs` for `paused` or `abandoned` closeout.
 2. Prefer `scripts/merge-session.cjs` when closeout should become accepted mainline.
-3. Prefer `scripts/append-change.cjs` to append to `CHANGES.md` if durable changes occurred.
+3. Prefer `scripts/append-change.cjs` with `--file` and `--verification` to append to `CHANGES.md` if durable changes occurred.
 4. Update `TOOLS.md` if notable tools, MCP servers, scripts, or skills were used.
 5. Update `DECISIONS.md` or `DONE.md` only if Full Mode is enabled and relevant.
 6. Refresh `WePlaning.md` manually only when scripts are not used.

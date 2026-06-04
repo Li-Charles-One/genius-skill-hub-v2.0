@@ -3,6 +3,7 @@
 const path = require("path");
 const {
   osToken,
+  allowNoCheck,
   parseArgs,
   readMemory,
   replaceOrAppendTableRow,
@@ -24,11 +25,12 @@ Options:
   --mcp <status>    MCP status. Default: unknown
   --skill <name>    Repeat or separate with ";;"
   --notes <text>    Notes. Default: Registered by script
-  --no-check        Skip consistency check
+  --no-check        Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "register-agent.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);

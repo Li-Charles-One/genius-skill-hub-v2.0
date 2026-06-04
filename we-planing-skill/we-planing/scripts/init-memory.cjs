@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  allowNoCheck,
   generateSessionId,
   parseArgs,
   renderCurrentMd,
@@ -24,11 +25,12 @@ Options:
   --os <name>          OS name. Default: process platform
   --short-id <id>      Short suffix for root session. Default: root
   --force              Allow initializing when .agent-memory already exists
-  --no-check           Skip consistency check
+  --no-check           Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "init-memory.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const project = args.project;
@@ -190,7 +192,7 @@ Last updated: ${now}
 
 | Session ID | Agent | OS | Adapter | Tools | MCP | Skills | Notes |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| ${sessionId} | ${agent} | ${os} | ${adapter} | unknown | unknown | we-planing | Bootstrapped WePlaning |
+| ${sessionId} | ${agent} | ${os} | ${adapter} | node, we-planing scripts | unavailable | we-planing | Bootstrapped WePlaning |
 
 ## Skills
 

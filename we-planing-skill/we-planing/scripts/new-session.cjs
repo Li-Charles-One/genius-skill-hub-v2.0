@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const {
   activeCount,
+  allowNoCheck,
   appendTableRow,
   generateSessionId,
   parseArgs,
@@ -35,11 +36,12 @@ Options:
   --short-id <id>      Short suffix when generating an id
   --context <text>     Context-read item. Repeat or separate with ";;"
   --note <text>        Work-note item. Repeat or separate with ";;"
-  --no-check           Skip consistency check
+  --no-check           Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "new-session.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const role = required(args, "role", help);
@@ -80,44 +82,50 @@ const noteLines = notes.length
   ? notes.map((item) => `- ${item}`).join("\n")
   : "- Session opened by script.";
 
-writeSession(
-  root,
-  sessionId,
-  renderSessionMd({
+const before = {
+  threads,
+  tools: readMemory(root, "TOOLS.md"),
+  sessionExists: fs.existsSync(target),
+};
+
+try {
+  writeSession(
+    root,
     sessionId,
-    agent,
-    adapter,
-    os,
-    role,
-    parentSession: parent,
-    status: "active",
-    started,
-    closed: "unknown",
-    goal,
-    contextRead: contextLines,
-    workNotes: noteLines,
-    filesTouched: `- .agent-memory/sessions/${sessionId}.md
+    renderSessionMd({
+      sessionId,
+      agent,
+      adapter,
+      os,
+      role,
+      parentSession: parent,
+      status: "active",
+      started,
+      closed: "unknown",
+      goal,
+      contextRead: contextLines,
+      workNotes: noteLines,
+      filesTouched: `- .agent-memory/sessions/${sessionId}.md
 - .agent-memory/THREADS.md
 - .agent-memory/WePlaning.md`,
-    decisions: "- none yet",
-    result: "Session opened.",
-    exactNextStep: "unknown",
-  }),
-);
+      decisions: "- none yet",
+      result: "Session opened.",
+      exactNextStep: "unknown",
+    }),
+  );
 
-threads.rows.push({
-  id: sessionId,
-  parent,
-  agent,
-  os,
-  role,
-  status: "active",
-  summary,
-});
-writeThreads(root, threads, started);
+  threads.rows.push({
+    id: sessionId,
+    parent,
+    agent,
+    os,
+    role,
+    status: "active",
+    summary,
+  });
+  writeThreads(root, threads, started);
 
-// Auto-insert a TOOLS.md row for the new session.
-try {
+  // Auto-insert a TOOLS.md row for the new session.
   const toolsText = readMemory(root, "TOOLS.md");
   const updated = appendTableRow(toolsText, "## Agent Sessions", [
     sessionId,
@@ -130,15 +138,18 @@ try {
     summary,
   ]);
   writeMemory(root, "TOOLS.md", updated);
+  updateWePlaning(root, {
+    updated: started,
+    updatedBy: agent,
+    activeSessions: activeCount(threads.rows),
+  });
 } catch (err) {
-  // Non-fatal: TOOLS.md insert can fail if heading is missing or format differs.
-  console.warn(`Warning: Could not auto-insert TOOLS.md row: ${err.message}`);
+  writeThreads(root, before.threads, started);
+  writeMemory(root, "TOOLS.md", before.tools);
+  if (!before.sessionExists && fs.existsSync(target)) fs.rmSync(target, { force: true });
+  console.error(`Could not auto-insert TOOLS.md row: ${err.message}`);
+  process.exit(1);
 }
-updateWePlaning(root, {
-  updated: started,
-  updatedBy: agent,
-  activeSessions: activeCount(threads.rows),
-});
 
 if (!args["no-check"]) runCheck(root, __dirname);
 console.log(sessionId);

@@ -2,6 +2,7 @@
 
 const path = require("path");
 const {
+  allowNoCheck,
   extractField,
   parseArgs,
   readMemory,
@@ -18,11 +19,12 @@ Usage:
 Options:
   --based-on <id>    Expected current mainline before writing
   --session <id>     Session that intends to write; its Parent session is used when --based-on is omitted
-  --no-check         Skip consistency gate
+  --no-check         Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "sync-before-write.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 if (!args["no-check"]) runCheck(root, __dirname);
