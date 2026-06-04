@@ -88,9 +88,25 @@ withMemoryLock(root, () => {
   let sessionText;
   const mainlineSessionPath = sessionPath(root, currentMainline);
   if (!fs.existsSync(mainlineSessionPath)) {
-    console.error(`Mainline session file missing: .agent-memory/sessions/${currentMainline}.md`);
-    console.error("Refusing automatic repair because CURRENT.md may point at a ghost session. Restore the session file or choose the correct mainline manually.");
-    process.exit(1);
+    repairs.push(`session ${currentMainline} rebuild missing mainline session file`);
+    sessionText = renderSessionMd({
+      sessionId: currentMainline,
+      agent: row.agent || "unknown",
+      adapter: "unknown",
+      os: row.os || "unknown",
+      role: row.role || "unknown",
+      parentSession: row.parent || "unknown",
+      status: "merged",
+      started: "unknown",
+      closed: now,
+      goal: "Reconstructed missing mainline session file.",
+      contextRead: "- CURRENT.md\n- THREADS.md",
+      workNotes: "- Rebuilt by repair-memory.cjs because the mainline session file was missing.",
+      filesTouched: `- .agent-memory/sessions/${currentMainline}.md`,
+      decisions: "- Preserve CURRENT.md as accepted mainline state.",
+      result: "Reconstructed missing mainline session file from CURRENT.md and THREADS.md.",
+      exactNextStep: "Review the reconstructed session if original session details are needed.",
+    });
   } else {
     sessionText = readSession(root, currentMainline);
   }
