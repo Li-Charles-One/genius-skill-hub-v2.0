@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Quick validation script for skills - minimal version
+Quick validation script for skills
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -10,9 +11,87 @@ from pathlib import Path
 import yaml
 
 MAX_SKILL_NAME_LENGTH = 64
+ALLOWED_FRONTMATTER_PROPERTIES = {"name", "description", "license", "allowed-tools", "metadata"}
+PLACEHOLDER_PATTERNS = (
+    "TODO:",
+    "[TODO:",
+    "Complete and informative explanation",
+    "Replace with actual",
+)
 
 
-def validate_skill(skill_path):
+def parse_skill_frontmatter(skill_md):
+    content = skill_md.read_text(encoding="utf-8")
+    if not content.startswith("---"):
+        return None, content, "No YAML frontmatter found"
+
+    match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+    if not match:
+        return None, content, "Invalid frontmatter format"
+
+    frontmatter_text = match.group(1)
+
+    try:
+        frontmatter = yaml.safe_load(frontmatter_text)
+        if not isinstance(frontmatter, dict):
+            return None, content, "Frontmatter must be a YAML dictionary"
+    except yaml.YAMLError as e:
+        return None, content, f"Invalid YAML in frontmatter: {e}"
+
+    return frontmatter, content, None
+
+
+def list_skill_frontmatter_names(hub_path):
+    names = {}
+    hub_path = Path(hub_path)
+    if not hub_path.exists():
+        return None, f"Hub path not found: {hub_path}"
+
+    for skill_md in sorted(hub_path.glob("*/SKILL.md")):
+        frontmatter, _content, error = parse_skill_frontmatter(skill_md)
+        if error or not isinstance(frontmatter, dict):
+            continue
+        name = frontmatter.get("name")
+        if isinstance(name, str) and name.strip():
+            names.setdefault(name.strip(), []).append(skill_md.parent)
+
+    return names, None
+
+
+def validate_resources_are_discoverable(skill_path, content):
+    missing = []
+    discoverable_text = content
+    openai_yaml = skill_path / "agents" / "openai.yaml"
+    if openai_yaml.exists():
+        discoverable_text += "\n" + openai_yaml.read_text(encoding="utf-8")
+
+    for resource_dir_name in ("references", "scripts", "assets", "evals"):
+        resource_dir = skill_path / resource_dir_name
+        if not resource_dir.exists():
+            continue
+        for resource_file in sorted(resource_dir.rglob("*")):
+            if "__pycache__" in resource_file.parts or resource_file.suffix in {".pyc", ".pyo"}:
+                continue
+            if resource_file.is_file():
+                rel = resource_file.relative_to(skill_path).as_posix()
+                if rel not in discoverable_text and rel.replace("/", "\\") not in discoverable_text:
+                    missing.append(rel)
+    if missing:
+        return (
+            False,
+            "Resource file(s) are not discoverable from SKILL.md: " + ", ".join(missing),
+        )
+    return True, None
+
+
+def validate_no_unfinished_placeholders(content):
+    found = [pattern for pattern in PLACEHOLDER_PATTERNS if pattern in content]
+    if found:
+        return False, "Unfinished placeholder text found in SKILL.md: " + ", ".join(found)
+    return True, None
+
+
+def validate_skill(skill_path, hub_path=None):
     """Basic validation of a skill"""
     skill_path = Path(skill_path)
 
@@ -20,28 +99,13 @@ def validate_skill(skill_path):
     if not skill_md.exists():
         return False, "SKILL.md not found"
 
-    content = skill_md.read_text(encoding="utf-8")
-    if not content.startswith("---"):
-        return False, "No YAML frontmatter found"
+    frontmatter, content, error = parse_skill_frontmatter(skill_md)
+    if error:
+        return False, error
 
-    match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if not match:
-        return False, "Invalid frontmatter format"
-
-    frontmatter_text = match.group(1)
-
-    try:
-        frontmatter = yaml.safe_load(frontmatter_text)
-        if not isinstance(frontmatter, dict):
-            return False, "Frontmatter must be a YAML dictionary"
-    except yaml.YAMLError as e:
-        return False, f"Invalid YAML in frontmatter: {e}"
-
-    allowed_properties = {"name", "description", "license", "allowed-tools", "metadata"}
-
-    unexpected_keys = set(frontmatter.keys()) - allowed_properties
+    unexpected_keys = set(frontmatter.keys()) - ALLOWED_FRONTMATTER_PROPERTIES
     if unexpected_keys:
-        allowed = ", ".join(sorted(allowed_properties))
+        allowed = ", ".join(sorted(ALLOWED_FRONTMATTER_PROPERTIES))
         unexpected = ", ".join(sorted(unexpected_keys))
         return (
             False,
@@ -74,7 +138,6 @@ def validate_skill(skill_path):
                 f"Name is too long ({len(name)} characters). "
                 f"Maximum is {MAX_SKILL_NAME_LENGTH} characters.",
             )
-
     description = frontmatter.get("description", "")
     if not isinstance(description, str):
         return False, f"Description must be a string, got {type(description).__name__}"
@@ -87,6 +150,20 @@ def validate_skill(skill_path):
                 False,
                 f"Description is too long ({len(description)} characters). Maximum is 1024 characters.",
             )
+
+    if hub_path:
+        names, error = list_skill_frontmatter_names(hub_path)
+        if error:
+            return False, error
+        matches = names.get(name, []) if names else []
+        current_dir = skill_path.resolve()
+        duplicates = [item for item in matches if item.resolve() != current_dir]
+        if duplicates:
+            paths = ", ".join(str(item) for item in duplicates)
+            return False, f"Duplicate skill name '{name}' found in hub: {paths}"
+
+    if name and name != skill_path.name:
+        return False, f"Frontmatter name '{name}' must match folder name '{skill_path.name}'"
 
     agents_dir = skill_path / "agents"
     if agents_dir.exists():
@@ -110,14 +187,26 @@ def validate_skill(skill_path):
                 if not isinstance(default_prompt, str) or expected_token not in default_prompt:
                     return False, f"openai.yaml: default_prompt must mention {expected_token}"
 
+    ok, message = validate_resources_are_discoverable(skill_path, content)
+    if not ok:
+        return False, message
+
+    ok, message = validate_no_unfinished_placeholders(content)
+    if not ok:
+        return False, message
+
     return True, "Skill is valid!"
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python quick_validate.py <skill_directory>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Validate a Codex-style skill package.")
+    parser.add_argument("skill_directory", help="Skill directory containing SKILL.md")
+    parser.add_argument(
+        "--hub",
+        help="Optional Skill Hub directory for duplicate frontmatter name checks",
+    )
+    args = parser.parse_args()
 
-    valid, message = validate_skill(sys.argv[1])
+    valid, message = validate_skill(args.skill_directory, args.hub)
     print(message)
     sys.exit(0 if valid else 1)

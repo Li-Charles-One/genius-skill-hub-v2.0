@@ -165,6 +165,7 @@ Record important evidence in a reference file when it will affect future mainten
 - `scripts/init_skill.py`: scaffold Codex-style skills.
 - `scripts/quick_validate.py`: validate core `SKILL.md` structure.
 - `scripts/generate_openai_yaml.py`: generate Codex UI metadata.
+- `scripts/validate_evals.py`: validate eval definitions and optionally execute assertions against result JSON.
 - `references/skill-optimization-template.md`: package template for reshaping and optimizing skills.
 - `references/agent-adapter-standard.md`: multi-Agent adapter conventions.
 - `references/cross-platform-command-standard.md`: Windows/macOS/Linux command and script conventions.

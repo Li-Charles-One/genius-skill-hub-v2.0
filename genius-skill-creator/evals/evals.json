@@ -4,66 +4,166 @@
     {
       "id": "create-package",
       "prompt": "Create a new skill for backing up code to GitHub.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Create, captures purpose/trigger/non-goals/outputs/dependencies, uses init_skill.py when useful, creates SKILL.md and agents/openai.yaml, and validates with quick_validate.py.",
-      "files": []
+      "files": [],
+      "assertions": [
+        {"type": "contains", "value": "Create"},
+        {"type": "contains", "value": "SKILL.md"},
+        {"type": "contains", "value": "agents/openai.yaml"},
+        {"type": "contains", "value": "quick_validate.py"}
+      ]
     },
     {
       "id": "optimize-existing-skill",
       "prompt": "Optimize this existing skill so it can be the template for the rest of my Skill Hub.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Standardize or Optimize, reads skill-optimization-template.md, keeps SKILL.md thin, moves detailed guidance into references, records output standard, and validates before delivery.",
       "files": [
         "SKILL.md",
         "references/skill-optimization-template.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Standardize"},
+        {"type": "contains", "value": "skill-optimization-template.md"},
+        {"type": "contains", "value": "SKILL.md"},
+        {"type": "contains", "value": "references"}
       ]
     },
     {
       "id": "multi-agent-adapter",
       "prompt": "Port this skill so Reasonix can use it too.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, keeps runtime metadata in agents/reasonix.yaml, lists only verified tools, and keeps shared instructions in SKILL.md and references.",
       "files": [
         "agents/reasonix.yaml",
         "references/agent-adapter-standard.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Port"},
+        {"type": "contains", "value": "agents/reasonix.yaml"},
+        {"type": "contains", "value": "agent-adapter-standard.md"},
+        {"type": "contains", "value": "verified"}
       ]
     },
     {
       "id": "trae-solo-adapter",
       "prompt": "Port this skill for Trae Solo and make sure SOLO Coder can use it.",
-      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats Trae SOLO as a SOLO Coder/Builder, project rule, custom instruction, or MCP-oriented adapter, keeps uncertain tool names marked unverified, and reports integration style plus validation gaps.",
+      "trigger_expected": true,
+      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats Trae as native SKILL.md-compatible support, and reports the project/global deployment paths plus validation gaps.",
       "files": [
         "agents/trae-solo.yaml",
         "references/agent-adapter-standard.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Port"},
+        {"type": "contains", "value": "agents/trae-solo.yaml"},
+        {"type": "contains", "value": "native"},
+        {"type": "contains", "value": ".trae/skills"}
       ]
     },
     {
       "id": "cherrystudio-adapter",
       "prompt": "Make this skill work in CherryStudio for Code Tool and Agent workflows.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats CherryStudio as Code Tool, Agent, MCP, or custom assistant guidance, avoids assuming a native skill package format, and reports code-agent or MCP assumptions.",
       "files": [
         "agents/cherrystudio.yaml",
         "references/agent-adapter-standard.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Port"},
+        {"type": "contains", "value": "agents/cherrystudio.yaml"},
+        {"type": "contains", "value": "Code Tool"},
+        {"type": "contains", "value": "MCP"}
       ]
     },
     {
       "id": "cross-platform-commands",
       "prompt": "Update the scripts and command examples so they run on Windows, macOS, and Linux.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Standardize or Repair, checks cross-platform-command-standard.md, prefers Python or Node for repeated logic, provides PowerShell and Bash variants when syntax differs, avoids Bash-only Windows instructions, and marks unverified operating systems.",
       "files": [
         "references/cross-platform-command-standard.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "cross-platform-command-standard.md"},
+        {"type": "contains", "value": "PowerShell"},
+        {"type": "contains", "value": "Bash"},
+        {"type": "contains", "value": "Windows"}
       ]
     },
     {
       "id": "trigger-tuning",
       "prompt": "Make the description easier to trigger without causing false positives.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Evaluate or Repair, creates should-trigger and should-not-trigger prompts, reviews false positives, patches only the description or smallest relevant instruction, and reruns the same evals.",
       "files": [
         "evals/evals.json"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "should-trigger"},
+        {"type": "contains", "value": "should-not-trigger"},
+        {"type": "contains", "value": "description"},
+        {"type": "contains", "value": "evals/evals.json"}
       ]
     },
     {
       "id": "audit-folder",
       "prompt": "Audit this folder of skills and tell me which ones are invalid or duplicated.",
+      "trigger_expected": true,
       "expected_output": "Classifies the request as Audit, checks frontmatter, duplicate names, resource discoverability, adapter metadata, scripts, and eval coverage, then leads with findings and validation gaps.",
-      "files": []
+      "files": [],
+      "assertions": [
+        {"type": "contains", "value": "Audit"},
+        {"type": "contains", "value": "frontmatter"},
+        {"type": "contains", "value": "duplicate"},
+        {"type": "contains", "value": "validation gaps"}
+      ]
+    },
+    {
+      "id": "non-skill-python-script",
+      "prompt": "帮我写一个 Python 脚本，读取 CSV 并输出前 10 行。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is ordinary script writing, not skill creation, repair, validation, audit, evaluation, optimization, standardization, or porting.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "genius-skill-creator"},
+        {"type": "not_contains", "value": "SKILL.md"}
+      ]
+    },
+    {
+      "id": "non-skill-readme",
+      "prompt": "这个项目的 README 怎么写？",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is project documentation, not a skill package task.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "agents/openai.yaml"},
+        {"type": "not_contains", "value": "quick_validate.py"}
+      ]
+    },
+    {
+      "id": "non-skill-debug-bug",
+      "prompt": "帮我调试一下这个 bug，页面点击保存后没有反应。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is product debugging, not skill maintenance.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "skill-optimization-template.md"},
+        {"type": "not_contains", "value": "agent-adapter-standard.md"}
+      ]
+    },
+    {
+      "id": "non-skill-translate-code",
+      "prompt": "把这段 JavaScript 代码翻译成 Go。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is code translation, not skill creation or optimization.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "SKILL.md"},
+        {"type": "not_contains", "value": "evals/evals.json"}
+      ]
     }
   ]
 }
