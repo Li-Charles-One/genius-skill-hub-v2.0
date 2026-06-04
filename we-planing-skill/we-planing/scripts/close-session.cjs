@@ -14,6 +14,7 @@ const {
   updateWePlaning,
   usage,
   utcNow,
+  withMemoryLock,
   writeSession,
   writeThreads,
 } = require("./weplaning-utils.cjs");
@@ -40,40 +41,42 @@ if (!["paused", "abandoned", "merged"].includes(status)) {
 }
 
 const now = args.time || utcNow();
-let sessionText = readSession(root, sessionId);
-const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
-let threads = readThreads(root);
-const row = threads.rows.find((item) => item.id === sessionId);
-if (!row) {
-  console.error(`Session is not listed in THREADS.md: ${sessionId}`);
-  process.exit(1);
-}
+withMemoryLock(root, () => {
+  let sessionText = readSession(root, sessionId);
+  const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
+  const threads = readThreads(root);
+  const row = threads.rows.find((item) => item.id === sessionId);
+  if (!row) {
+    console.error(`Session is not listed in THREADS.md: ${sessionId}`);
+    process.exit(1);
+  }
 
-if (threads.mainline === sessionId && status !== "merged") {
-  console.error("Cannot close the mainline session as paused or abandoned. Merge another session first.");
-  process.exit(1);
-}
+  if (threads.mainline === sessionId && status !== "merged") {
+    console.error("Cannot close the mainline session as paused or abandoned. Merge another session first.");
+    process.exit(1);
+  }
 
-row.status = status;
-if (status === "merged") {
-  threads.mainline = sessionId;
-  threads.lastMerged = sessionId;
-}
-writeThreads(root, threads, now);
+  row.status = status;
+  if (status === "merged") {
+    threads.mainline = sessionId;
+    threads.lastMerged = sessionId;
+  }
+  writeThreads(root, threads, now);
 
-sessionText = replaceField(sessionText, "Status", status);
-const closed = extractField(sessionText, "Closed");
-if (!closed || closed === "unknown" || closed === "(open)") {
-  sessionText = replaceField(sessionText, "Closed", now);
-}
-writeSession(root, sessionId, sessionText);
+  sessionText = replaceField(sessionText, "Status", status);
+  const closed = extractField(sessionText, "Closed");
+  if (!closed || closed === "unknown" || closed === "(open)") {
+    sessionText = replaceField(sessionText, "Closed", now);
+  }
+  writeSession(root, sessionId, sessionText);
 
-updateWePlaning(root, {
-  updated: now,
-  updatedBy: agent,
-  mainline: threads.mainline,
-  lastClosed: sessionId,
-  activeSessions: activeCount(threads.rows),
+  updateWePlaning(root, {
+    updated: now,
+    updatedBy: agent,
+    mainline: threads.mainline,
+    lastClosed: sessionId,
+    activeSessions: activeCount(threads.rows),
+  });
 });
 
 if (!args["no-check"]) runCheck(root, __dirname);

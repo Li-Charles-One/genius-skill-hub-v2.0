@@ -153,11 +153,12 @@ node scripts/pre-close-check.cjs <project-root> [--session <id>] [--fix]
 node scripts/audit-memory.cjs <project-root>
 node scripts/sync-skill-package.cjs --source <skill-dir> --target <skill-dir>
 node scripts/safe-edit.cjs <project-root> --session <id> --changed "<desc>" --file <path> --verification "<cmd>" [options]
+node scripts/test-concurrency.cjs
 ```
 
 Use scripts first for:
 
-- **closing and merging a session safely** — prefer `safe-edit.cjs` (single atomic pipeline);
+- **closing and merging a session safely** — prefer `safe-edit.cjs` (single pipeline with lock and snapshot rollback);
 - initializing Minimal Mode memory;
 - creating session files and `THREADS.md` entries;
 - appending standard `CHANGES.md` entries;
@@ -171,6 +172,7 @@ Use scripts first for:
 - scanning for pre-close issues (unknown TOOLS/CHANGES fields, mainline drift);
 - auditing semantic drift that strict consistency checks cannot catch;
 - syncing a changed skill package to a local Skill Hub or mirror;
+- stress-testing concurrent `CHANGES.md`, `THREADS.md`, and `TOOLS.md` writes;
 - running the consistency gate.
 
 Manual edits are still allowed for nuanced content, but run the consistency gate afterward.

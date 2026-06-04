@@ -16,6 +16,7 @@ const {
   updateWePlaning,
   usage,
   utcNow,
+  withMemoryLock,
   writeMemory,
   writeSession,
   writeThreads,
@@ -69,62 +70,55 @@ function updateBasedOn(text, sessionId, sessionText, now) {
 const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);
 const now = args.time || utcNow();
-let threads = readThreads(root);
-const observedMainline = threads.mainline;
-let sessionText = readSession(root, sessionId);
-const parent = extractField(sessionText, "Parent session") || "unknown";
-const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
+withMemoryLock(root, () => {
+  let threads = readThreads(root);
+  let sessionText = readSession(root, sessionId);
+  const parent = extractField(sessionText, "Parent session") || "unknown";
+  const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
 
-if (
-  !args["allow-branch"] &&
-  threads.mainline !== sessionId &&
-  parent !== threads.mainline
-) {
-  console.error(
-    `Refusing to merge branch session. Parent=${parent}, current mainline=${threads.mainline}. Use --allow-branch to override.`,
-  );
-  process.exit(1);
-}
+  if (
+    !args["allow-branch"] &&
+    threads.mainline !== sessionId &&
+    parent !== threads.mainline
+  ) {
+    console.error(
+      `Refusing to merge branch session. Parent=${parent}, current mainline=${threads.mainline}. Use --allow-branch to override.`,
+    );
+    process.exit(1);
+  }
 
-const row = threads.rows.find((item) => item.id === sessionId);
-if (!row) {
-  console.error(`Session is not listed in THREADS.md: ${sessionId}`);
-  process.exit(1);
-}
+  const row = threads.rows.find((item) => item.id === sessionId);
+  if (!row) {
+    console.error(`Session is not listed in THREADS.md: ${sessionId}`);
+    process.exit(1);
+  }
 
-const currentThreads = readThreads(root);
-if (currentThreads.mainline !== observedMainline) {
-  console.error(
-    `Refusing to merge: THREADS.md mainline changed during merge. Observed=${observedMainline}, current=${currentThreads.mainline}. Re-read memory and retry.`,
-  );
-  process.exit(1);
-}
+  row.status = "merged";
+  threads = { ...threads, mainline: sessionId, lastMerged: sessionId };
+  writeThreads(root, threads, now);
 
-row.status = "merged";
-threads = { ...threads, mainline: sessionId, lastMerged: sessionId };
-writeThreads(root, threads, now);
+  sessionText = replaceField(sessionText, "Status", "merged");
+  const closed = extractField(sessionText, "Closed");
+  if (!closed || closed === "unknown" || closed === "(open)") {
+    sessionText = replaceField(sessionText, "Closed", now);
+  }
+  writeSession(root, sessionId, sessionText);
 
-sessionText = replaceField(sessionText, "Status", "merged");
-const closed = extractField(sessionText, "Closed");
-if (!closed || closed === "unknown" || closed === "(open)") {
-  sessionText = replaceField(sessionText, "Closed", now);
-}
-writeSession(root, sessionId, sessionText);
+  if (!args["no-current-update"]) {
+    let current = readMemory(root, "CURRENT.md");
+    current = replaceField(current, "Last updated", now);
+    current = replaceField(current, "Mainline session", sessionId);
+    current = updateBasedOn(current, sessionId, sessionText, now);
+    writeMemory(root, "CURRENT.md", current);
+  }
 
-if (!args["no-current-update"]) {
-  let current = readMemory(root, "CURRENT.md");
-  current = replaceField(current, "Last updated", now);
-  current = replaceField(current, "Mainline session", sessionId);
-  current = updateBasedOn(current, sessionId, sessionText, now);
-  writeMemory(root, "CURRENT.md", current);
-}
-
-updateWePlaning(root, {
-  updated: now,
-  updatedBy: agent,
-  mainline: sessionId,
-  lastClosed: sessionId,
-  activeSessions: activeCount(threads.rows),
+  updateWePlaning(root, {
+    updated: now,
+    updatedBy: agent,
+    mainline: sessionId,
+    lastClosed: sessionId,
+    activeSessions: activeCount(threads.rows),
+  });
 });
 
 if (!args["no-check"]) runCheck(root, __dirname);

@@ -12,6 +12,7 @@ const {
   toList,
   usage,
   utcNow,
+  withMemoryLock,
   writeMemory,
 } = require("./weplaning-utils.cjs");
 
@@ -43,19 +44,21 @@ const skills = toList(args.skill || args.skills).join(", ") || "unknown";
 const notes = args.notes || "Registered by script";
 const now = args.time || utcNow();
 
-let toolsText = readMemory(root, "TOOLS.md");
-toolsText = toolsText.replace(/^Last updated:\s*.*$/m, `Last updated: ${now}`);
-toolsText = replaceOrAppendTableRow(toolsText, "## Agent Sessions", sessionId, [
-  sessionId,
-  agent,
-  os,
-  adapter,
-  tools,
-  mcp,
-  skills,
-  notes,
-]);
+withMemoryLock(root, () => {
+  let toolsText = readMemory(root, "TOOLS.md");
+  toolsText = toolsText.replace(/^Last updated:\s*.*$/m, `Last updated: ${now}`);
+  toolsText = replaceOrAppendTableRow(toolsText, "## Agent Sessions", sessionId, [
+    sessionId,
+    agent,
+    os,
+    adapter,
+    tools,
+    mcp,
+    skills,
+    notes,
+  ]);
 
-writeMemory(root, "TOOLS.md", toolsText);
+  writeMemory(root, "TOOLS.md", toolsText);
+});
 if (!args["no-check"]) runCheck(root, __dirname);
 console.log(sessionId);

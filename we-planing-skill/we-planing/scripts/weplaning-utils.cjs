@@ -70,12 +70,13 @@ function writeFile(filePath, text) {
   const normalized = normalizeNewlines(text);
   const dir = path.dirname(filePath);
   const base = path.basename(filePath);
-  const stamp = `${Date.now()}-${process.pid}`;
+  const stamp = uniqueStamp();
   const tempPath = path.join(dir, `.${base}.${stamp}.tmp`);
-  const backupPath = path.join(dir, `${base}.bak`);
 
   if (fs.existsSync(filePath)) {
-    fs.copyFileSync(filePath, backupPath);
+    const backupDir = path.join(dir, ".backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+    fs.copyFileSync(filePath, path.join(backupDir, `${base}.${stamp}.bak`));
   }
 
   try {
@@ -110,6 +111,10 @@ function utcNow() {
 
 function compactTimestamp(iso) {
   return iso.replace(/[-:]/g, "").replace(".000", "");
+}
+
+function uniqueStamp() {
+  return `${compactTimestamp(utcNow())}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function osToken(value) {
@@ -270,6 +275,79 @@ function allowNoCheck(args, scriptName) {
   if (process.env.WEPLANING_INTERNAL_NO_CHECK === "1") return;
   console.error(`${scriptName}: --no-check is internal-only. Run check-memory.cjs after writes instead.`);
   process.exit(1);
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function withMemoryLock(root, callback, options = {}) {
+  const lockKey = path.resolve(memoryDir(root));
+  if (process.env.WEPLANING_LOCK_HELD === lockKey) return callback();
+
+  const dir = path.join(memoryDir(root), ".weplaning.lock");
+  const ownerPath = path.join(dir, "owner.json");
+  const timeoutMs = Number(options.timeoutMs || process.env.WEPLANING_LOCK_TIMEOUT_MS || 30_000);
+  const staleMs = Number(options.staleMs || process.env.WEPLANING_LOCK_STALE_MS || 120_000);
+  const started = Date.now();
+  const owner = {
+    pid: process.pid,
+    command: path.basename(process.argv[1] || "node"),
+    started: utcNow(),
+  };
+
+  while (true) {
+    try {
+      fs.mkdirSync(dir);
+      fs.writeFileSync(ownerPath, `${JSON.stringify(owner, null, 2)}\n`, "utf8");
+      break;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      let age = 0;
+      try {
+        age = Date.now() - fs.statSync(dir).mtimeMs;
+      } catch {
+        age = staleMs + 1;
+      }
+      if (age > staleMs) {
+        const staleOwner = readJsonIfExists(ownerPath);
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+          console.error(`Removed stale WePlaning lock${staleOwner?.pid ? ` from pid ${staleOwner.pid}` : ""}.`);
+          continue;
+        } catch {
+          // Another process may have removed it. Retry until timeout.
+        }
+      }
+      if (Date.now() - started > timeoutMs) {
+        const currentOwner = readJsonIfExists(ownerPath);
+        throw new Error(`Timed out waiting for WePlaning lock${currentOwner?.pid ? ` held by pid ${currentOwner.pid}` : ""}.`);
+      }
+      sleepSync(50 + Math.floor(Math.random() * 75));
+    }
+  }
+
+  const previousLock = process.env.WEPLANING_LOCK_HELD;
+  process.env.WEPLANING_LOCK_HELD = lockKey;
+  try {
+    return callback();
+  } finally {
+    if (previousLock === undefined) delete process.env.WEPLANING_LOCK_HELD;
+    else process.env.WEPLANING_LOCK_HELD = previousLock;
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Lock cleanup failure should not mask the original write result.
+    }
+  }
 }
 
 function extractField(text, label) {
@@ -459,6 +537,9 @@ module.exports = {
   updateWePlaning,
   usage,
   utcNow,
+  uniqueStamp,
+  withMemoryLock,
+  writeFile,
   writeMemory,
   writeSession,
   writeThreads,

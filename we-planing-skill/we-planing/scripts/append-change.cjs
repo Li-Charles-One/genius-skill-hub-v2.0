@@ -14,6 +14,7 @@ const {
   toList,
   usage,
   utcNow,
+  withMemoryLock,
   writeMemory,
 } = require("./weplaning-utils.cjs");
 
@@ -40,15 +41,6 @@ allowNoCheck(args, "append-change.cjs");
 const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);
 const changed = toList(required(args, "changed", help));
-const sessionText = readSession(root, sessionId);
-const threads = readThreads(root);
-const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
-const role = args.role || extractField(sessionText, "Role") || "unknown";
-const basedOn =
-  args["based-on"] ||
-  threads.mainline ||
-  extractField(sessionText, "Parent session") ||
-  "unknown";
 const now = args.time || utcNow();
 const short = args.short || "change";
 const changeId = args["change-id"] || `${now} ${short}`;
@@ -75,9 +67,9 @@ if (!verification.length) {
 const entry = `
 ## ${changeId}
 - Session: ${sessionId}
-- Agent: ${agent}
-- Role: ${role}
-- Based on: ${basedOn}
+- Agent: __AGENT__
+- Role: __ROLE__
+- Based on: __BASED_ON__
 - Change ID: ${changeId}
 - Changed:
 ${list(changed, "unknown")}
@@ -89,8 +81,23 @@ ${list(verification, "unknown")}
 ${list(notes, "none")}
 `;
 
-const current = readMemory(root, "CHANGES.md").replace(/\s*$/, "\n");
-writeMemory(root, "CHANGES.md", `${current}${entry}`);
+withMemoryLock(root, () => {
+  const sessionText = readSession(root, sessionId);
+  const threads = readThreads(root);
+  const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
+  const role = args.role || extractField(sessionText, "Role") || "unknown";
+  const basedOn =
+    args["based-on"] ||
+    threads.mainline ||
+    extractField(sessionText, "Parent session") ||
+    "unknown";
+  const current = readMemory(root, "CHANGES.md").replace(/\s*$/, "\n");
+  const finalEntry = entry
+    .replace("__AGENT__", agent)
+    .replace("__ROLE__", role)
+    .replace("__BASED_ON__", basedOn);
+  writeMemory(root, "CHANGES.md", `${current}${finalEntry}`);
+});
 
 if (!args["no-check"]) runCheck(root, __dirname);
 console.log(compactTimestamp(now));

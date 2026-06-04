@@ -18,6 +18,7 @@ const {
   updateWePlaning,
   usage,
   utcNow,
+  withMemoryLock,
   writeMemory,
   writeSession,
   writeThreads,
@@ -51,8 +52,6 @@ const agent = args.agent || "Codex";
 const adapter = args.adapter || "unknown";
 const os = args.os || process.platform;
 const started = args.started || utcNow();
-const threads = readThreads(root);
-const parent = args.parent || threads.mainline;
 const sessionId =
   args.id ||
   generateSessionId({
@@ -64,15 +63,6 @@ const sessionId =
   });
 
 const target = sessionPath(root, sessionId);
-if (fs.existsSync(target)) {
-  console.error(`Session already exists: ${target}`);
-  process.exit(1);
-}
-if (threads.rows.some((row) => row.id === sessionId)) {
-  console.error(`Session already listed in THREADS.md: ${sessionId}`);
-  process.exit(1);
-}
-
 const context = toList(args.context);
 const notes = toList(args.note);
 const contextLines = context.length
@@ -82,74 +72,90 @@ const noteLines = notes.length
   ? notes.map((item) => `- ${item}`).join("\n")
   : "- Session opened by script.";
 
-const before = {
-  threads,
-  tools: readMemory(root, "TOOLS.md"),
-  sessionExists: fs.existsSync(target),
-};
+withMemoryLock(root, () => {
+  let threads = readThreads(root);
+  const parent = args.parent || threads.mainline;
 
-try {
-  writeSession(
-    root,
-    sessionId,
-    renderSessionMd({
+  if (fs.existsSync(target)) {
+    console.error(`Session already exists: ${target}`);
+    process.exit(1);
+  }
+  if (threads.rows.some((row) => row.id === sessionId)) {
+    console.error(`Session already listed in THREADS.md: ${sessionId}`);
+    process.exit(1);
+  }
+
+  const before = {
+    threads,
+    tools: readMemory(root, "TOOLS.md"),
+    weplaning: readMemory(root, "WePlaning.md"),
+    sessionExists: fs.existsSync(target),
+  };
+
+  try {
+    writeSession(
+      root,
       sessionId,
-      agent,
-      adapter,
-      os,
-      role,
-      parentSession: parent,
-      status: "active",
-      started,
-      closed: "unknown",
-      goal,
-      contextRead: contextLines,
-      workNotes: noteLines,
-      filesTouched: `- .agent-memory/sessions/${sessionId}.md
+      renderSessionMd({
+        sessionId,
+        agent,
+        adapter,
+        os,
+        role,
+        parentSession: parent,
+        status: "active",
+        started,
+        closed: "unknown",
+        goal,
+        contextRead: contextLines,
+        workNotes: noteLines,
+        filesTouched: `- .agent-memory/sessions/${sessionId}.md
 - .agent-memory/THREADS.md
 - .agent-memory/WePlaning.md`,
-      decisions: "- none yet",
-      result: "Session opened.",
-      exactNextStep: "unknown",
-    }),
-  );
+        decisions: "- none yet",
+        result: "Session opened.",
+        exactNextStep: "unknown",
+      }),
+    );
 
-  threads.rows.push({
-    id: sessionId,
-    parent,
-    agent,
-    os,
-    role,
-    status: "active",
-    summary,
-  });
-  writeThreads(root, threads, started);
+    threads.rows.push({
+      id: sessionId,
+      parent,
+      agent,
+      os,
+      role,
+      status: "active",
+      summary,
+    });
+    writeThreads(root, threads, started);
 
-  // Auto-insert a TOOLS.md row for the new session.
-  const toolsText = readMemory(root, "TOOLS.md");
-  const updated = appendTableRow(toolsText, "## Agent Sessions", [
-    sessionId,
-    agent,
-    os,
-    adapter,
-    "unknown",
-    "unknown",
-    "unknown",
-    summary,
-  ]);
-  writeMemory(root, "TOOLS.md", updated);
-  updateWePlaning(root, {
-    updated: started,
-    updatedBy: agent,
-    activeSessions: activeCount(threads.rows),
-  });
-} catch (err) {
-  writeThreads(root, before.threads, started);
-  writeMemory(root, "TOOLS.md", before.tools);
-  if (!before.sessionExists && fs.existsSync(target)) fs.rmSync(target, { force: true });
-  console.error(`Could not auto-insert TOOLS.md row: ${err.message}`);
-  process.exit(1);
-}
+    // Auto-insert a TOOLS.md row for the new session.
+    const toolsText = readMemory(root, "TOOLS.md");
+    const updated = appendTableRow(toolsText, "## Agent Sessions", [
+      sessionId,
+      agent,
+      os,
+      adapter,
+      "unknown",
+      "unknown",
+      "unknown",
+      summary,
+    ]);
+    writeMemory(root, "TOOLS.md", updated);
+    updateWePlaning(root, {
+      updated: started,
+      updatedBy: agent,
+      activeSessions: activeCount(threads.rows),
+    });
+  } catch (err) {
+    writeThreads(root, before.threads, started);
+    writeMemory(root, "TOOLS.md", before.tools);
+    writeMemory(root, "WePlaning.md", before.weplaning);
+    if (!before.sessionExists && fs.existsSync(target)) fs.rmSync(target, { force: true });
+    console.error(`Could not create session: ${err.message}`);
+    process.exit(1);
+  }
+});
 
 if (!args["no-check"]) runCheck(root, __dirname);
 console.log(sessionId);

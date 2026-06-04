@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { parseArgs, required, usage } = require("./weplaning-utils.cjs");
+const { parseArgs, required, usage, withMemoryLock, writeFile } = require("./weplaning-utils.cjs");
 
 const help = `
 Usage:
@@ -69,8 +69,7 @@ function restoreSnapshot(snapshot) {
   }
   for (const [relativePath, content] of snapshot.contentByRelativePath.entries()) {
     const filePath = path.join(snapshot.memoryDir, relativePath);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, content);
+    writeFile(filePath, content.toString("utf8"));
   }
 }
 
@@ -98,11 +97,11 @@ function runStep(label, command, argv) {
 }
 
 const scriptDir = __dirname;
-const snapshot = createSnapshot();
+let snapshot = null;
 
 function abort(message) {
   console.error(message);
-  restoreSnapshot(snapshot);
+  if (snapshot) restoreSnapshot(snapshot);
   const check = spawnSync(process.execPath, [path.join(scriptDir, "check-memory.cjs"), root], {
     cwd: root,
     encoding: "utf8",
@@ -112,45 +111,49 @@ function abort(message) {
   process.exit(1);
 }
 
-const syncResult = runStep("sync-before-write", path.join(scriptDir, "sync-before-write.cjs"), [
-  root,
-  "--session", sessionId,
-  "--no-check",
-]);
-if (!syncResult.ok) abort("Pipeline aborted: sync-before-write failed.");
+withMemoryLock(root, () => {
+  snapshot = createSnapshot();
 
-const preCheckResult = runStep("check-memory (pre)", path.join(scriptDir, "check-memory.cjs"), [root]);
-if (!preCheckResult.ok) abort("Pipeline aborted: pre-check failed.");
-
-const preCloseResult = runStep("pre-close-check", path.join(scriptDir, "pre-close-check.cjs"), [
-  root,
-  "--session", sessionId,
-  "--no-check",
-]);
-if (!preCloseResult.ok) abort("Pipeline aborted: pre-close-check reported issues.");
-
-const appendArgv = [root, "--session", sessionId, "--changed", changed, "--no-check"];
-for (const file of values(files)) appendArgv.push("--file", file);
-for (const item of values(verification)) appendArgv.push("--verification", item);
-if (args.note) {
-  for (const note of values(args.note)) appendArgv.push("--note", note);
-}
-
-const appendResult = runStep("append-change", path.join(scriptDir, "append-change.cjs"), appendArgv);
-if (!appendResult.ok) abort("Pipeline aborted: append-change failed.");
-
-if (!args["no-merge"]) {
-  const mergeResult = runStep("merge-session", path.join(scriptDir, "merge-session.cjs"), [
+  const syncResult = runStep("sync-before-write", path.join(scriptDir, "sync-before-write.cjs"), [
     root,
     "--session", sessionId,
     "--no-check",
   ]);
-  if (!mergeResult.ok) abort("Pipeline aborted: merge-session failed.");
-} else {
-  console.log("SKIPPED merge-session (--no-merge)");
-}
+  if (!syncResult.ok) abort("Pipeline aborted: sync-before-write failed.");
 
-const postCheckResult = runStep("check-memory (post)", path.join(scriptDir, "check-memory.cjs"), [root]);
-if (!postCheckResult.ok) abort("Pipeline aborted: post-check failed. Snapshot was restored.");
+  const preCheckResult = runStep("check-memory (pre)", path.join(scriptDir, "check-memory.cjs"), [root]);
+  if (!preCheckResult.ok) abort("Pipeline aborted: pre-check failed.");
+
+  const preCloseResult = runStep("pre-close-check", path.join(scriptDir, "pre-close-check.cjs"), [
+    root,
+    "--session", sessionId,
+    "--no-check",
+  ]);
+  if (!preCloseResult.ok) abort("Pipeline aborted: pre-close-check reported issues.");
+
+  const appendArgv = [root, "--session", sessionId, "--changed", changed, "--no-check"];
+  for (const file of values(files)) appendArgv.push("--file", file);
+  for (const item of values(verification)) appendArgv.push("--verification", item);
+  if (args.note) {
+    for (const note of values(args.note)) appendArgv.push("--note", note);
+  }
+
+  const appendResult = runStep("append-change", path.join(scriptDir, "append-change.cjs"), appendArgv);
+  if (!appendResult.ok) abort("Pipeline aborted: append-change failed.");
+
+  if (!args["no-merge"]) {
+    const mergeResult = runStep("merge-session", path.join(scriptDir, "merge-session.cjs"), [
+      root,
+      "--session", sessionId,
+      "--no-check",
+    ]);
+    if (!mergeResult.ok) abort("Pipeline aborted: merge-session failed.");
+  } else {
+    console.log("SKIPPED merge-session (--no-merge)");
+  }
+
+  const postCheckResult = runStep("check-memory (post)", path.join(scriptDir, "check-memory.cjs"), [root]);
+  if (!postCheckResult.ok) abort("Pipeline aborted: post-check failed. Snapshot was restored.");
+});
 
 console.log("safe-edit pipeline completed successfully.");
