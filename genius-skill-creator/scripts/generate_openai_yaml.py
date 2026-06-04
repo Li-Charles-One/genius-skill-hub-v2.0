@@ -148,7 +148,7 @@ def parse_interface_overrides(raw_overrides):
             print(f"[ERROR] Unknown interface field '{key}'. Allowed: {allowed}")
             return None, None
         overrides[key] = value
-        if key not in ("display_name", "short_description") and key not in optional_order:
+        if key not in ("display_name", "short_description", "default_prompt") and key not in optional_order:
             optional_order.append(key)
     return overrides, optional_order
 
@@ -160,6 +160,7 @@ def write_openai_yaml(skill_dir, skill_name, raw_overrides):
 
     display_name = overrides.get("display_name") or format_display_name(skill_name)
     short_description = overrides.get("short_description") or generate_short_description(display_name)
+    default_prompt = overrides.get("default_prompt") or f"Use ${skill_name} to help with {display_name} tasks."
 
     if not (25 <= len(short_description) <= 64):
         print(
@@ -172,6 +173,7 @@ def write_openai_yaml(skill_dir, skill_name, raw_overrides):
         "interface:",
         f"  display_name: {yaml_quote(display_name)}",
         f"  short_description: {yaml_quote(short_description)}",
+        f"  default_prompt: {yaml_quote(default_prompt)}",
     ]
 
     for key in optional_order:

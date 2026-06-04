@@ -49,6 +49,10 @@ jobs:
               print(f"valid agent metadata: {file}")
           PY
 
+      - name: Validate Genius Skill Creator package
+        run: |
+          python genius-skill-creator/scripts/quick_validate.py genius-skill-creator
+
       - name: Smoke test code audit report validator
         run: |
           set -euo pipefail

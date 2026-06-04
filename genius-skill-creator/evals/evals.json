@@ -1,22 +1,42 @@
-﻿{
-  "skill_name": "skill-creator",
+{
+  "skill_name": "genius-skill-creator",
   "evals": [
     {
-      "id": 1,
-      "prompt": "我想创建一个技能，用来自动备份我的代码到 GitHub",
-      "expected_output": "应该触发 brainstorming 技能，引导用户明确需求，然后创建 SKILL.md 文件",
+      "id": "create-package",
+      "prompt": "Create a new skill for backing up code to GitHub.",
+      "expected_output": "Classifies the request as Create, captures purpose/trigger/non-goals/outputs/dependencies, uses init_skill.py when useful, creates SKILL.md and agents/openai.yaml, and validates with quick_validate.py.",
       "files": []
     },
     {
-      "id": 2,
-      "prompt": "帮我优化这个技能的描述，让它更容易被触发",
-      "expected_output": "应该触发 skill-creator 的描述优化功能",
-      "files": []
+      "id": "optimize-existing-skill",
+      "prompt": "Optimize this existing skill so it can be the template for the rest of my Skill Hub.",
+      "expected_output": "Classifies the request as Standardize or Optimize, reads skill-optimization-template.md, keeps SKILL.md thin, moves detailed guidance into references, records output standard, and validates before delivery.",
+      "files": [
+        "SKILL.md",
+        "references/skill-optimization-template.md"
+      ]
     },
     {
-      "id": 3,
-      "prompt": "我想测试一下我的技能效果如何",
-      "expected_output": "应该触发 skill-creator 的评估功能，创建测试用例并运行",
+      "id": "multi-agent-adapter",
+      "prompt": "Port this skill so Reasonix can use it too.",
+      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, keeps runtime metadata in agents/reasonix.yaml, lists only verified tools, and keeps shared instructions in SKILL.md and references.",
+      "files": [
+        "agents/reasonix.yaml",
+        "references/agent-adapter-standard.md"
+      ]
+    },
+    {
+      "id": "trigger-tuning",
+      "prompt": "Make the description easier to trigger without causing false positives.",
+      "expected_output": "Classifies the request as Evaluate or Repair, creates should-trigger and should-not-trigger prompts, reviews false positives, patches only the description or smallest relevant instruction, and reruns the same evals.",
+      "files": [
+        "evals/evals.json"
+      ]
+    },
+    {
+      "id": "audit-folder",
+      "prompt": "Audit this folder of skills and tell me which ones are invalid or duplicated.",
+      "expected_output": "Classifies the request as Audit, checks frontmatter, duplicate names, resource discoverability, adapter metadata, scripts, and eval coverage, then leads with findings and validation gaps.",
       "files": []
     }
   ]

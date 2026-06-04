@@ -3,7 +3,7 @@
 Skill Initializer - Creates a new skill from template
 
 Usage:
-    init_skill.py <skill-name> --path <path> [--resources scripts,references,assets] [--examples] [--interface key=value]
+    init_skill.py <skill-name> --path <path> [--resources scripts,references,assets,evals] [--examples] [--interface key=value]
 
 Examples:
     init_skill.py my-new-skill --path skills/public
@@ -21,93 +21,49 @@ from pathlib import Path
 from generate_openai_yaml import write_openai_yaml
 
 MAX_SKILL_NAME_LENGTH = 64
-ALLOWED_RESOURCES = {"scripts", "references", "assets"}
+ALLOWED_RESOURCES = {"scripts", "references", "assets", "evals"}
 
 SKILL_TEMPLATE = """---
 name: {skill_name}
-description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+description: "TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it."
 ---
 
 # {skill_title}
 
 ## Overview
 
-[TODO: 1-2 sentences explaining what this skill enables]
+[TODO: 1-2 sentences explaining what this skill enables.]
 
-## Structuring This Skill
+## Start Here
 
-[TODO: Choose the structure that best fits this skill's purpose. Common patterns:
+Classify the request this skill handles:
 
-**1. Workflow-Based** (best for sequential processes)
-- Works well when there are clear step-by-step procedures
-- Example: DOCX skill with "Workflow Decision Tree" -> "Reading" -> "Creating" -> "Editing"
-- Structure: ## Overview -> ## Workflow Decision Tree -> ## Step 1 -> ## Step 2...
+- [TODO: Mode 1]
+- [TODO: Mode 2]
 
-**2. Task-Based** (best for tool collections)
-- Works well when the skill offers different operations/capabilities
-- Example: PDF skill with "Quick Start" -> "Merge PDFs" -> "Split PDFs" -> "Extract Text"
-- Structure: ## Overview -> ## Quick Start -> ## Task Category 1 -> ## Task Category 2...
+Then inspect the smallest useful evidence:
 
-**3. Reference/Guidelines** (best for standards or specifications)
-- Works well for brand guidelines, coding standards, or requirements
-- Example: Brand styling with "Brand Guidelines" -> "Colors" -> "Typography" -> "Features"
-- Structure: ## Overview -> ## Guidelines -> ## Specifications -> ## Usage...
+- [TODO: files/context needed]
 
-**4. Capabilities-Based** (best for integrated systems)
-- Works well when the skill provides multiple interrelated features
-- Example: Product Management with "Core Capabilities" -> numbered capability list
-- Structure: ## Overview -> ## Core Capabilities -> ### 1. Feature -> ### 2. Feature...
+## Non-Negotiables
 
-Patterns can be mixed and matched as needed. Most skills combine patterns (e.g., start with task-based, add workflow for complex operations).
+- [TODO: hard rule 1]
+- [TODO: hard rule 2]
 
-Delete this entire "Structuring This Skill" section when done - it's just guidance.]
+## Workflow
 
-## [TODO: Replace with the first main section based on chosen structure]
+1. [TODO: first action]
+2. [TODO: second action]
+3. Validate the result with the smallest reliable check.
 
-[TODO: Add content here. See examples in existing skills:
-- Code samples for technical skills
-- Decision trees for complex workflows
-- Concrete examples with realistic user requests
-- References to scripts/templates/references as needed]
+## Resource Map
 
-## Resources (optional)
+- `agents/openai.yaml`: Codex/UI metadata.
+- [TODO: list references/scripts/assets/evals that actually exist.]
 
-Create only the resource directories this skill actually needs. Delete this section if no resources are required.
+## Final Response
 
-### scripts/
-Executable code (Python/Bash/etc.) that can be run directly to perform specific operations.
-
-**Examples from other skills:**
-- PDF skill: `fill_fillable_fields.py`, `extract_form_field_info.py` - utilities for PDF manipulation
-- DOCX skill: `document.py`, `utilities.py` - Python modules for document processing
-
-**Appropriate for:** Python scripts, shell scripts, or any executable code that performs automation, data processing, or specific operations.
-
-**Note:** Scripts may be executed without loading into context, but can still be read by Codex for patching or environment adjustments.
-
-### references/
-Documentation and reference material intended to be loaded into context to inform Codex's process and thinking.
-
-**Examples from other skills:**
-- Product management: `communication.md`, `context_building.md` - detailed workflow guides
-- BigQuery: API reference documentation and query examples
-- Finance: Schema documentation, company policies
-
-**Appropriate for:** In-depth documentation, API references, database schemas, comprehensive guides, or any detailed information that Codex should reference while working.
-
-### assets/
-Files not intended to be loaded into context, but rather used within the output Codex produces.
-
-**Examples from other skills:**
-- Brand styling: PowerPoint template files (.pptx), logo files
-- Frontend builder: HTML/React boilerplate project directories
-- Typography: Font files (.ttf, .woff2)
-
-**Appropriate for:** Templates, boilerplate code, document templates, images, icons, fonts, or any files meant to be copied or used in the final output.
-
----
-
-**Not every skill requires all three types of resources.**
+Report what changed, validation run, remaining risks, and where the skill package lives.
 """
 
 EXAMPLE_SCRIPT = '''#!/usr/bin/env python3
@@ -193,6 +149,19 @@ Example asset files from other skills:
 Note: This is a text placeholder. Actual assets can be any file type.
 """
 
+EXAMPLE_EVALS = """{{
+  "skill_name": "{skill_name}",
+  "evals": [
+    {{
+      "id": "basic-trigger",
+      "prompt": "Concrete user request that should trigger this skill.",
+      "expected_output": "What good behavior looks like.",
+      "files": []
+    }}
+  ]
+}}
+"""
+
 
 def normalize_skill_name(skill_name):
     """Normalize a skill name to lowercase hyphen-case."""
@@ -253,6 +222,13 @@ def create_resource_dirs(skill_dir, skill_name, skill_title, resources, include_
                 print("[OK] Created assets/example_asset.txt")
             else:
                 print("[OK] Created assets/")
+        elif resource == "evals":
+            if include_examples:
+                example_evals = resource_dir / "evals.json"
+                example_evals.write_text(EXAMPLE_EVALS.format(skill_name=skill_name), encoding="utf-8")
+                print("[OK] Created evals/evals.json")
+            else:
+                print("[OK] Created evals/")
 
 
 def init_skill(skill_name, path, resources, include_examples, interface_overrides):
@@ -318,16 +294,18 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
     print("\nNext steps:")
     print("1. Edit SKILL.md to complete the TODO items and update the description")
     if resources:
+        resource_labels = ", ".join(f"{resource}/" for resource in resources)
         if include_examples:
-            print("2. Customize or delete the example files in scripts/, references/, and assets/")
+            print(f"2. Customize or delete the example files in {resource_labels}")
         else:
-            print("2. Add resources to scripts/, references/, and assets/ as needed")
+            print(f"2. Add resources to {resource_labels} as needed")
     else:
-        print("2. Create resource directories only if needed (scripts/, references/, assets/)")
+        print("2. Create resource directories only if needed (scripts/, references/, assets/, evals/)")
     print("3. Update agents/openai.yaml if the UI metadata should differ")
-    print("4. Run the validator when ready to check the skill structure")
+    print("4. Add agents/<runtime>.yaml when this skill must support another Agent")
+    print("5. Run the validator when ready to check the skill structure")
     print(
-        "5. Forward-test complex skills with realistic user requests to ensure they work as intended"
+        "6. Forward-test complex skills with realistic user requests to ensure they work as intended"
     )
 
     return skill_dir
@@ -342,7 +320,7 @@ def main():
     parser.add_argument(
         "--resources",
         default="",
-        help="Comma-separated list: scripts,references,assets",
+        help="Comma-separated list: scripts,references,assets,evals",
     )
     parser.add_argument(
         "--examples",

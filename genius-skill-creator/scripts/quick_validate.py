@@ -88,6 +88,28 @@ def validate_skill(skill_path):
                 f"Description is too long ({len(description)} characters). Maximum is 1024 characters.",
             )
 
+    agents_dir = skill_path / "agents"
+    if agents_dir.exists():
+        for agent_file in sorted(agents_dir.glob("*.yaml")):
+            try:
+                data = yaml.safe_load(agent_file.read_text(encoding="utf-8"))
+            except yaml.YAMLError as e:
+                return False, f"{agent_file.name}: invalid YAML: {e}"
+            if not isinstance(data, dict):
+                return False, f"{agent_file.name}: YAML root must be a mapping"
+
+            if agent_file.name == "openai.yaml":
+                interface = data.get("interface")
+                if not isinstance(interface, dict):
+                    return False, "openai.yaml: missing interface mapping"
+                short_description = interface.get("short_description", "")
+                if not isinstance(short_description, str) or not (25 <= len(short_description) <= 64):
+                    return False, "openai.yaml: short_description must be 25-64 characters"
+                default_prompt = interface.get("default_prompt", "")
+                expected_token = f"${name}"
+                if not isinstance(default_prompt, str) or expected_token not in default_prompt:
+                    return False, f"openai.yaml: default_prompt must mention {expected_token}"
+
     return True, "Skill is valid!"
 
 
