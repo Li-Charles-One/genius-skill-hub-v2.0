@@ -2,7 +2,7 @@ runtime: "reasonix"
 display_name: "Genius Skill Creator"
 description: "Reasonix adapter for creating, repairing, auditing, evaluating, and optimizing skill packages."
 run_as: "subagent"
-model: "deepseek-v4-pro"
+model: "deepseek-v4-pro" # default; override per project when the Reasonix runtime supports it
 allowed_tools:
   - read_file
   - search_content

@@ -1,6 +1,6 @@
 ---
 name: genius-skill-creator
-description: Create, repair, validate, evaluate, optimize, standardize, or port Codex/Claude-style skills and Skill Hub packages. Use when users want a new skill, a reusable skill template, metadata/frontmatter fixes, openai.yaml or agent adapter repair, eval prompts, trigger tuning, package audits, multi-Agent skill migration including Trae Solo and CherryStudio, or cross-platform command standards.
+description: Create, repair, validate, evaluate, optimize, standardize, or port Codex-style skill packages. Use for SKILL.md/frontmatter fixes, Skill Hub audits, adapter metadata, eval/trigger tuning, scaffolding, or cross-Agent skill migration.
 ---
 
 # Genius Skill Creator
@@ -86,6 +86,7 @@ For Codex-style skills, use `scripts/quick_validate.py` and `references/openai_y
    - `agents/` for runtime-specific metadata and adapters.
 3. Scaffold or patch:
    - Use `scripts/init_skill.py` for new Codex-style skills when useful.
+   - Use `scripts/init_skill.py --adapters openai,reasonix,trae-solo,cherrystudio` when the new skill needs starter runtime adapters.
    - Use direct patching for small repairs.
 4. Generate or update `agents/openai.yaml` when the target runtime supports it.
 5. Add `agents/reasonix.yaml` or another adapter when the skill should work outside Codex.
@@ -162,7 +163,7 @@ Record important evidence in a reference file when it will affect future mainten
 
 ## Resource Map
 
-- `scripts/init_skill.py`: scaffold Codex-style skills.
+- `scripts/init_skill.py`: scaffold Codex-style skills and optional adapter templates.
 - `scripts/quick_validate.py`: validate core `SKILL.md` structure.
 - `scripts/generate_openai_yaml.py`: generate Codex UI metadata.
 - `scripts/validate_evals.py`: validate eval definitions and optionally execute assertions against result JSON.

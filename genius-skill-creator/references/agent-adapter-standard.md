@@ -48,7 +48,7 @@ runtime: "reasonix"
 display_name: "Readable Name"
 description: "Runtime-specific adapter purpose."
 run_as: "subagent"
-model: "deepseek-v4-pro"
+model: "deepseek-v4-pro" # default; override per project when the runtime supports it
 allowed_tools:
   - read_file
   - search_content
@@ -66,7 +66,7 @@ usage:
   output_contract: "Short description of expected final output."
 ```
 
-Only list tools that are verified for the target runtime. Mark uncertain capabilities as absent rather than inventing tool names.
+Only list tools that are verified for the target runtime. Mark uncertain capabilities as absent rather than inventing tool names. Treat `model` as the default runtime choice, not a universal requirement; projects may override it when Reasonix supports a different model policy.
 
 ## `agents/trae-solo.yaml`
 

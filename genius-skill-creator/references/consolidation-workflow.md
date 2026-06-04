@@ -12,8 +12,18 @@ When multiple skills overlap, consolidate into class-level skills following this
 
 ### Step 1: Inventory
 
+PowerShell:
+
+```powershell
+Get-ChildItem -Path "$HOME/.hermes/skills" -Recurse -Filter SKILL.md |
+  Select-String -Pattern "关键词" -List |
+  Select-Object -ExpandProperty Path
+```
+
+Bash:
+
 ```bash
-find ~/.hermes/skills -name "SKILL.md" | xargs grep -l "关键词"
+find ~/.hermes/skills -name "SKILL.md" -print0 | xargs -0 grep -l "关键词"
 ```
 
 Read each candidate skill. For each, note:
@@ -56,6 +66,14 @@ description: "⚠️ 已合并到 <new-skill>。[功能] 现在是 <new-skill> s
 ### Step 5: Delete
 
 After confirming the new skill works:
+PowerShell:
+
+```powershell
+Remove-Item -Path "$HOME/.hermes/skills/<deprecated-skill>" -Recurse -Force
+```
+
+Bash:
+
 ```bash
 rm -rf ~/.hermes/skills/<deprecated-skill>
 ```
@@ -90,8 +108,17 @@ Orchestrators often accumulate `references/` files. Each file belongs to a speci
 - Batch generation guides → the sub-skill that produces the output
 - Asset prompts, visual references → the sub-skill that generates visuals
 
+PowerShell:
+
+```powershell
+$target = "$HOME/.hermes/skills/creative/<sub-skill>/references"
+New-Item -ItemType Directory -Path $target -Force | Out-Null
+Copy-Item -Path "$HOME/.hermes/skills/creative/<orchestrator>/references/<file>.md" -Destination $target
+```
+
+Bash:
+
 ```bash
-# Copy reference files to appropriate sub-skills
 mkdir -p ~/.hermes/skills/creative/<sub-skill>/references/
 cp ~/.hermes/skills/creative/<orchestrator>/references/<file>.md \
    ~/.hermes/skills/creative/<sub-skill>/references/
@@ -99,6 +126,16 @@ cp ~/.hermes/skills/creative/<orchestrator>/references/<file>.md \
 
 ### Step 2: Clean Up References
 After copying, grep for the old orchestrator name in copied files and replace with the correct sub-skill name:
+PowerShell:
+
+```powershell
+Get-ChildItem -Path "$HOME/.hermes/skills/creative/<sub-skill>/references" -Recurse -File |
+  Select-String -Pattern "<orchestrator-name>"
+# Replace any scheduled-task examples, skill references, etc.
+```
+
+Bash:
+
 ```bash
 grep -rn '<orchestrator-name>' ~/.hermes/skills/creative/<sub-skill>/references/
 # Replace any cronjob examples, skill references, etc.

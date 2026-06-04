@@ -3,7 +3,7 @@
 Skill Initializer - Creates a new skill from template
 
 Usage:
-    init_skill.py <skill-name> --path <path> [--resources scripts,references,assets,evals] [--examples] [--interface key=value]
+    init_skill.py <skill-name> --path <path> [--resources scripts,references,assets,evals] [--examples] [--adapters openai,reasonix,trae-solo,cherrystudio] [--interface key=value]
 
 Examples:
     init_skill.py my-new-skill --path skills/public
@@ -11,6 +11,7 @@ Examples:
     init_skill.py my-api-helper --path skills/private --resources scripts --examples
     init_skill.py custom-skill --path /custom/location
     init_skill.py my-skill --path skills/public --interface short_description="Short UI label"
+    init_skill.py portable-skill --path skills/public --adapters openai,reasonix,trae-solo
 """
 
 import argparse
@@ -26,6 +27,8 @@ from generate_openai_yaml import write_openai_yaml
 
 MAX_SKILL_NAME_LENGTH = 64
 ALLOWED_RESOURCES = {"scripts", "references", "assets", "evals"}
+ALLOWED_ADAPTERS = {"openai", "reasonix", "trae-solo", "cherrystudio"}
+DEFAULT_ADAPTERS = ["openai"]
 
 SKILL_TEMPLATE = """---
 name: {skill_name}
@@ -62,7 +65,7 @@ Then inspect the smallest useful evidence:
 
 ## Resource Map
 
-- `agents/openai.yaml`: Codex/UI metadata.
+{agent_resource_map}
 - [TODO: list references/scripts/assets/evals that actually exist.]
 
 ## Final Response
@@ -166,6 +169,85 @@ EXAMPLE_EVALS = """{{
 }}
 """
 
+REASONIX_ADAPTER_TEMPLATE = """runtime: "reasonix"
+display_name: "{skill_title}"
+description: "Reasonix adapter for using {skill_name}."
+run_as: "subagent"
+model: "deepseek-v4-pro" # default; override per project when the Reasonix runtime supports it
+allowed_tools:
+  - read_file
+  - search_content
+  - search_files
+  - directory_tree
+  - get_file_info
+  - glob
+  - write_file
+  - run_command
+usage:
+  default_prompt: "Use {skill_name} for the concrete task."
+  shared_instructions:
+    - "../SKILL.md"
+  output_contract: "Report requirement summary, files changed, validation results, and remaining risks."
+"""
+
+TRAE_SOLO_ADAPTER_TEMPLATE = """runtime: "trae-solo"
+display_name: "{skill_title}"
+description: "Trae IDE / Trae SOLO adapter for porting {skill_name} as a native Trae Skill, project rule, or custom instruction."
+integration_style:
+  - "native-skill"
+  - "project-rule"
+  - "user-rule"
+  - "custom-instruction"
+capability_status:
+  native_skill_package: "verified - Trae supports native SKILL.md with YAML frontmatter under .trae/skills/ or ~/.trae-cn/skills/"
+  skill_format: "SKILL.md with name and description frontmatter plus markdown body"
+  skill_discovery: "on-demand - descriptions are matched before full content loads"
+  tool_names: "use Trae IDE built-in tools; do not invent runtime-specific tool names"
+skill_deployment:
+  project_path: ".trae/skills/{skill_name}/SKILL.md"
+  global_path_windows: "%USERPROFILE%/.trae-cn/skills/{skill_name}/SKILL.md"
+  global_path_unix: "~/.trae-cn/skills/{skill_name}/SKILL.md"
+  agents_compat_path: ".agents/skills/{skill_name}/SKILL.md"
+usage:
+  default_prompt: "Use {skill_name} as a native Trae Skill or project rule."
+  shared_instructions:
+    - "../SKILL.md"
+  output_contract: "Return Trae deployment path, generated files or rule text, validation results, and remaining risks."
+"""
+
+CHERRYSTUDIO_ADAPTER_TEMPLATE = """runtime: "cherrystudio"
+display_name: "{skill_title}"
+description: "CherryStudio adapter for using {skill_name} through Code Tool, Agent, MCP, or custom assistant workflows."
+integration_style:
+  - "code-tool"
+  - "agent"
+  - "mcp"
+  - "custom-assistant"
+capability_status:
+  code_agents: "verified through Cherry Studio Code Tools docs"
+  mcp_permissions: "verified through Cherry Studio Agent docs"
+  native_skill_package: "unverified"
+  tool_names: "use the selected code agent or MCP service capabilities; do not invent CherryStudio-native tool names"
+usage:
+  default_prompt: "Use {skill_name} for CherryStudio Code Tool, Agent, MCP, or custom assistant workflows."
+  shared_instructions:
+    - "../SKILL.md"
+  output_contract: "Return integration style, code-agent or MCP assumptions, validation results, and unverified capabilities."
+"""
+
+ADAPTER_TEMPLATES = {
+    "reasonix": ("reasonix.yaml", REASONIX_ADAPTER_TEMPLATE),
+    "trae-solo": ("trae-solo.yaml", TRAE_SOLO_ADAPTER_TEMPLATE),
+    "cherrystudio": ("cherrystudio.yaml", CHERRYSTUDIO_ADAPTER_TEMPLATE),
+}
+
+AGENT_RESOURCE_MAP = {
+    "openai": "`agents/openai.yaml`: Codex/UI metadata.",
+    "reasonix": "`agents/reasonix.yaml`: Reasonix runtime adapter metadata.",
+    "trae-solo": "`agents/trae-solo.yaml`: Trae native skill and rule adapter metadata.",
+    "cherrystudio": "`agents/cherrystudio.yaml`: CherryStudio Code Tool/Agent/MCP adapter metadata.",
+}
+
 
 def normalize_skill_name(skill_name):
     """Normalize a skill name to lowercase hyphen-case."""
@@ -198,6 +280,55 @@ def parse_resources(raw_resources):
             deduped.append(resource)
             seen.add(resource)
     return deduped
+
+
+def parse_adapters(raw_adapters):
+    if not raw_adapters:
+        return list(DEFAULT_ADAPTERS)
+    adapters = [item.strip() for item in raw_adapters.split(",") if item.strip()]
+    invalid = sorted({item for item in adapters if item not in ALLOWED_ADAPTERS})
+    if invalid:
+        allowed = ", ".join(sorted(ALLOWED_ADAPTERS))
+        print(f"[ERROR] Unknown adapter(s): {', '.join(invalid)}")
+        print(f"   Allowed: {allowed}")
+        sys.exit(1)
+    deduped = []
+    seen = set()
+    for adapter in adapters:
+        if adapter not in seen:
+            deduped.append(adapter)
+            seen.add(adapter)
+    return deduped
+
+
+def format_agent_resource_map(adapters):
+    return "\n".join(f"- {AGENT_RESOURCE_MAP[adapter]}" for adapter in adapters)
+
+
+def create_adapter_files(skill_dir, skill_name, skill_title, adapters, interface_overrides):
+    if interface_overrides and "openai" not in adapters:
+        print("[ERROR] --interface can only be used when the openai adapter is selected.")
+        return False
+
+    if "openai" in adapters:
+        result = write_openai_yaml(skill_dir, skill_name, interface_overrides)
+        if not result:
+            return False
+
+    agents_dir = skill_dir / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    for adapter in adapters:
+        if adapter == "openai":
+            continue
+        file_name, template = ADAPTER_TEMPLATES[adapter]
+        output_path = agents_dir / file_name
+        output_path.write_text(
+            template.format(skill_name=skill_name, skill_title=skill_title),
+            encoding="utf-8",
+        )
+        print(f"[OK] Created agents/{file_name}")
+
+    return True
 
 
 def create_resource_dirs(skill_dir, skill_name, skill_title, resources, include_examples):
@@ -235,7 +366,7 @@ def create_resource_dirs(skill_dir, skill_name, skill_title, resources, include_
                 print("[OK] Created evals/")
 
 
-def init_skill(skill_name, path, resources, include_examples, interface_overrides):
+def init_skill(skill_name, path, resources, include_examples, interface_overrides, adapters):
     """
     Initialize a new skill directory with template SKILL.md.
 
@@ -244,6 +375,7 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
         path: Path where the skill directory should be created
         resources: Resource directories to create
         include_examples: Whether to create example files in resource directories
+        adapters: Agent/runtime adapter metadata files to create
 
     Returns:
         Path to created skill directory, or None if error
@@ -266,7 +398,11 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
 
     # Create SKILL.md from template
     skill_title = title_case_skill_name(skill_name)
-    skill_content = SKILL_TEMPLATE.format(skill_name=skill_name, skill_title=skill_title)
+    skill_content = SKILL_TEMPLATE.format(
+        skill_name=skill_name,
+        skill_title=skill_title,
+        agent_resource_map=format_agent_resource_map(adapters),
+    )
 
     skill_md_path = skill_dir / "SKILL.md"
     try:
@@ -276,13 +412,12 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
         print(f"[ERROR] Error creating SKILL.md: {e}")
         return None
 
-    # Create agents/openai.yaml
+    # Create selected adapter metadata files.
     try:
-        result = write_openai_yaml(skill_dir, skill_name, interface_overrides)
-        if not result:
+        if not create_adapter_files(skill_dir, skill_name, skill_title, adapters, interface_overrides):
             return None
     except Exception as e:
-        print(f"[ERROR] Error creating agents/openai.yaml: {e}")
+        print(f"[ERROR] Error creating adapter metadata: {e}")
         return None
 
     # Create resource directories if requested
@@ -305,8 +440,9 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
             print(f"2. Add resources to {resource_labels} as needed")
     else:
         print("2. Create resource directories only if needed (scripts/, references/, assets/, evals/)")
-    print("3. Update agents/openai.yaml if the UI metadata should differ")
-    print("4. Add agents/<runtime>.yaml when this skill must support another Agent")
+    adapter_labels = ", ".join(f"agents/{adapter}.yaml" if adapter != "openai" else "agents/openai.yaml" for adapter in adapters)
+    print(f"3. Review generated adapter metadata: {adapter_labels}")
+    print("4. Add or remove agents/<runtime>.yaml when runtime support changes")
     print("5. Run the validator when ready to check the skill structure")
     print(
         "6. Forward-test complex skills with realistic user requests to ensure they work as intended"
@@ -332,6 +468,11 @@ def main():
         help="Create example files inside the selected resource directories",
     )
     parser.add_argument(
+        "--adapters",
+        default="openai",
+        help="Comma-separated adapters to create: openai,reasonix,trae-solo,cherrystudio",
+    )
+    parser.add_argument(
         "--interface",
         action="append",
         default=[],
@@ -354,6 +495,7 @@ def main():
         print(f"Note: Normalized skill name from '{raw_skill_name}' to '{skill_name}'.")
 
     resources = parse_resources(args.resources)
+    adapters = parse_adapters(args.adapters)
     if args.examples and not resources:
         print("[ERROR] --examples requires --resources to be set.")
         sys.exit(1)
@@ -368,9 +510,10 @@ def main():
             print("   Examples: enabled")
     else:
         print("   Resources: none (create as needed)")
+    print(f"   Adapters: {', '.join(adapters)}")
     print()
 
-    result = init_skill(skill_name, path, resources, args.examples, args.interface)
+    result = init_skill(skill_name, path, resources, args.examples, args.interface, adapters)
 
     if result:
         sys.exit(0)
