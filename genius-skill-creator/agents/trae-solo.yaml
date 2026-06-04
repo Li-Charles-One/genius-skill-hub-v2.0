@@ -1,0 +1,24 @@
+runtime: "trae-solo"
+display_name: "Genius Skill Creator"
+description: "Trae SOLO adapter for using the skill creator template as SOLO Coder, SOLO Builder, project rule, custom instruction, or MCP-oriented guidance."
+integration_style:
+  - "solo-coder"
+  - "solo-builder"
+  - "project-rule"
+  - "custom-instruction"
+  - "mcp-oriented-guidance"
+capability_status:
+  native_skill_package: "unverified"
+  tool_names: "unverified"
+  command_execution: "use Trae SOLO workspace/tool panels when available; do not invent commands"
+  docs_basis: "Trae SOLO docs describe SOLO Coder, SOLO Builder, task management, tool panels, preview/deploy workflow, and DiffView."
+  docs_url: "https://traesolo.net/docs/solo-mode.html"
+usage:
+  default_prompt: "Use genius-skill-creator to optimize or port a skill package for Trae SOLO without inventing unsupported tool names."
+  shared_instructions:
+    - "../SKILL.md"
+    - "../references/skill-optimization-template.md"
+    - "../references/agent-adapter-standard.md"
+    - "../references/cross-platform-command-standard.md"
+    - "../references/eval-workflow.md"
+  output_contract: "Return requirement summary, Trae SOLO integration style, files changed or rule text produced, Windows/macOS/Linux command status, validation results, and unverified capabilities."

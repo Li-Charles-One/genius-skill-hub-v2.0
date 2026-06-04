@@ -1,0 +1,24 @@
+runtime: "cherrystudio"
+display_name: "Genius Skill Creator"
+description: "CherryStudio adapter for using the skill creator template through Code Tool, Agent, MCP, or custom assistant workflows."
+integration_style:
+  - "code-tool"
+  - "agent"
+  - "mcp"
+  - "custom-assistant"
+capability_status:
+  code_agents: "verified through Cherry Studio Code Tools docs for launching and managing supported code agents"
+  mcp_permissions: "verified through Cherry Studio Agent docs for configuring available tools and MCP services"
+  native_skill_package: "unverified"
+  tool_names: "use the selected code agent or MCP service capabilities; do not invent CherryStudio-native tool names"
+  docs_url_agent: "https://docs.cherry-ai.com/docs/en-us/advanced-basic/agent"
+  docs_url_code_tools: "https://docs.cherry-ai.com/docs/en-us/advanced-basic/code-tools-shi-yong-jiao-cheng"
+usage:
+  default_prompt: "Use genius-skill-creator to optimize or port a skill package for CherryStudio Code Tool, Agent, MCP, or custom assistant use."
+  shared_instructions:
+    - "../SKILL.md"
+    - "../references/skill-optimization-template.md"
+    - "../references/agent-adapter-standard.md"
+    - "../references/cross-platform-command-standard.md"
+    - "../references/eval-workflow.md"
+  output_contract: "Return requirement summary, CherryStudio integration style, code-agent or MCP assumptions, files changed or prompt text produced, Windows/macOS/Linux command status, validation results, and unverified capabilities."

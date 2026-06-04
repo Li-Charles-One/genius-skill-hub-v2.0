@@ -27,7 +27,10 @@ Target shape:
 +-- agents/
 |   +-- openai.yaml          Codex/UI metadata
 |   +-- reasonix.yaml        Reasonix/runtime adapter when supported
+|   +-- trae-solo.yaml       Trae SOLO rule/custom-instruction adapter when supported
+|   +-- cherrystudio.yaml    CherryStudio Code Tool/Agent/MCP adapter when supported
 +-- references/              Detailed reusable guidance, loaded only when needed
+|   +-- cross-platform-command-standard.md
 +-- scripts/                 Deterministic helpers and validators
 +-- evals/                   Trigger and behavior test prompts
 +-- assets/                  Templates, icons, report files, or other output assets
@@ -76,6 +79,20 @@ At minimum, a multi-Agent skill should record:
 
 Read `agent-adapter-standard.md` before adding a new adapter.
 
+For Trae Solo, adapt skills as SOLO Coder/Builder, project rule, custom instruction, or MCP-oriented guidance unless a real Trae package format is verified. For CherryStudio, adapt skills as Code Tool, Agent, MCP, or custom assistant guidance unless a native skill format is verified. Do not invent runtime tool names.
+
+## Cross-Platform Command Standard
+
+When a skill includes scripts, install commands, shell snippets, or validation commands, it should explicitly support Windows, macOS, and Linux unless the skill is platform-specific.
+
+Use `cross-platform-command-standard.md` to decide:
+
+- whether logic belongs in Python or Node instead of shell;
+- whether commands need separate PowerShell and Bash variants;
+- how to quote paths with spaces;
+- which OS checks were actually run;
+- how to mark unverified operating systems.
+
 ## Output Contract
 
 For skill creation, repair, audit, or optimization, final output should include:
@@ -99,5 +116,6 @@ Run the smallest set that proves the change:
 - run `node --check` or language syntax checks for changed scripts;
 - run representative script smoke tests when scripts changed;
 - run or manually review evals when trigger/output behavior changed.
+- review commands against `cross-platform-command-standard.md` when command examples changed.
 
 When syncing to Skill Hub, validate both the local source package and the synced package.

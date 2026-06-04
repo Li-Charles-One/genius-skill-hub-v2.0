@@ -26,6 +26,32 @@
       ]
     },
     {
+      "id": "trae-solo-adapter",
+      "prompt": "Port this skill for Trae Solo and make sure SOLO Coder can use it.",
+      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats Trae SOLO as a SOLO Coder/Builder, project rule, custom instruction, or MCP-oriented adapter, keeps uncertain tool names marked unverified, and reports integration style plus validation gaps.",
+      "files": [
+        "agents/trae-solo.yaml",
+        "references/agent-adapter-standard.md"
+      ]
+    },
+    {
+      "id": "cherrystudio-adapter",
+      "prompt": "Make this skill work in CherryStudio for Code Tool and Agent workflows.",
+      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats CherryStudio as Code Tool, Agent, MCP, or custom assistant guidance, avoids assuming a native skill package format, and reports code-agent or MCP assumptions.",
+      "files": [
+        "agents/cherrystudio.yaml",
+        "references/agent-adapter-standard.md"
+      ]
+    },
+    {
+      "id": "cross-platform-commands",
+      "prompt": "Update the scripts and command examples so they run on Windows, macOS, and Linux.",
+      "expected_output": "Classifies the request as Standardize or Repair, checks cross-platform-command-standard.md, prefers Python or Node for repeated logic, provides PowerShell and Bash variants when syntax differs, avoids Bash-only Windows instructions, and marks unverified operating systems.",
+      "files": [
+        "references/cross-platform-command-standard.md"
+      ]
+    },
+    {
       "id": "trigger-tuning",
       "prompt": "Make the description easier to trigger without causing false positives.",
       "expected_output": "Classifies the request as Evaluate or Repair, creates should-trigger and should-not-trigger prompts, reviews false positives, patches only the description or smallest relevant instruction, and reruns the same evals.",

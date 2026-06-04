@@ -1,6 +1,6 @@
 ---
 name: genius-skill-creator
-description: Create, repair, validate, evaluate, optimize, standardize, or port Codex/Claude-style skills and Skill Hub packages. Use when users want a new skill, a reusable skill template, metadata/frontmatter fixes, openai.yaml or agent adapter repair, eval prompts, trigger tuning, package audits, or multi-Agent skill migration.
+description: Create, repair, validate, evaluate, optimize, standardize, or port Codex/Claude-style skills and Skill Hub packages. Use when users want a new skill, a reusable skill template, metadata/frontmatter fixes, openai.yaml or agent adapter repair, eval prompts, trigger tuning, package audits, multi-Agent skill migration including Trae Solo and CherryStudio, or cross-platform command standards.
 ---
 
 # Genius Skill Creator
@@ -12,6 +12,7 @@ Core modes:
 - **System builder:** scaffold folders, write valid `SKILL.md`, generate `agents/openai.yaml`, add scripts/references/assets, and run validation.
 - **Evaluation improver:** create realistic test prompts, compare behavior, review outputs, improve instructions, and optimize trigger descriptions.
 - **Package optimizer:** reshape requirements, thin the entrypoint, move detailed material into modules, add multi-Agent adapters, and define validation/output gates.
+- **Adapter standardizer:** map shared skill behavior to Codex, Reasonix, Trae Solo, CherryStudio, or another runtime without inventing unsupported tools.
 
 Do not treat a skill as finished just because it reads well. A finished skill should be valid, triggerable, lean, resource-aware, and tested enough for its risk.
 
@@ -62,10 +63,12 @@ Every generated or repaired skill must:
 - Include assets only when they are used in outputs.
 - Put product/runtime metadata in `agents/<runtime>.yaml`.
 - For multi-Agent skills, keep shared instructions in `SKILL.md` and `references/`, and keep tool/model/runtime specifics in adapters.
+- For Trae Solo and CherryStudio, prefer rule/custom-instruction/MCP or Code Agent adapter guidance unless a real package or CLI format is verified.
+- For commands and scripts, consider Windows, macOS, and Linux. Provide OS-specific command variants when syntax differs.
 - Avoid extra docs such as `README.md`, `CHANGELOG.md`, or install guides unless the target ecosystem explicitly requires them.
 - Validate with the best available validator before delivery.
 
-For Codex-style skills, use `scripts/quick_validate.py` and `references/openai_yaml.md`. For multi-Agent skills, also read `references/agent-adapter-standard.md`.
+For Codex-style skills, use `scripts/quick_validate.py` and `references/openai_yaml.md`. For multi-Agent skills, also read `references/agent-adapter-standard.md`. For script or command guidance, read `references/cross-platform-command-standard.md`.
 
 ## Creation Workflow
 
@@ -86,8 +89,9 @@ For Codex-style skills, use `scripts/quick_validate.py` and `references/openai_y
    - Use direct patching for small repairs.
 4. Generate or update `agents/openai.yaml` when the target runtime supports it.
 5. Add `agents/reasonix.yaml` or another adapter when the skill should work outside Codex.
-6. Validate.
-7. Test with realistic prompts when the skill has meaningful behavioral risk.
+6. Add cross-platform command guidance when scripts, shell snippets, or install commands are part of the skill.
+7. Validate.
+8. Test with realistic prompts when the skill has meaningful behavioral risk.
 
 ## Repair Workflow
 
@@ -100,8 +104,9 @@ Check in this order:
 5. `agents/openai.yaml` has a 25-64 character `short_description` and a `default_prompt` mentioning `$skill-name`.
 6. Runtime adapters are under `agents/` and parse as YAML.
 7. Resource files are directly discoverable from `SKILL.md`.
-8. Scripts compile or run a representative help/test command.
-9. Placeholder text is intentional, not unfinished skill content.
+8. Commands and scripts avoid OS-specific assumptions unless the skill is explicitly platform-specific.
+9. Scripts compile or run a representative help/test command.
+10. Placeholder text is intentional, not unfinished skill content.
 
 Use `references/openai_yaml.md` for UI metadata constraints.
 
@@ -162,6 +167,7 @@ Record important evidence in a reference file when it will affect future mainten
 - `scripts/generate_openai_yaml.py`: generate Codex UI metadata.
 - `references/skill-optimization-template.md`: package template for reshaping and optimizing skills.
 - `references/agent-adapter-standard.md`: multi-Agent adapter conventions.
+- `references/cross-platform-command-standard.md`: Windows/macOS/Linux command and script conventions.
 - `references/openai_yaml.md`: `agents/openai.yaml` constraints.
 - `references/eval-workflow.md`: practical eval and trigger optimization workflow.
 - `references/consolidation-workflow.md`: merge/consolidate related skills.
