@@ -63,7 +63,7 @@ Every generated or repaired skill must:
 - Include assets only when they are used in outputs.
 - Put product/runtime metadata in `agents/<runtime>.yaml`.
 - For multi-Agent skills, keep shared instructions in `SKILL.md` and `references/`, and keep tool/model/runtime specifics in adapters.
-- For Trae Solo and CherryStudio, prefer rule/custom-instruction/MCP or Code Agent adapter guidance unless a real package or CLI format is verified.
+- For Trae, deploy as a native Trae Skill under `.trae/skills/` (project) or `~/.trae-cn/skills/` (global) — Trae's SKILL.md format is compatible with Codex format.
 - For commands and scripts, consider Windows, macOS, and Linux. Provide OS-specific command variants when syntax differs.
 - Avoid extra docs such as `README.md`, `CHANGELOG.md`, or install guides unless the target ecosystem explicitly requires them.
 - Validate with the best available validator before delivery.

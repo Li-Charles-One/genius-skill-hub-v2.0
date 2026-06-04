@@ -79,7 +79,7 @@ At minimum, a multi-Agent skill should record:
 
 Read `agent-adapter-standard.md` before adding a new adapter.
 
-For Trae Solo, adapt skills as SOLO Coder/Builder, project rule, custom instruction, or MCP-oriented guidance unless a real Trae package format is verified. For CherryStudio, adapt skills as Code Tool, Agent, MCP, or custom assistant guidance unless a native skill format is verified. Do not invent runtime tool names.
+For Trae, use native SKILL.md format — Trae supports it natively under `.trae/skills/` (project) or `~/.trae-cn/skills/` (global), with on-demand loading based on description matching. Trae SKILL.md frontmatter (`name`, `description`) is compatible with Codex format. For CherryStudio, adapt skills as Code Tool, Agent, MCP, or custom assistant guidance unless a native skill format is verified. Do not invent runtime tool names.
 
 ## Cross-Platform Command Standard
 

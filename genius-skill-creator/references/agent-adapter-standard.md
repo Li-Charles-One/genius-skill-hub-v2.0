@@ -70,36 +70,70 @@ Only list tools that are verified for the target runtime. Mark uncertain capabil
 
 ## `agents/trae-solo.yaml`
 
-Purpose: Trae SOLO adapter for using shared skill instructions as SOLO Coder, SOLO Builder, project rule, custom instruction, or MCP-oriented guidance.
+Purpose: Trae IDE / Trae SOLO adapter for porting skills as native Trae Skills, project rules, user rules, or custom instructions.
+
+Trae has verified native SKILL.md support:
+
+- Project skills: `.trae/skills/<skill-name>/SKILL.md`
+- Global skills (Windows): `%USERPROFILE%/.trae-cn/skills/<skill-name>/SKILL.md`
+- Global skills (macOS/Linux): `~/.trae-cn/skills/<skill-name>/SKILL.md`
+- `.agents/skills/` compatibility for Agent Skills ecosystem
+- SKILL.md format: YAML frontmatter (`name`, `description`) + markdown body
+- On-demand loading: agent scans descriptions first, loads full content only when task matches
+- Subdirectories supported: `examples/`, `templates/`, `resources/`
+- Creation: AI conversation, manual UI, or `.zip` import
+- Rules system: `user_rules.md` (global), `project_rules.md` (project-level, `.trae/rules/`), 20KB limit
+- Rule priority: user input > custom agent prompt > user_rules.md > project_rules.md
 
 Expected shape:
 
 ```yaml
 runtime: "trae-solo"
 display_name: "Readable Name"
-description: "Trae SOLO adapter purpose."
+description: "Trae IDE / SOLO adapter purpose."
 integration_style:
-  - "solo-coder"
-  - "solo-builder"
+  - "native-skill"
   - "project-rule"
+  - "user-rule"
   - "custom-instruction"
 capability_status:
-  tool_names: "unverified"
-  command_execution: "through Trae SOLO workspace/tool panels when available"
+  native_skill_package: "verified — Trae supports native SKILL.md with YAML frontmatter"
+  skill_format: "SKILL.md with name + description frontmatter plus markdown body"
+  skill_discovery: "on-demand — scans descriptions first, loads full content when matched"
+  agents_skills_compat: "verified — .agents/skills/ directory supported"
+  rules_system: "user_rules.md (global), project_rules.md (project-level); 20000 byte limit"
+  tool_names: "use Trae IDE built-in tools; do not invent tool names"
+  docs_url_skill: "https://docs.trae.cn/ide/skills"
+  docs_url_rules: "https://docs.trae.cn/ide/rules"
+skill_deployment:
+  project_path: ".trae/skills/<skill-name>/SKILL.md"
+  global_path_windows: "%USERPROFILE%/.trae-cn/skills/<skill-name>/SKILL.md"
+  global_path_unix: "~/.trae-cn/skills/<skill-name>/SKILL.md"
+  agents_compat_path: ".agents/skills/<skill-name>/SKILL.md"
 usage:
-  default_prompt: "Use skill-name to perform the concrete task."
+  default_prompt: "Use skill-name to port or optimize as a native Trae Skill."
+  porting_strategy: |
+    1. Keep SKILL.md frontmatter with name and description — same format as Codex.
+    2. Move detailed guidance into subdirectories — Trae supports them natively.
+    3. For project rules, generate project_rules.md snippet from non-negotiable rules.
+    4. For global skills, deploy to ~/.trae-cn/skills/<name>/SKILL.md.
+    5. Trae SKILL.md format is compatible with Codex SKILL.md format.
   shared_instructions:
     - "../SKILL.md"
     - "../references/specific-guide.md"
-  output_contract: "Short description of expected final output."
+  output_contract: "Return requirement summary, Trae skill type, deployment path, files changed, and validation results."
 ```
 
 Rules:
 
-- treat Trae SOLO as a workflow adapter, not a Codex skill package format;
-- map the skill into requirements, plan, files touched, verification, and final handoff;
-- do not invent Trae-specific tool names;
-- if a real `.trae`, `.trae-cn`, rule, or marketplace package format is discovered in the target workspace, record that evidence before generating files for it.
+- Trae has native SKILL.md support — treat it as a first-class skill platform, not just a workflow adapter;
+- SKILL.md frontmatter format (`name`, `description`) is compatible with Codex format;
+- Use `description` for trigger matching — Trae's on-demand loading depends on it;
+- Subdirectories are supported but optional — use only when the skill needs them;
+- For skills that also need project-level rules, generate a `project_rules.md` snippet from the skill's non-negotiable rules;
+- Global skills go under `~/.trae-cn/skills/`, project skills under `.trae/skills/`;
+- Trae also supports `.agents/skills/` for Agent Skills ecosystem compatibility;
+- Do not invent Trae-specific tool names beyond what the IDE provides natively.
 
 ## `agents/cherrystudio.yaml`
 
