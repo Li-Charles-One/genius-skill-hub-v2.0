@@ -64,23 +64,6 @@ if (!verification.length) {
   process.exit(1);
 }
 
-const entry = `
-## ${changeId}
-- Session: ${sessionId}
-- Agent: __AGENT__
-- Role: __ROLE__
-- Based on: __BASED_ON__
-- Change ID: ${changeId}
-- Changed:
-${list(changed, "unknown")}
-- Files touched:
-${list(files, "unknown")}
-- Verification:
-${list(verification, "unknown")}
-- Notes:
-${list(notes, "none")}
-`;
-
 withMemoryLock(root, () => {
   const sessionText = readSession(root, sessionId);
   const threads = readThreads(root);
@@ -92,11 +75,23 @@ withMemoryLock(root, () => {
     extractField(sessionText, "Parent session") ||
     "unknown";
   const current = readMemory(root, "CHANGES.md").replace(/\s*$/, "\n");
-  const finalEntry = entry
-    .replace("__AGENT__", agent)
-    .replace("__ROLE__", role)
-    .replace("__BASED_ON__", basedOn);
-  writeMemory(root, "CHANGES.md", `${current}${finalEntry}`);
+  const entry = `
+## ${changeId}
+- Session: ${sessionId}
+- Agent: ${agent}
+- Role: ${role}
+- Based on: ${basedOn}
+- Change ID: ${changeId}
+- Changed:
+${list(changed, "unknown")}
+- Files touched:
+${list(files, "unknown")}
+- Verification:
+${list(verification, "unknown")}
+- Notes:
+${list(notes, "none")}
+`;
+  writeMemory(root, "CHANGES.md", `${current}${entry}`);
 });
 
 if (!args["no-check"]) runCheck(root, __dirname);

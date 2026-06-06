@@ -100,26 +100,12 @@ jobs:
       - name: Check WePlaning scripts syntax
         run: |
           find we-planing/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
+          find we-planing/tools -name '*.cjs' -print0 | xargs -0 -n1 node --check
 
       - name: Smoke test WePlaning lifecycle
         run: |
           set -euo pipefail
-          root="$(mktemp -d)"
-          scripts="we-planing/scripts"
-
-          session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Smoke" --goal "Validate WePlaning scripts" --agent CI --adapter GitHubActions --os linux | tail -n1)"
-          node "$scripts/check-memory.cjs" "$root"
-          node "$scripts/session-list.cjs" "$root"
-
-          work="$(node "$scripts/new-session.cjs" "$root" --role editor --summary "CI work session" --goal "Exercise scripts" --agent CI --adapter GitHubActions --os linux --short-id work | tail -n1)"
-          node "$scripts/sync-before-write.cjs" "$root" --session "$work"
-          node "$scripts/register-agent.cjs" "$root" --session "$work" --agent CI --adapter GitHubActions --os linux --tool node --skill we-planing
-          node "$scripts/append-change.cjs" "$root" --session "$work" --agent CI --changed "CI smoke change" --file ".agent-memory/CHANGES.md" --verification "append-change passed"
-          node "$scripts/merge-session.cjs" "$root" --session "$work" --agent CI
-          node "$scripts/repair-memory.cjs" "$root" --agent CI
-          node "$scripts/handoff.cjs" "$root" --session "$work" --tools "node" --commands "GitHub Actions smoke" --merge "already merged" >/tmp/handoff.txt
-          test -s /tmp/handoff.txt
-          node "$scripts/check-memory.cjs" "$root"
+          node we-planing/tools/smoke-weplaning.cjs
 
       - name: Smoke test WePlaning repair
         run: |
@@ -130,7 +116,7 @@ jobs:
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Repair" --goal "Validate repair" --agent CI --adapter GitHubActions --os linux | tail -n1)"
           rm "$root/.agent-memory/sessions/$session.md"
           node "$scripts/repair-memory.cjs" "$root" --dry-run
-          node "$scripts/repair-memory.cjs" "$root" --agent CI
+          node "$scripts/repair-memory.cjs" "$root"
           node "$scripts/check-memory.cjs" "$root"
 
       - name: Smoke test WePlaning semantic audit
@@ -140,8 +126,7 @@ jobs:
           scripts="we-planing/scripts"
 
           session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Audit" --goal "Validate semantic audit" --agent CI --adapter GitHubActions --os linux | tail -n1)"
-          node "$scripts/register-agent.cjs" "$root" --session "$session" --agent CI --adapter GitHubActions --os linux --tool node --mcp unavailable --skill we-planing
-          node "$scripts/audit-memory.cjs" "$root"
+          node "$scripts/check-memory.cjs" "$root" --audit
 
           python - "$root" <<'PY'
           import sys
@@ -150,11 +135,11 @@ jobs:
           root = Path(sys.argv[1])
           current = root / ".agent-memory" / "CURRENT.md"
           text = current.read_text(encoding="utf-8")
-          text = text.replace("## Open Blockers\nnone\n\n## Based On", "## Open Blockers\nNeeds manual browser authorization.\n\n## Based On")
+          text = text.replace("## Open Blockers\nnone\n\n## Based On", "## Open Blockers\n- none\n- Needs manual browser authorization.\n\n## Based On")
           current.write_text(text, encoding="utf-8")
           PY
 
-          if node "$scripts/audit-memory.cjs" "$root"; then
+          if node "$scripts/check-memory.cjs" "$root" --audit; then
             echo "Expected semantic audit to fail on blocker drift"
             exit 1
           fi

@@ -18,7 +18,7 @@ This repository is the source hub for reusable skills, local skill mirrors, and 
 | genius-vision | `genius-vision/` | Universal image and video analysis (OCR, UI review, chart data, video summary) via the doubao vision API. |
 | github-cli | `github-cli/` | Use GitHub CLI for repo, auth, PR, issue, Actions, and API work. |
 | mcp-builder | `mcp-builder/` | Build MCP servers for external APIs or services. |
-| we-planing | `we-planing/` | WePlaning v2.2 project memory with lifecycle scripts and cross-Agent sync helpers. |
+| we-planing | `we-planing/` | Lightweight WePlaning v2.3 project memory with lifecycle scripts. |
 | writing-plans | `writing-plans/` | Write implementation plans before multi-step coding work. |
 
 ## Skill Pipeline
@@ -45,5 +45,6 @@ Run the same lightweight checks locally before pushing meaningful skill changes:
 ```powershell
 git status --short
 node we-planing/scripts/check-memory.cjs <project-root>
-node we-planing/scripts/audit-memory.cjs <project-root>
+node we-planing/scripts/check-memory.cjs <project-root> --audit
+node we-planing/tools/smoke-weplaning.cjs
 ```

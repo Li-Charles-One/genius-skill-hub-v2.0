@@ -77,6 +77,7 @@ function writeFile(filePath, text) {
     const backupDir = path.join(dir, ".backups");
     fs.mkdirSync(backupDir, { recursive: true });
     fs.copyFileSync(filePath, path.join(backupDir, `${base}.${stamp}.bak`));
+    cleanupBackups(backupDir, base, 10);
   }
 
   try {
@@ -85,6 +86,22 @@ function writeFile(filePath, text) {
   } catch (error) {
     if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
     throw error;
+  }
+}
+
+function cleanupBackups(backupDir, base, keep) {
+  if (!fs.existsSync(backupDir)) return;
+  const prefix = `${base}.`;
+  const backups = fs
+    .readdirSync(backupDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.startsWith(prefix) && entry.name.endsWith(".bak"))
+    .map((entry) => {
+      const fullPath = path.join(backupDir, entry.name);
+      return { fullPath, mtimeMs: fs.statSync(fullPath).mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const backup of backups.slice(keep)) {
+    fs.rmSync(backup.fullPath, { force: true });
   }
 }
 
@@ -138,18 +155,13 @@ function randomShortId() {
 }
 
 function generateSessionId({ iso, agent, os, role, shortId }) {
-  return [
-    compactTimestamp(iso),
-    slug(agent) || "agent",
-    osToken(os),
-    slug(role) || "other",
-    slug(shortId) || randomShortId(),
-  ].join("-");
+  const timestamp = compactTimestamp(iso).replace(/(\d{8}T\d{4}).*/, "$1");
+  return [timestamp, slug(agent) || "agent", slug(shortId) || randomShortId()].join("-");
 }
 
 function section(text, heading) {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = normalizeNewlines(text).match(new RegExp(`^## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`, "m"));
+  const match = normalizeNewlines(text).match(new RegExp(`^## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$(?![\\s\\S]))`, "m"));
   return match ? match[1].trimEnd() : "";
 }
 
@@ -168,7 +180,7 @@ function parseCurrentMd(text) {
 
 function renderCurrentMd(state) {
   return `# Current Mainline
-Schema version: 2.2
+Schema version: 2.3
 Last updated: ${state.lastUpdated}
 Mainline session: ${state.mainlineSession}
 
@@ -216,7 +228,7 @@ function parseSessionMd(text) {
 function renderSessionMd(state) {
   return `# Session ${state.sessionId}
 
-Schema version: 2.2
+Schema version: 2.3
 Session ID: ${state.sessionId}
 Agent: ${state.agent}
 Adapter: ${state.adapter}
@@ -365,15 +377,6 @@ function replaceField(text, label, value) {
   return text.replace(pattern, `${label}: ${value}`);
 }
 
-function replaceSnapshotValue(text, key, value) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`^(\\|\\s*${escaped}\\s*\\|\\s*)[^|]+?(\\s*\\|)$`, "m");
-  if (!pattern.test(text)) {
-    throw new Error(`Missing snapshot key "${key}"`);
-  }
-  return text.replace(pattern, `$1${value}$2`);
-}
-
 function sanitizeCell(value) {
   return String(value || "unknown").replace(/\|/g, "/").replace(/\r?\n/g, " ").trim();
 }
@@ -438,7 +441,7 @@ function parseThreads(text) {
 function renderThreads({ updated, mainline, lastMerged, rows }) {
   const lines = [
     "# Threads",
-    "Schema version: 2.2",
+    "Schema version: 2.3",
     `Last updated: ${updated}`,
     "",
     `Mainline session: ${mainline}`,
@@ -467,19 +470,6 @@ function writeThreads(root, threads, updated) {
 
 function activeCount(rows) {
   return rows.filter((row) => row.status === "active").length;
-}
-
-function updateWePlaning(root, values) {
-  let text = readMemory(root, "WePlaning.md");
-  if (values.updated) text = replaceField(text, "Last updated", values.updated);
-  if (values.updatedBy) text = replaceField(text, "Last updated by", values.updatedBy);
-  if (values.mainline) text = replaceSnapshotValue(text, "Mainline session", values.mainline);
-  if (values.lastClosed) text = replaceSnapshotValue(text, "Last closed session", values.lastClosed);
-  if (values.activeSessions !== undefined) {
-    text = replaceSnapshotValue(text, "Active sessions", String(values.activeSessions));
-  }
-  if (values.blocker !== undefined) text = replaceSnapshotValue(text, "Blocker", values.blocker);
-  writeMemory(root, "WePlaning.md", text);
 }
 
 function sessionPath(root, sessionId) {
@@ -534,7 +524,6 @@ module.exports = {
   parseCurrentMd,
   parseSessionMd,
   toList,
-  updateWePlaning,
   usage,
   utcNow,
   uniqueStamp,

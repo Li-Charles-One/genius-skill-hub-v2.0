@@ -4,38 +4,66 @@ const fs = require("fs");
 const path = require("path");
 const {
   extractField,
+  parseArgs,
   parseThreads,
+  readMemory,
+  readSession,
+  section,
+  usage,
 } = require("./weplaning-utils.cjs");
 
-const root = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
+const help = `
+Usage:
+  node check-memory.cjs <project-root> [--audit]
+
+Checks WePlaning v2.3 structural consistency. The optional --audit flag adds
+semantic warnings for stale Based On pointers and placeholder mainline content.
+`;
+
+const args = parseArgs(process.argv.slice(2));
+usage(!args.help, "", help);
+
+const root = args._[0] ? path.resolve(args._[0]) : process.cwd();
 const memoryDir = path.join(root, ".agent-memory");
+const errors = [];
+const warnings = [];
+
+function fail(message) {
+  errors.push(message);
+}
+
+function warn(message) {
+  warnings.push(message);
+}
 
 function readText(relativePath) {
   return fs.readFileSync(path.join(memoryDir, relativePath), "utf8");
 }
 
-function extractSnapshotValue(text, key) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = text.match(new RegExp(`^\\|\\s*${escaped}\\s*\\|\\s*([^|]+?)\\s*\\|`, "m"));
-  return match ? match[1].trim() : null;
+function hasSchema(text, name) {
+  if (!/^Schema version:\s*2\.(2|3)$/m.test(text)) fail(`${name} missing supported schema version 2.2 or 2.3`);
 }
 
-const errors = [];
-function fail(message) {
-  errors.push(message);
+function hasNoBlockerBullet(text) {
+  return /^\s*-\s*(none|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞)\s*[。.]?\s*$/im.test(text);
 }
 
-for (const required of [
-  "WePlaning.md",
-  "CURRENT.md",
-  "THREADS.md",
-  "CHANGES.md",
-  "TOOLS.md",
-]) {
+function hasRealBlocker(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return false;
+  return lines.some((line) => !/^-?\s*(none|unknown|unavailable|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞)\s*[。.]?$/i.test(line));
+}
+
+if (!fs.existsSync(memoryDir) || !fs.statSync(memoryDir).isDirectory()) {
+  fail("Missing required directory: .agent-memory");
+}
+
+for (const required of ["CURRENT.md", "THREADS.md", "CHANGES.md"]) {
   const filePath = path.join(memoryDir, required);
-  if (!fs.existsSync(filePath)) {
-    fail(`Missing required file: .agent-memory/${required}`);
-  }
+  if (!fs.existsSync(filePath)) fail(`Missing required file: .agent-memory/${required}`);
 }
 
 const sessionsDir = path.join(memoryDir, "sessions");
@@ -46,37 +74,22 @@ if (!fs.existsSync(sessionsDir) || !fs.statSync(sessionsDir).isDirectory()) {
 if (errors.length === 0) {
   const current = readText("CURRENT.md");
   const threads = readText("THREADS.md");
-  const weplaning = readText("WePlaning.md");
+  const changes = readText("CHANGES.md");
 
-  for (const [name, text] of [
-    ["WePlaning.md", weplaning],
-    ["CURRENT.md", current],
-    ["THREADS.md", threads],
-    ["CHANGES.md", readText("CHANGES.md")],
-    ["TOOLS.md", readText("TOOLS.md")],
-  ]) {
-    if (!/^Schema version:\s*2\.2$/m.test(text)) {
-      fail(`${name} missing "Schema version: 2.2"`);
-    }
-  }
+  hasSchema(current, "CURRENT.md");
+  hasSchema(threads, "THREADS.md");
+  hasSchema(changes, "CHANGES.md");
 
   const currentMainline = extractField(current, "Mainline session");
   const parsedThreads = parseThreads(threads);
   const threadsMainline = parsedThreads.mainline;
   const lastMerged = parsedThreads.lastMerged;
-  const snapshotMainline = extractSnapshotValue(weplaning, "Mainline session");
-  const snapshotActive = extractSnapshotValue(weplaning, "Active sessions");
-  const threadRows = parsedThreads.rows;
-  const mainlineRow = threadRows.find((row) => row.id === threadsMainline);
-  const activeCount = threadRows.filter((row) => row.status === "active").length;
+  const mainlineRow = parsedThreads.rows.find((row) => row.id === threadsMainline);
 
   if (!currentMainline) fail("CURRENT.md missing Mainline session");
   if (!threadsMainline) fail("THREADS.md missing Mainline session");
   if (currentMainline && threadsMainline && currentMainline !== threadsMainline) {
     fail(`Mainline mismatch: CURRENT.md=${currentMainline}, THREADS.md=${threadsMainline}`);
-  }
-  if (snapshotMainline && threadsMainline && snapshotMainline !== threadsMainline) {
-    fail(`Snapshot mainline mismatch: WePlaning.md=${snapshotMainline}, THREADS.md=${threadsMainline}`);
   }
   if (lastMerged && threadsMainline && lastMerged !== threadsMainline) {
     fail(`Last merged session mismatch: Last merged=${lastMerged}, Mainline=${threadsMainline}`);
@@ -87,29 +100,54 @@ if (errors.length === 0) {
   if (mainlineRow && mainlineRow.status !== "merged") {
     fail(`Mainline session must be merged, got ${mainlineRow.status}: ${threadsMainline}`);
   }
+
   if (threadsMainline) {
     const sessionPath = path.join(sessionsDir, `${threadsMainline}.md`);
     if (!fs.existsSync(sessionPath)) {
       fail(`Mainline session file missing: .agent-memory/sessions/${threadsMainline}.md`);
     } else {
       const sessionText = fs.readFileSync(sessionPath, "utf8");
-      if (!/^Schema version:\s*2\.2$/m.test(sessionText)) {
-        fail(`Mainline session missing "Schema version: 2.2": ${threadsMainline}`);
-      }
+      hasSchema(sessionText, `sessions/${threadsMainline}.md`);
       const sessionStatus = extractField(sessionText, "Status");
       if (sessionStatus !== "merged") {
         fail(`Mainline session file must have Status: merged, got ${sessionStatus || "missing"}`);
       }
     }
   }
-  if (snapshotActive !== null && Number(snapshotActive) !== activeCount) {
-    fail(`Active session count mismatch: WePlaning.md=${snapshotActive}, THREADS.md=${activeCount}`);
+
+  if (args.audit && errors.length === 0) {
+    const openBlockers = section(current, "Open Blockers") || "";
+    if (hasRealBlocker(openBlockers) && hasNoBlockerBullet(openBlockers)) {
+      warn("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
+    }
+
+    const basedOnSession = (section(current, "Based On").match(/^- Session:\s*(.+)$/m) || [])[1]?.trim();
+    if (basedOnSession && basedOnSession !== threadsMainline) {
+      warn(`CURRENT.md Based On session (${basedOnSession}) differs from mainline (${threadsMainline}).`);
+    }
+
+    const mainlineSessionText = readSession(root, threadsMainline);
+    const result = section(mainlineSessionText, "Result").trim();
+    const nextStep = section(mainlineSessionText, "Exact Next Step").trim();
+    if (/^(Session opened\.?|unknown)$/i.test(result)) {
+      warn(`Mainline session ${threadsMainline} has placeholder Result: ${result || "empty"}.`);
+    }
+    if (/^unknown$/i.test(nextStep)) {
+      warn(`Mainline session ${threadsMainline} has placeholder Exact Next Step.`);
+    }
   }
 }
 
 if (errors.length > 0) {
   console.error("WePlaning memory check failed:");
   for (const error of errors) console.error(`- ${error}`);
+  process.exit(1);
+}
+
+for (const warning of warnings) console.error(`[audit] ${warning}`);
+
+if (warnings.length > 0 && args.audit) {
+  console.error(`WePlaning memory check passed with ${warnings.length} audit warning(s).`);
   process.exit(1);
 }
 

@@ -5,13 +5,12 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const scriptDir = __dirname;
+const scriptDir = path.resolve(__dirname, "..", "scripts");
 
-function run(args, options = {}) {
+function run(args) {
   const result = spawnSync(process.execPath, args, {
     cwd: scriptDir,
     encoding: "utf8",
-    ...options,
   });
   if (result.status !== 0) {
     throw new Error(`${args.join(" ")} failed\n${result.stdout || ""}${result.stderr || ""}`);
@@ -28,10 +27,6 @@ function spawnNode(args) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
-}
-
-function countMatches(text, pattern) {
-  return (text.match(pattern) || []).length;
 }
 
 function initProject(name) {
@@ -116,54 +111,7 @@ function concurrentNewSessionTest() {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-function concurrentToolsTest() {
-  const root = initProject("weplaning-tools");
-  const ids = Array.from({ length: 5 }, (_, index) => `tools-session-${index}`);
-  for (const [index, id] of ids.entries()) {
-    run([
-      path.join(scriptDir, "new-session.cjs"),
-      root,
-      "--role", "implementer",
-      "--summary", `Tools session ${index}`,
-      "--goal", `Register tools ${index}`,
-      "--agent", "Codex",
-      "--adapter", "codex",
-      "--os", "win",
-      "--id", id,
-      "--context", "concurrency test",
-    ]);
-  }
-
-  const workers = ids.map((id, index) =>
-    spawnNode([
-      path.join(scriptDir, "register-agent.cjs"),
-      root,
-      "--session", id,
-      "--agent", "Codex",
-      "--adapter", "codex",
-      "--os", "win",
-      "--tool", `tool-${index}`,
-      "--mcp", "unavailable",
-      "--skill", "we-planing",
-      "--notes", `registered-${index}`,
-    ]),
-  );
-
-  for (const worker of workers) {
-    assert(worker.status === 0, `register-agent worker failed\n${worker.stdout || ""}${worker.stderr || ""}`);
-  }
-  const tools = fs.readFileSync(path.join(root, ".agent-memory", "TOOLS.md"), "utf8");
-  for (let index = 0; index < ids.length; index += 1) {
-    assert(tools.includes(`| ${ids[index]} | Codex | win | codex | tool-${index} | unavailable | we-planing | registered-${index} |`), `missing TOOLS row ${ids[index]}`);
-  }
-  assert(countMatches(tools, /\| tools-session-/g) === 5, "unexpected TOOLS session row count");
-  run([path.join(scriptDir, "check-memory.cjs"), root]);
-  fs.rmSync(root, { recursive: true, force: true });
-}
-
 concurrentAppendTest();
 console.log("append concurrency passed");
 concurrentNewSessionTest();
 console.log("new-session concurrency passed");
-concurrentToolsTest();
-console.log("tools concurrency passed");

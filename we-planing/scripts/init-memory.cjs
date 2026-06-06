@@ -71,53 +71,17 @@ writeSession(
     status: "merged",
     started: now,
     closed: now,
-    goal: `Bootstrap WePlaning v2.2 memory for ${project}.`,
+    goal: `Bootstrap WePlaning v2.3 memory for ${project}.`,
     contextRead: "- Initial project context",
-    workNotes: "- Initialized WePlaning Minimal Mode.",
-    filesTouched: `- .agent-memory/WePlaning.md
-- .agent-memory/CURRENT.md
+    workNotes: "- Initialized WePlaning memory.",
+    filesTouched: `- .agent-memory/CURRENT.md
 - .agent-memory/THREADS.md
 - .agent-memory/CHANGES.md
-- .agent-memory/TOOLS.md
 - .agent-memory/sessions/${sessionId}.md`,
-    decisions: "- Use WePlaning v2.2 Minimal Mode.",
+    decisions: "- Use WePlaning v2.3 memory.",
     result: "Memory initialized.",
     exactNextStep: goal,
   }),
-);
-
-writeMemory(
-  root,
-  "WePlaning.md",
-  `# WePlaning
-Schema version: 2.2
-Last updated: ${now}
-Last updated by: ${agent}
-
-## Read First
-| Need | Read | Why |
-|:--|:--|:--|
-| Current accepted state | CURRENT.md | Mainline |
-| Session tree | THREADS.md | Parent/mainline |
-| Recent changes | CHANGES.md | Audit trail |
-| Tool capabilities | TOOLS.md | Available tools |
-
-## Snapshot
-| Key | Value |
-|:--|:--|
-| Mainline session | ${sessionId} |
-| Last closed session | ${sessionId} |
-| Active sessions | 0 |
-| Blocker | none |
-
-## Human Concerns
-- unknown
-
-## Repeat Patterns
-| Pattern | Count | Agent workload | Last seen | Suggested action |
-|:--|:--|:--|:--|:--|
-| — | — | — | — | — |
-`,
 );
 
 writeMemory(
@@ -128,7 +92,7 @@ writeMemory(
     mainlineSession: sessionId,
     activeGoal: goal,
     currentUnderstanding: `${project} memory has been initialized. Accepted project facts should live here, while in-progress work should live in session files.`,
-    currentState: "- WePlaning v2.2 memory is active.\n- Minimal Mode files exist.",
+    currentState: "- WePlaning v2.3 memory is active.\n- Required memory files exist.",
     acceptedNextSteps: "1. Continue from the active goal.\n2. Open a new session for durable work.",
     openBlockers: "none",
     basedOn: `- Session: ${sessionId}\n- Last change: ${now} init`,
@@ -139,7 +103,7 @@ writeMemory(
   root,
   "THREADS.md",
   `# Threads
-Schema version: 2.2
+Schema version: 2.3
 Last updated: ${now}
 
 Mainline session: ${sessionId}
@@ -157,7 +121,7 @@ writeMemory(
   root,
   "CHANGES.md",
   `# Changes
-Schema version: 2.2
+Schema version: 2.3
 
 ## ${now} init
 - Session: ${sessionId}
@@ -166,46 +130,16 @@ Schema version: 2.2
 - Based on: root
 - Change ID: ${now} init
 - Changed:
-  - Bootstrapped WePlaning v2.2 Minimal Mode
+  - Bootstrapped WePlaning v2.3 memory
 - Files touched:
-  - .agent-memory/WePlaning.md
   - .agent-memory/CURRENT.md
   - .agent-memory/THREADS.md
   - .agent-memory/CHANGES.md
-  - .agent-memory/TOOLS.md
   - .agent-memory/sessions/${sessionId}.md
 - Verification:
-  - Minimal Mode files created
+  - Required memory files created
 - Notes:
   - Project: ${project}
-`,
-);
-
-writeMemory(
-  root,
-  "TOOLS.md",
-  `# Tools
-Schema version: 2.2
-Last updated: ${now}
-
-## Agent Sessions
-
-| Session ID | Agent | OS | Adapter | Tools | MCP | Skills | Notes |
-|:--|:--|:--|:--|:--|:--|:--|:--|
-| ${sessionId} | ${agent} | ${os} | ${adapter} | node, we-planing scripts | unavailable | we-planing | Bootstrapped WePlaning |
-
-## Skills
-
-| Skill | Session ID | Version | Purpose | Location | Trigger |
-|:--|:--|:--|:--|:--|:--|
-| we-planing | ${sessionId} | 2.2+scripts | Maintain project collaboration memory | unknown | memory/resume/handoff requests |
-
-## Constraints
-- Secrets, API keys, tokens, private MCP credentials, cookies, and passwords MUST NOT be recorded.
-- Tool capability SHOULD be recorded even when exact configuration is private.
-- If a tool is not available, write \`unavailable\`.
-- If a tool's availability is unknown, write \`unknown\`.
-- Local absolute paths MUST be marked \`local-only\` and include OS when necessary.
 `,
 );
 

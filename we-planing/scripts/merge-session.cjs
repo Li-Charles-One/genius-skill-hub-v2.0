@@ -2,7 +2,6 @@
 
 const path = require("path");
 const {
-  activeCount,
   allowNoCheck,
   extractField,
   parseArgs,
@@ -13,7 +12,6 @@ const {
   required,
   runCheck,
   section,
-  updateWePlaning,
   usage,
   utcNow,
   withMemoryLock,
@@ -74,7 +72,6 @@ withMemoryLock(root, () => {
   let threads = readThreads(root);
   let sessionText = readSession(root, sessionId);
   const parent = extractField(sessionText, "Parent session") || "unknown";
-  const agent = args.agent || extractField(sessionText, "Agent") || "unknown";
 
   if (
     !args["allow-branch"] &&
@@ -111,14 +108,6 @@ withMemoryLock(root, () => {
     current = updateBasedOn(current, sessionId, sessionText, now);
     writeMemory(root, "CURRENT.md", current);
   }
-
-  updateWePlaning(root, {
-    updated: now,
-    updatedBy: agent,
-    mainline: sessionId,
-    lastClosed: sessionId,
-    activeSessions: activeCount(threads.rows),
-  });
 });
 
 if (!args["no-check"]) runCheck(root, __dirname);

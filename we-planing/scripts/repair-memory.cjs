@@ -3,7 +3,6 @@
 const path = require("path");
 const fs = require("fs");
 const {
-  activeCount,
   allowNoCheck,
   extractField,
   parseArgs,
@@ -13,7 +12,6 @@ const {
   renderSessionMd,
   replaceField,
   runCheck,
-  updateWePlaning,
   usage,
   utcNow,
   withMemoryLock,
@@ -31,11 +29,9 @@ Repairs common WePlaning drift:
   - aligns THREADS.md mainline with CURRENT.md mainline
   - marks mainline thread row and session file as merged
   - aligns Last merged session with mainline
-  - refreshes WePlaning.md snapshot mainline and active count
   - rebuilds missing mainline THREADS row or session file with minimal data
 
 Options:
-  --agent <name>    Agent name for WePlaning.md Last updated by. Default: Codex
   --dry-run         Print intended repairs without writing
   --no-check        Internal use only; external callers must run consistency checks
 `;
@@ -46,7 +42,6 @@ allowNoCheck(args, "repair-memory.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const now = args.time || utcNow();
-const agent = args.agent || "Codex";
 let repairs = [];
 withMemoryLock(root, () => {
   const current = readMemory(root, "CURRENT.md");
@@ -144,14 +139,6 @@ withMemoryLock(root, () => {
     writeThreads(root, threads, now);
     writeSession(root, currentMainline, sessionText);
   }
-
-  updateWePlaning(root, {
-    updated: now,
-    updatedBy: agent,
-    mainline: threads.mainline,
-    lastClosed: threads.lastMerged,
-    activeSessions: activeCount(threads.rows),
-  });
 });
 
 if (args["dry-run"]) {

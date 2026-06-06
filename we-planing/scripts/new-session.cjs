@@ -3,23 +3,18 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  activeCount,
   allowNoCheck,
-  appendTableRow,
   generateSessionId,
   parseArgs,
-  readMemory,
   readThreads,
   renderSessionMd,
   required,
   runCheck,
   sessionPath,
   toList,
-  updateWePlaning,
   usage,
   utcNow,
   withMemoryLock,
-  writeMemory,
   writeSession,
   writeThreads,
 } = require("./weplaning-utils.cjs");
@@ -85,12 +80,7 @@ withMemoryLock(root, () => {
     process.exit(1);
   }
 
-  const before = {
-    threads,
-    tools: readMemory(root, "TOOLS.md"),
-    weplaning: readMemory(root, "WePlaning.md"),
-    sessionExists: fs.existsSync(target),
-  };
+  const before = { threads, sessionExists: fs.existsSync(target) };
 
   try {
     writeSession(
@@ -110,8 +100,7 @@ withMemoryLock(root, () => {
         contextRead: contextLines,
         workNotes: noteLines,
         filesTouched: `- .agent-memory/sessions/${sessionId}.md
-- .agent-memory/THREADS.md
-- .agent-memory/WePlaning.md`,
+- .agent-memory/THREADS.md`,
         decisions: "- none yet",
         result: "Session opened.",
         exactNextStep: "unknown",
@@ -128,29 +117,8 @@ withMemoryLock(root, () => {
       summary,
     });
     writeThreads(root, threads, started);
-
-    // Auto-insert a TOOLS.md row for the new session.
-    const toolsText = readMemory(root, "TOOLS.md");
-    const updated = appendTableRow(toolsText, "## Agent Sessions", [
-      sessionId,
-      agent,
-      os,
-      adapter,
-      "unknown",
-      "unknown",
-      "unknown",
-      summary,
-    ]);
-    writeMemory(root, "TOOLS.md", updated);
-    updateWePlaning(root, {
-      updated: started,
-      updatedBy: agent,
-      activeSessions: activeCount(threads.rows),
-    });
   } catch (err) {
     writeThreads(root, before.threads, started);
-    writeMemory(root, "TOOLS.md", before.tools);
-    writeMemory(root, "WePlaning.md", before.weplaning);
     if (!before.sessionExists && fs.existsSync(target)) fs.rmSync(target, { force: true });
     console.error(`Could not create session: ${err.message}`);
     process.exit(1);

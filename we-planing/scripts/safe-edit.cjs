@@ -3,22 +3,34 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { parseArgs, required, usage, withMemoryLock, writeFile } = require("./weplaning-utils.cjs");
+const {
+  extractField,
+  parseArgs,
+  readMemory,
+  readSession,
+  readThreads,
+  required,
+  usage,
+  withMemoryLock,
+  writeFile,
+  writeSession,
+} = require("./weplaning-utils.cjs");
 
 const help = `
 Usage:
-  node safe-edit.cjs <project-root> --session <id> --changed <text> --file <path> --verification <text> [options]
+  node safe-edit.cjs <project-root> --lite --session <id> [options]
+  node safe-edit.cjs <project-root> --close --session <id> --changed <text> --file <path> --verification <text> [options]
 
-Runs the full closeout pipeline with a snapshot rollback guard:
-  sync-before-write -> check-memory(pre) -> pre-close-check -> append-change -> merge-session -> check-memory(post)
+Modes:
+  --lite              Guard a lightweight session update with pre/post checks.
+  --close             Append change, merge session, then run the consistency gate.
 
 Options:
-  --session <id>        Required. Session to close and merge.
-  --changed <text>      Required. Change description (same as append-change.cjs).
-  --file <path>         Required. Repeatable or ";;" separated. Files touched.
-  --verification <text> Required. Repeatable or ";;" separated. Verification steps.
-  --note <text>         Repeatable or ";;" separated. Notes.
-  --no-merge            Skip merge-session step (only append change, no mainline update).
+  --session <id>        Required session id.
+  --changed <text>      Required with --close. Change description.
+  --file <path>         Required with --close. Repeatable or ";;" separated.
+  --verification <text> Required with --close. Repeatable or ";;" separated.
+  --note <text>         Repeatable or ";;" separated. Notes for append-change.
   --dry-run             Print steps without executing.
 `;
 
@@ -27,17 +39,16 @@ usage(!args.help, "", help);
 
 const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);
-const changed = required(args, "changed", help);
-const files = args.file || args.files;
-const verification = args.verification;
+const mode = args.close ? "close" : "lite";
+usage(args.lite || args.close, "Choose exactly one mode: --lite or --close", help);
+usage(!(args.lite && args.close), "Choose only one mode: --lite or --close", help);
 
-if (!files) {
-  console.error("Missing required argument: --file");
-  process.exit(1);
-}
-if (!verification) {
-  console.error("Missing required argument: --verification");
-  process.exit(1);
+if (mode === "close") {
+  required(args, "changed", help);
+  if (!(args.file || args.files)) usage(false, "Missing required argument: --file", help);
+  if (!args.verification) usage(false, "Missing required argument: --verification", help);
+} else {
+  required(args, "changed", help);
 }
 
 function listFiles(dir) {
@@ -62,14 +73,17 @@ function createSnapshot() {
 
 function restoreSnapshot(snapshot) {
   if (args["dry-run"]) return;
-  fs.mkdirSync(snapshot.memoryDir, { recursive: true });
+  const newFiles = [];
   for (const filePath of listFiles(snapshot.memoryDir)) {
     const relativePath = path.relative(snapshot.memoryDir, filePath);
-    if (!snapshot.contentByRelativePath.has(relativePath)) fs.rmSync(filePath, { force: true });
+    if (!snapshot.contentByRelativePath.has(relativePath)) newFiles.push(relativePath);
   }
   for (const [relativePath, content] of snapshot.contentByRelativePath.entries()) {
-    const filePath = path.join(snapshot.memoryDir, relativePath);
-    writeFile(filePath, content.toString("utf8"));
+    writeFile(path.join(snapshot.memoryDir, relativePath), content.toString("utf8"));
+  }
+  if (newFiles.length) {
+    console.error("Left new files untouched after rollback:");
+    for (const file of newFiles) console.error(`- .agent-memory/${file.replace(/\\/g, "/")}`);
   }
 }
 
@@ -96,6 +110,36 @@ function runStep(label, command, argv) {
   return { ok, status: result.status };
 }
 
+function ensureFreshMainline() {
+  const threads = readThreads(root);
+  const currentMainline = extractField(readMemory(root, "CURRENT.md"), "Mainline session");
+  if (currentMainline !== threads.mainline) {
+    throw new Error(`Mainline mismatch before write: CURRENT.md=${currentMainline}, THREADS.md=${threads.mainline}`);
+  }
+  const sessionText = readSession(root, sessionId);
+  const parent = extractField(sessionText, "Parent session");
+  if (parent && parent !== threads.mainline && sessionId !== threads.mainline) {
+    throw new Error(`Stale write blocked: parent=${parent}, current mainline=${threads.mainline}`);
+  }
+}
+
+function appendToSection(text, heading, line) {
+  const marker = `## ${heading}\n`;
+  const start = text.indexOf(marker);
+  if (start === -1) throw new Error(`Missing section: ${heading}`);
+  const bodyStart = start + marker.length;
+  const rest = text.slice(bodyStart);
+  const nextIndex = rest.search(/\n## /);
+  const body = nextIndex === -1 ? rest : rest.slice(0, nextIndex);
+  const tail = nextIndex === -1 ? "" : rest.slice(nextIndex);
+  return `${text.slice(0, bodyStart)}${body.replace(/\s*$/, "")}\n- ${line}\n${tail}`;
+}
+
+function updateLiteSession() {
+  const sessionText = readSession(root, sessionId);
+  writeSession(root, sessionId, appendToSection(sessionText, "Work Notes", args.changed));
+}
+
 const scriptDir = __dirname;
 let snapshot = null;
 
@@ -114,46 +158,41 @@ function abort(message) {
 withMemoryLock(root, () => {
   snapshot = createSnapshot();
 
-  const syncResult = runStep("sync-before-write", path.join(scriptDir, "sync-before-write.cjs"), [
-    root,
-    "--session", sessionId,
-    "--no-check",
-  ]);
-  if (!syncResult.ok) abort("Pipeline aborted: sync-before-write failed.");
+  try {
+    ensureFreshMainline();
+  } catch (error) {
+    abort(error.message);
+  }
 
   const preCheckResult = runStep("check-memory (pre)", path.join(scriptDir, "check-memory.cjs"), [root]);
   if (!preCheckResult.ok) abort("Pipeline aborted: pre-check failed.");
 
-  const preCloseResult = runStep("pre-close-check", path.join(scriptDir, "pre-close-check.cjs"), [
-    root,
-    "--session", sessionId,
-    "--no-check",
-  ]);
-  if (!preCloseResult.ok) abort("Pipeline aborted: pre-close-check reported issues.");
+  if (mode === "lite") {
+    try {
+      if (!args["dry-run"]) updateLiteSession();
+      else console.log(`[DRY-RUN] append session Work Notes: ${args.changed}`);
+    } catch (error) {
+      abort(`Pipeline aborted: lite session update failed: ${error.message}`);
+    }
+  } else {
+    const appendArgv = [root, "--session", sessionId, "--changed", args.changed, "--no-check"];
+    for (const file of values(args.file || args.files)) appendArgv.push("--file", file);
+    for (const item of values(args.verification)) appendArgv.push("--verification", item);
+    if (args.note) for (const note of values(args.note)) appendArgv.push("--note", note);
 
-  const appendArgv = [root, "--session", sessionId, "--changed", changed, "--no-check"];
-  for (const file of values(files)) appendArgv.push("--file", file);
-  for (const item of values(verification)) appendArgv.push("--verification", item);
-  if (args.note) {
-    for (const note of values(args.note)) appendArgv.push("--note", note);
-  }
+    const appendResult = runStep("append-change", path.join(scriptDir, "append-change.cjs"), appendArgv);
+    if (!appendResult.ok) abort("Pipeline aborted: append-change failed.");
 
-  const appendResult = runStep("append-change", path.join(scriptDir, "append-change.cjs"), appendArgv);
-  if (!appendResult.ok) abort("Pipeline aborted: append-change failed.");
-
-  if (!args["no-merge"]) {
     const mergeResult = runStep("merge-session", path.join(scriptDir, "merge-session.cjs"), [
       root,
       "--session", sessionId,
       "--no-check",
     ]);
     if (!mergeResult.ok) abort("Pipeline aborted: merge-session failed.");
-  } else {
-    console.log("SKIPPED merge-session (--no-merge)");
   }
 
   const postCheckResult = runStep("check-memory (post)", path.join(scriptDir, "check-memory.cjs"), [root]);
   if (!postCheckResult.ok) abort("Pipeline aborted: post-check failed. Snapshot was restored.");
 });
 
-console.log("safe-edit pipeline completed successfully.");
+console.log(`safe-edit ${mode} pipeline completed successfully.`);

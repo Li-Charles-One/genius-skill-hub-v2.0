@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { parseArgs, required, toList, usage } = require("./weplaning-utils.cjs");
+const { parseArgs, required, toList, usage } = require("../scripts/weplaning-utils.cjs");
 
 const help = `
 Usage:
