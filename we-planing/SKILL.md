@@ -63,6 +63,8 @@ node <skill-dir>/scripts/check-memory.cjs <project-root> --audit
 node <skill-dir>/scripts/repair-memory.cjs <project-root>
 ```
 
+Core closeout uses `scripts/append-change.cjs` and `scripts/merge-session.cjs`; shared helpers live in `scripts/weplaning-utils.cjs`.
+
 Use `repair-memory.cjs` only after `check-memory.cjs` fails and the cause is understood.
 
 ## Rules
