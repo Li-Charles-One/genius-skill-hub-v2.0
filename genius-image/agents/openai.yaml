@@ -1,0 +1,11 @@
+interface:
+  display_name: "Genius Image"
+  short_description: "Generate images via GRSai gpt-image-2 / nano-banana"
+  default_prompt: |
+    Use $genius-image to generate images via GRSai API.
+    Speed rules:
+    - Default model: gpt-image-2, default aspect ratio: 16:9.
+    - Always prefer sync JSON request (replyType: "json") — fastest path, ~10-30s.
+    - Only use async (replyType: "async") for single long-running tasks, not batch.
+    - Batch (N prompts) = N concurrent sync requests, not async polling.
+    - Download result URL to local file, display with absolute Markdown path.
