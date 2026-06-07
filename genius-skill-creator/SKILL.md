@@ -16,6 +16,55 @@ Core modes:
 
 Do not treat a skill as finished just because it reads well. A finished skill should be valid, triggerable, lean, resource-aware, and tested enough for its risk.
 
+## BEFORE ANYTHING ELSE: Identify Your Runtime (Every Agent Must Do This)
+
+This skill describes actions in platform-neutral language. Before executing any instruction, you MUST determine which AI agent runtime you are running on, then map the skill's actions to YOUR actual tools.
+
+### Step 1: Detect your runtime
+
+Check your available tools against these fingerprints. Match the FIRST row where every tool in the "Signature tools" column is available to you:
+
+| Runtime | Signature tools | How you invoke sub-skills | Install path |
+|---|---|---|---|
+| **Reasonix** | `read_file`, `grep`, `glob`, `ls`, `write_file`, `bash`, `task`, `edit_file` | `run_skill({ name: "<skill>", arguments: "..." })` | `~/.reasonix/skills/<name>/` |
+| **Codex** | `read_file`, `search_content`, `search_files`, `directory_tree`, `write_file`, `run_command` | `/skill-name` or `$skill-name` in prompt | `.agents/skills/<name>/` |
+| **Cursor** | `search_file`, `search_content`, `read_file`, `write`, `execute_command`, `editor_edit_file` | `/<skill-name>` in chat | `.cursor/skills/<name>/` |
+| **Claude Code** | `Read`, `Write`, `Edit`, `Grep`, `Glob`, `Bash`, `Task` | `/skill-name` in chat | `.claude/skills/<name>/` or `~/.claude/skills/<name>/` |
+
+If none match, or you're unsure, ask the user: *"Which AI agent are you currently running on? (Reasonix / Codex / Cursor / Claude Code / other)"* Then use the answer to look up the right mapping.
+
+### Step 2: Map this skill's actions to YOUR tools
+
+Every action described in this skill uses neutral language: "read a file," "search code," "run a shell command," "spawn a sub-agent." Translate each one to YOUR runtime's exact tool name. Examples:
+
+| Neutral action | Reasonix | Codex |
+|---|---|---|
+| read a file | `read_file` | `read_file` |
+| search code for a pattern | `grep` | `search_content` |
+| list files in a directory | `ls` or `glob` | `directory_tree` or `search_files` |
+| run a shell command | `bash` | `run_command` |
+| spawn a sub-agent for a task | `task` or `run_skill(...)` | dispatch via prompt instruction |
+| validate a YAML/JSON file | `python scripts/validate.py` via `bash` | `python scripts/validate.py` via `run_command` |
+
+### Step 3: Map sub-skill invocations
+
+When this skill says "invoke the writing-plans skill" or "run the brainstorm skill," translate to YOUR runtime's invocation method:
+
+| Runtime | How to invoke writing-plans |
+|---|---|
+| Reasonix | `run_skill({ name: "writing-plans", arguments: "<spec path>" })` |
+| Codex | `/writing-plans <spec path>` or mention in prompt |
+| Cursor | `/writing-plans <spec path>` |
+| Claude Code | `/writing-plans <spec path>` |
+
+### Step 4: Map file paths
+
+When this skill references a file like `references/design-template.md`, compute the full path based on YOUR runtime's skill location and the current skill's install path. The path is relative to the directory containing THIS `SKILL.md`.
+
+### If You Can't Map Something
+
+Mark it as `<!-- unverified -->` in your reasoning and proceed with your best available tool. At the end of your response, report: "Platform mapping: <runtime>. Unverified actions: <list>." This makes the gap visible instead of silently failing.
+
 ## Start Here
 
 Classify the user request:
