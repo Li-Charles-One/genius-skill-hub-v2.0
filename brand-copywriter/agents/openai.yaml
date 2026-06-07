@@ -1,0 +1,4 @@
+interface:
+  display_name: "Brand Copywriter"
+  short_description: "Write sharper brand and campaign copy"
+  default_prompt: "Use $brand-copywriter to draft two contrasting versions of brand marketing copy with framework selection and AI-style cleanup."
