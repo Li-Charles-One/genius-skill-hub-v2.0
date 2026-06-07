@@ -1,23 +1,19 @@
 ---
 name: brainstorming
 description: Explore intent, requirements, and design before implementing complex features. Use for ambiguous multi-approach tasks or when user asks to brainstorm/plan. Skips automatically for clear-scope work. Outputs design spec, then hands off to writing-plans for implementation planning. Includes optional Visual Companion (browser-based mockup/diagram tool) for visual questions.
-run_as: subagent
-model: deepseek-v4-pro
-allowed_tools:
-  - read_file
-  - search_content
-  - search_files
-  - directory_tree
-  - glob
-  - write_file
-  - run_command
+license: MIT
+metadata:
+  version: "2.0.0"
+  hermes:
+    tags: [planning, design, spec, brainstorming, architecture, requirements]
+    related_skills: [writing-plans]
 ---
 
 # Brainstorming Ideas Into Designs
 
 ## Relationship to writing-plans
 
-Brainstorming explores WHAT to build and WHY. Writing-plans defines HOW to build it. They are sequential: brainstorm first (if needed), then write-plan. If the user already knows what they want, skip brainstorming and go straight to /write-plan. Brainstorming should NOT produce implementation details — that's writing-plans' job.
+Brainstorming explores WHAT to build and WHY. Writing-plans defines HOW to build it. They are sequential: brainstorm first (if needed), then writing-plans. If the user already knows what they want, skip brainstorming and go straight to the writing-plans skill. Brainstorming should NOT produce implementation details — that's writing-plans' job.
 
 Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
 
@@ -36,7 +32,7 @@ Start by understanding the current project context, then ask questions one at a 
 - User explicitly asks to brainstorm or plan
 - Task has multiple valid approaches and the wrong choice would be costly to reverse
 
-**Use codebase-cartographer** to understand existing patterns before proposing designs — don't re-explore what's already mapped.
+**Use codebase exploration tools** to survey existing patterns before proposing designs — don't re-explore what's already mapped manually.
 </COMPLEXITY-GATE>
 
 ## Anti-Pattern: "Everything Needs A Design"
@@ -64,8 +60,8 @@ Only use when the user explicitly asks to brainstorm OR the task involves a new 
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec review loop** — dispatch spec-document-reviewer subagent with precisely crafted review context (never your session history); fix issues and re-dispatch until approved (max 5 iterations, then surface to human). See `spec-document-reviewer-prompt.md`.
+6. **Write design doc** — save to `specs/YYYY-MM-DD-<topic>-design.md` and commit
+7. **Spec review loop** — dispatch a review subagent with the review prompt from `spec-document-reviewer-prompt.md`; fix issues and re-dispatch until approved (max 5 iterations, then surface to human).
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
@@ -73,7 +69,7 @@ Only use when the user explicitly asks to brainstorm OR the task involves a new 
 
 **Flow:** Explore context → (offer visual companion if needed) → clarify questions → propose approaches → present design sections (loop until approved) → write spec doc → spec review loop (fix until approved, max 5 iterations) → user reviews spec → invoke writing-plans.
 
-**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
+**The terminal state is invoking writing-plans.** Do NOT invoke any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
 
 ## The Process
 
@@ -118,14 +114,14 @@ Only use when the user explicitly asks to brainstorm OR the task involves a new 
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+- Write the validated design (spec) to `specs/YYYY-MM-DD-<topic>-design.md`
   - (User preferences for spec location override this default)
 - Commit the design document to git
 
 **Spec Review Loop:**
 After writing the spec document:
 
-1. Dispatch spec-document-reviewer subagent (see `spec-document-reviewer-prompt.md`)
+1. Dispatch a review subagent with the review prompt from `spec-document-reviewer-prompt.md`
 2. If Issues Found: fix, re-dispatch, repeat until Approved
 3. If loop exceeds 5 iterations, surface to human for guidance
 
@@ -170,7 +166,7 @@ A browser-based companion for showing mockups, diagrams, and visual options duri
 A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question — use the terminal. "Which wizard layout works better?" is a visual question — use the browser.
 
 If the user agrees to the companion, read the detailed guide before proceeding:
-`skills/brainstorming/visual-companion.md`
+`visual-companion.md`
 
 The companion is implemented as an isolated module under `scripts/`:
 
@@ -189,7 +185,7 @@ This skill is organized so each piece is independently removable:
 ```
 brainstorming/
 ├── SKILL.md                          (this file — orchestration only)
-├── agents/openai.yaml                (subagent metadata)
+├── agents/                            (platform adapter files, optional)
 ├── visual-companion.md               (visual companion guide, optional)
 ├── spec-document-reviewer-prompt.md  (reviewer persona for spec review loop)
 └── scripts/                          (visual companion runtime, optional)
