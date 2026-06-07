@@ -1,33 +1,389 @@
 ---
 name: genius-design
-description: Use when user wants to apply a specific brand style, reverse-engineer a website's design, or generate on-brand UI. Two workflows: (A) pick from 73 pre-built brand DESIGN.md templates, or (B) reverse-engineer any live website's CSS into a fresh DESIGN.md. Trigger keywords: 逆向, 品牌, UI设计, 网页开发, reverse engineer, brand, design system, 风格.
+description: "Generate production-grade DESIGN.md brand design systems with deep anti-slop rules. Three workflows: (A) pick from 73 brand templates, (B) reverse-engineer a live website, or (C) let the agent infer a design direction from your product type. Every DESIGN.md includes: brief inference + three-dial tuning (VARIANCE/MOTION/DENSITY), complete token definitions with semantic roles and constraints, brand-category-specific anti-pattern warnings, absolute refusal rules, and a 12-item pre-ship checklist. Trigger keywords: 逆向, 品牌, UI设计, 设计规范, DESIGN.md, reverse engineer, brand, design system, 风格."
+license: Apache-2.0
+metadata:
+  version: "2.0.0"
+  hermes:
+    tags: [design-system, brand, DESIGN.md, anti-slop, frontend, UI, landing-page, template, reverse-engineer]
+    related_skills: [taste-skill, impeccable]
 ---
-# Genius Design — Brand Design Systems for AI
 
-Two ways to get a design system into your project.
+# Genius Design — Deep Brand Design Systems for AI
 
-## ⚡ First: ask the user which path
+Produce a rich, anti-slop DESIGN.md that an AI agent can read and follow without producing generic output. Every DESIGN.md includes: brief inference + three-dial tuning (VARIANCE / MOTION / DENSITY), complete token definitions with semantic roles and constraints, brand-category-specific anti-pattern warnings, absolute refusal rules, and a 12-item pre-ship checklist.
 
-When this skill activates, **immediately ask the user**:
-
-> 你想要哪种方式？
-> - **A. 用现成模板** — 从 73 个品牌里选一个（Stripe, Apple, Linear, Vercel...）
-> - **B. 逆向网站** — 给我一个网址，我抓取它的 CSS 然后自动生成 DESIGN.md
-> - **C. 我不知道参考谁** — 告诉我产品类型（如「体育用品」「医疗器械」），我用 UI UX Pro Max 推理出推荐的设计方案
-
-Then route to the matching workflow below. If the user has already provided a URL, go straight to Workflow B.
-
-**配合 `frontend-design` skill**：genius-design 负责产出 DESIGN.md（设计规范），frontend-design 负责照着 DESIGN.md 生成高设计质量的前端代码。两者配合使用：先用 genius-design 确定品牌规则，再调用 frontend-design 执行实现。
+Before any workflow, run the **Brief Inference pre-step**. Then route to the matching workflow.
 
 ---
 
-## Workflow A: Use a pre-built brand template
+## First: Brief Inference (ALL workflows -- run this before anything else)
 
-Copy an existing DESIGN.md from the awesome-design-md collection into the project root.
+### 0.A Read the Room
 
-### What is DESIGN.md?
+Before picking a brand, fetching a site, or recommending a direction, read the user's signals:
 
-Google's open-source format (Apr 2026) — a Markdown file that describes a complete design system: colors, typography, spacing, components, motion. AI agents read it and follow the rules.
+1. **Page kind** -- landing (SaaS / consumer / agency / event), portfolio (dev / designer / creative studio), dashboard / tool, documentation, redesign (preserve vs overhaul), editorial / blog, e-commerce.
+2. **Vibe words** the user used -- "minimalist", "calm", "Linear-style", "Awwwards", "brutalist", "premium consumer", "Apple-y", "playful", "serious B2B", "editorial", "agency-y", "glassy", "dark tech".
+3. **Reference signals** -- URLs they linked, screenshots they pasted, products they named, brands they're competing with.
+4. **Audience** -- B2B procurement panel vs. design-conscious consumer vs. recruiter scanning a portfolio. The audience picks the aesthetic, not your taste.
+5. **Brand assets that already exist** -- logo, color, type, photography. For redesigns, these are starting material, not optional input.
+6. **Quiet constraints** -- accessibility-first audiences, public-sector, regulated industries, trust-first commerce, kids' products. These constraints OVERRIDE aesthetic preference.
+
+### 0.B Output a "Design Read" Before Any Action
+
+Before generating anything, state in one line: **"Reading this as: <page kind> for <audience>, with a <vibe> language, leaning toward <design system or aesthetic family>."**
+
+Example reads:
+- *"Reading this as: B2B SaaS landing for technical buyers, with a Linear-style minimalist language, leaning toward Tailwind utilities + Geist + restrained motion."*
+- *"Reading this as: solo designer portfolio for hiring managers, with an editorial / kinetic-type language, leaning toward native CSS + scroll-driven animation + custom typography."*
+- *"Reading this as: redesign of a public-sector service site, with a trust-first language, leaning toward GOV.UK Frontend or USWDS."*
+
+### 0.C If the Brief Is Ambiguous
+
+Ask exactly **one** clarifying question -- never a multi-question dump -- and only when the design read genuinely diverges. Example: *"Should this feel closer to Linear-clean or Awwwards-experimental?"*
+
+If you can confidently infer from context, **do not ask**. Just declare the design read and proceed.
+
+### 0.D Ask the User Which Path
+
+After declaring the Design Read, ask:
+
+> Choose your path:
+> - **A. Brand template** -- pick from 73 brands (Stripe, Apple, Linear, Vercel...)
+> - **B. Reverse-engineer** -- give me a URL, I analyze its design and generate DESIGN.md
+> - **C. AI recommendation** -- tell me your product type (e.g. "pet hospital management system"), I recommend a design direction
+
+Route to the matching workflow below. If the user has already provided a URL, go straight to Workflow B.
+
+---
+
+## The Three-Dial System (Integrated Into All Workflows)
+
+Every DESIGN.md must set three dial values. These gate every layout, motion, density, and color decision downstream.
+
+| Dial | Range | Meaning |
+|---|---|---|
+| `DESIGN_VARIANCE` | 1-10 | 1=Perfect Symmetry, 10=Artsy Chaos |
+| `MOTION_INTENSITY` | 1-10 | 1=Static, 10=Cinematic/Physics |
+| `VISUAL_DENSITY` | 1-10 | 1=Art Gallery/Airy, 10=Cockpit/Packed Data |
+
+**Baseline: 7 / 6 / 4** (landing page default). Override based on the brief.
+
+### Dial Inference Table
+
+| Signal | VARIANCE | MOTION | DENSITY |
+|---|---|---|---|
+| "minimalist / clean / calm / editorial / Linear-style" | 5-6 | 3-4 | 2-3 |
+| "premium consumer / Apple-y / luxury / brand" | 7-8 | 5-7 | 3-4 |
+| "playful / wild / Dribbble / Awwwards / experimental / agency" | 9-10 | 8-10 | 3-4 |
+| "landing page / portfolio / marketing site (default)" | 7-9 | 6-8 | 3-5 |
+| "trust-first / public-sector / regulated / accessibility-critical" | 3-4 | 2-3 | 4-5 |
+| "developer tool / SaaS / dashboard" | 5-6 | 4-5 | 4-6 |
+| "redesign - preserve" | match existing | +1 | match |
+| "redesign - overhaul" | +2 | +2 | match |
+
+### How Dial Values Drive Output
+
+Record these as the DESIGN.md's `dial_values` in the YAML frontmatter. Cross-reference them in every section:
+
+- `VARIANCE` gates layout decisions: centered hero forbidden when >4, asymmetric layouts required when >=8, split-screen and scroll-pinned structures when >=9.
+- `MOTION` gates animation depth: hover-only when <=3, scroll-triggered when >=6, magnetic/spring physics when >=9. Reduced-motion policy mandatory when >3.
+- `DENSITY` gates whitespace and information packing: section gap py-32+ when <=3, py-16 when >=7. Card containers banned when >=7. Data metrics breathe in plain layout.
+
+---
+
+## Design System Honesty Map
+
+Before generating tokens, decide: real design system, or aesthetic direction?
+
+### When a Real Design System Applies (Use Official Packages)
+
+| Brief reads as... | Reach for (official package) | Why |
+|---|---|---|
+| Microsoft / enterprise SaaS / dashboards | `@fluentui/react-components` | Official Fluent UI, accessibility done |
+| Google-ish UI, Material-flavored product | `@material/web` + Material 3 tokens | Official, theme-able |
+| IBM-style B2B / enterprise analytics | `@carbon/react` + `@carbon/styles` | Mature data-density patterns |
+| Shopify app surfaces | `polaris.js` / Polaris React | Required for Shopify admin UI |
+| Atlassian / Jira-style product | `@atlaskit/*` | Official Atlassian DS |
+| GitHub-style devtool / community page | `@primer/css` or `@primer/react-brand` | Official Primer |
+| Public-sector UK service | `govuk-frontend` | Legally expected |
+| US public-sector / trust-first | `uswds` | Same |
+| Modern accessible React foundation | `@radix-ui/themes` | Primitives + polished theme |
+| Modern SaaS with full ownership | shadcn/ui | Owner code, easy to customise |
+| Tailwind-based modern SaaS / AI marketing | Tailwind v4 utilities + `dark:` variant | Default for indie + small teams |
+
+**Honesty rule:** if the brief reads as one of the systems above, install and use the **official** package. Do not recreate its CSS by hand. Do not import a system's tokens but then override 90% of them. **One system per project** -- do not mix Fluent React with Carbon in the same tree.
+
+### When the Brief Is an Aesthetic, Not a System
+
+For these directions, there is **no single official package**. Build with native CSS + Tailwind + a maintained component library. Be honest about what is borrowed inspiration vs. official material.
+
+| Aesthetic | Honest implementation |
+|---|---|
+| Glassmorphism / "frosted glass" | `backdrop-filter`, layered borders, highlight overlays. Solid-fill fallback for `prefers-reduced-transparency`. |
+| Bento (Apple-style tile grids) | CSS Grid with mixed cell sizes. No single library owns this. |
+| Brutalism | Native CSS, monospace, raw borders. No library. |
+| Editorial / magazine | Serif type, asymmetric grid, generous whitespace. No library. |
+| Dark tech / hacker | Mono + accent neon, terminal motifs. No library. |
+| Aurora / mesh gradients | SVG or layered radial gradients. No library. |
+| Kinetic typography | Native CSS animations, scroll-driven animations, GSAP for hijacks. No library. |
+| Apple Liquid Glass | Apple documents for Apple platforms only. **No official `liquid-glass.css`**. Web approximations use `backdrop-filter` + layered borders + highlights. Label as approximation. |
+
+---
+
+## Code Stack Conventions (For Implementation)
+
+When the DESIGN.md is used to generate code (its intended purpose), the following defaults apply unless the Design System Map overrides them:
+
+- **Framework:** React or Next.js. Default to Server Components (RSC). Wrap providers in `"use client"` components. Interactive components (Motion, scroll listeners, pointer physics) MUST be isolated leaves with `'use client'`.
+- **Styling:** Tailwind v4 (default). v3 only if the existing project demands it. For v4: use `@tailwindcss/postcss` or the Vite plugin, NOT the `tailwindcss` plugin in `postcss.config.js`.
+- **Animation:** Motion (`import { motion } from "motion/react"`). `framer-motion` still works as legacy alias -- prefer `motion/react` in new code.
+- **Fonts:** Always `next/font` (Next.js) or self-host with `@font-face` + `font-display: swap`. Never link Google Fonts via `<link>` in production.
+- **Icons (priority order):** `@phosphor-icons/react`, `hugeicons-react`, `@radix-ui/react-icons`, `@tabler/icons-react`. Discouraged: `lucide-react` (acceptable only when user explicitly asks or project depends on it). One family per project.
+- **State:** Local `useState`/`useReducer` for isolated UI. Global state (Zustand, Jotai, React context) only for deep prop-drilling. **Never** `useState` for continuous values (mouse position, scroll progress) -- use Motion's `useMotionValue`/`useTransform`/`useScroll`.
+- **Dependency Verification (mandatory):** Before importing any 3rd-party library, check `package.json`. If missing, output the install command first. Never assume a library exists.
+
+---
+
+## Absolute Refusals (Match and Rewrite -- ALL Workflows)
+
+The following patterns must NEVER appear in any generated DESIGN.md or its derivative code. If you detect yourself about to produce one, refuse and rewrite with different structure.
+
+### Color Refusals
+
+- **AI-purple/blue glow gradients as default bg.** No automatic purple button glows, no random neon gradients. One accent color, saturation < 80%.
+- **Cream/sand/beige/paper body bg.** The warm-neutral band (OKLCH L 0.84-0.97, C < 0.06, hue 40-100) is banned as default. Includes `#f5f1ea`, `#f7f5f1`, `#fbf8f1`, `#efeae0`, `#ece6db`, `#faf7f1`, `#e8dfcb`. "Warmth" is carried by accent + typography + imagery, not body bg.
+- **Premium-consumer beige+brass+oxblood palette.** Banned hex families: `#f5f1ea`/bone bg, `#b08947`/brass accent, `#b6553a`/clay, `#9a2436`/oxblood, `#1a1714`/espresso text. Rotate to cold luxury, forest, cobalt+cream, or pure monochrome+pop.
+- **Multiple accent colors.** One per project. A warm-grey site does not suddenly get a blue CTA in section 7.
+- **Pure #000000 or #ffffff.** Always use tinted off-black / off-white.
+
+### Typography Refusals
+
+- **Inter as default.** Pick Geist, Outfit, Cabinet Grotesk, Satoshi, or a brand-appropriate alternative first. Inter is acceptable ONLY when the user explicitly asks for neutral/Linear-style or public-sector.
+- **Fraunces and Instrument_Serif as defaults.** The two LLM-favorite display serifs -- banned as automatic choices.
+- **Serif as default for any project.** Serif is only acceptable when the brand brief literally names a serif font, OR the aesthetic family is genuinely editorial/luxury/publication/heritage. Default sans-serif display always.
+- **Mixed-family emphasis.** Do not inject a serif word into a sans headline. Use italic or bold of the SAME font.
+- **Gradient text** (`background-clip: text` + gradient). Use a single solid color. Emphasis via weight or size.
+
+### Layout Refusals
+
+- **Side-stripe borders.** `border-left`/`border-right` > 1px as a colored accent on cards, list items, or callouts. Rewrite with full borders, background tints, or nothing.
+- **Identical card grids.** Same-sized cards with icon + heading + text repeated endlessly. At most one such grid per page, and only when it genuinely communicates information hierarchy.
+- **Eyebrow on every section.** The small uppercase wide-tracking label above each heading. Maximum 1 eyebrow per 3 sections.
+- **Numbered section markers as default scaffolding.** `01 . About / 02 . Process / 03 . Pricing` above every section. Numbers only when the section IS a genuine sequence.
+- **Hero overflowing viewport.** Headline > 2 lines, subtext > 20 words, CTA not visible without scroll -- all failures.
+- **Hero top padding > pt-24 (about 6rem) at desktop.** More reads as a layout bug, not intentional space.
+- **3 equal feature cards in a row.** The most generic AI layout pattern.
+- **Zigzag alternation beyond 2 consecutive sections.** Max 2 image+text splits in a row.
+- **Split-header as default** (left big headline + right small explainer). Stack vertically instead.
+- **Navigation > 1 line at desktop, height > 80px.** Two-line nav is broken design.
+- **Glassmorphism as default.** One frosted-glass element per page max.
+
+### Content Refusals
+
+- **Em dashes.** Use commas, colons, semicolons, periods, or parentheses instead of em-dashes (---/--).
+- **AI marketing buzzwords.** The streamline / empower / supercharge / leverage / unleash / transform / seamless / world-class / enterprise-grade / next-generation / cutting-edge / game-changer / mission-critical family.
+- **Aphoristic-cadence body copy.** "Serious statement, then punchy short negation" recurring across sections.
+- **Duplicate CTA intent.** "Get in touch" + "Contact us" + "Let's talk" + "Start a project" on the same page -- pick ONE label.
+
+### Component Refusals
+
+- **Div-based fake screenshots.** A "hand-built product preview" rendered with `<div>` rectangles, fake task lists, or fake dashboards. Use real images, generated images, or explicit placeholder slots.
+- **Hand-rolled decorative SVGs** (custom illustrations, wavy doodles, feTurbulence paper grain). Ship no illustration rather than amateur SVG.
+- **Fake-engineering-precise numbers** (92%, 4.1x, 48k without real data sources).
+- **Text-only hero** (headline + gradient blob). Hero needs a real visual asset.
+- **Empty cells in bento grids.** A bento grid has EXACTLY as many cells as content items. No filler tiles.
+
+---
+
+## Shared Enrichment Pipeline (Steps A3-A5 / B4-B6 / C4-C6)
+
+After the base DESIGN.md exists (fetched, extracted, or generated), run this shared pipeline. Steps are identical across all workflows.
+
+### Enrichment Step 1: Expand Every Section
+
+Read `reference/design-template.md`. For each section of the base DESIGN.md, add the following depth:
+
+- **Colors**: Add semantic roles for every hex value (never "blue: #0064E0" -- always "Primary CTA (#0064E0): all purchase buttons, signup CTAs, active nav links"). Add forbidden hex families from the Absolute Refusals above. Document the neutral system choice (cool-zinc / warm-stone / true-slate) and chroma tint (0.005-0.015 toward brand hue). Enforce one-accent constraint.
+- **Typography**: Add scale ratio (>=1.25 between steps), hero clamp ceiling (max 6rem = ~96px), tracking floor (>= -0.04em), banned defaults (Inter, Fraunces, Instrument_Serif), serif discipline rules, italic descender clearance (leading-[1.1] + pb-1 for y/g/j/p/q in display italic). Cap font families at 3. Set body max-width at 65ch.
+- **Shape & Elevation**: Document corner-radius scale (one system per page: all-sharp / all-soft-12-16px / all-pill). Shadow tint rule (tint to background hue, never pure black). Card usage constraint: cards only when elevation communicates real hierarchy; banned entirely when VISUAL_DENSITY > 7. Forbidden: border-radius > 16px on cards/sections, ghost-card pattern (1px border + soft wide shadow on the same element).
+- **Spacing**: Document base unit (8px default, 4px dense, 10px editorial). Hero top padding cap: pt-24 max at desktop. Section gap defaults (py-24 to py-32). Card padding range (p-6 to p-8).
+- **Layout**: Document max-width container (max-w-[1400px] or max-w-7xl), breakpoints (sm 640, md 768, lg 1024, xl 1280, 2xl 1536). Viewport stability: min-h-[100dvh] never h-screen. Grid over flex-math: CSS Grid for 2D, Flexbox for 1D, never complex flexbox percentage math. Hero constraints: headline <=2 lines, subtext <=20 words/<=4 lines, max 4 text elements (eyebrow OR brand strip + headline + subtext + CTAs). Forbidden layout patterns: centered hero when VARIANCE > 4, 3 equal cards, zigzag beyond 2 consecutive, eyebrow on >1/3 of sections, split-header as default.
+- **Components**: For buttons: 44-48px height, verb+object label <=3 words fits one line, WCAG AA contrast check, active tactile feedback (scale-[0.98]), no duplicate CTA intent. For inputs: label above input, never placeholder-as-label, WCAG AA on all parts. For cards: omit in favor of spacing; bento cells need real visual variation in 2-3 cells. Logo wall: under hero never inside, logos only no category labels, SVG from Simple Icons CDN. Navigation: 64-72px height cap 80px, single line at desktop.
+- **Motion**: Document intensity (from dial), exponential ease-out curve (cubic-bezier(0.16, 1, 0.3, 1)), no bounce/elastic. Reduced-motion policy mandatory when intensity > 3. Animate only transform + opacity (never top/left/width/height). No window.addEventListener('scroll') -- use Motion useScroll / ScrollTrigger / IntersectionObserver. Max one marquee per page. Every animation must have a one-sentence purpose.
+- **Imagery**: Priority: gen-tool -> Picsum seed (https://picsum.photos/seed/{descriptive-seed}/{w}/{h}) -> explicit placeholder slots. Minimum 2-3 real images even for minimalist sites. Logo source: Simple Icons CDN (https://cdn.simpleicons.org/{slug}/ffffff). Banned: div-based fake screenshots, hand-rolled decorative SVGs, text+gradient blob as hero, fake-engineering-precise numbers.
+- **Dark Mode**: Required. Strategy: Tailwind `dark:` variant or CSS variables. One theme per page, no section-level inversion. No pure black, no pure white.
+- **Theme Lock**: One accent across all sections. One corner-radius system. One palette (don't fluctuate between warm and cool grays). One theme per page.
+
+### Enrichment Step 2: Inject Anti-Patterns
+
+Read `reference/anti-patterns.md`. Match the brand to its category (a brand may belong to multiple categories -- e.g., Linear = Developer Tools + Dark Mode + Minimalist). Merge the warnings and pick the 3-5 most relevant. Inject as:
+
+```markdown
+## Anti-Patterns for This Brand
+
+When using this DESIGN.md, the most common AI mistakes are:
+1. **<title>**: <what the AI does wrong> -> <what to do instead>.
+...
+```
+
+### Enrichment Step 3: Append Pre-Ship Checklist
+
+Read `reference/preflight-checklist.md`. Append the complete 12-item checklist. If any item cannot be ticked for the current DESIGN.md, fix it before delivering.
+
+### Enrichment Step 4: Run the AI Slop Test
+
+Before delivering, run the two-altitude reflex check:
+
+**First-order:** If someone could guess the theme + palette from the category alone (e.g., "fintech = blue + white, AI = purple glow, premium consumer = beige + brass"), rework the color strategy until the answer isn't obvious from the domain.
+
+**Second-order:** If someone could guess the aesthetic family from category-plus-anti-references ("AI workflow tool that's not SaaS-cream -> editorial-typographic", "fintech that's not navy-and-gold -> terminal-native dark mode"), rework until both answers are not obvious.
+
+If either check fails, redo the color selection or aesthetic direction. This is not optional.
+
+### Enrichment Step 5: Deliver
+
+Tell the user:
+- The key design decisions (primary color, font stack, vibe, dial values)
+- Where the file was saved (`./DESIGN.md`)
+- If any values were inferred (mark them clearly)
+- Any decisions the user may want to override
+
+---
+
+## Workflow A: Brand Template (73 brands => deep DESIGN.md)
+
+### Step A1: User Picks a Brand
+
+Show the Selection Guide at the bottom of this file to help the user choose. Or they can name any brand from the catalog. The Brief Inference (Section 0) already produced a Design Read -- use it to recommend 2-3 best-fit brands before asking the user to pick.
+
+### Step A2: Fetch the Base DESIGN.md
+
+```bash
+# Primary: your fork
+curl -sL "https://raw.githubusercontent.com/Li-Charles-One/awesome-design-md/main/design-md/<slug>/DESIGN.md" -o ./DESIGN.md
+
+# Fallback: upstream
+curl -sL "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/<slug>/DESIGN.md" -o ./DESIGN.md
+```
+
+Alternatively, use the bundled script:
+```bash
+python scripts/fetch_design_md.py <brand> ./DESIGN.md
+```
+
+### Step A3: Infer Customizations
+
+After fetching the base DESIGN.md, read it and infer:
+
+1. **Dial values**: What VARIANCE / MOTION / DENSITY does this brand's aesthetic suggest? Use the Dial Inference Table above. Record these in the YAML frontmatter as `dial_values:`.
+2. **Design system mapping**: Does this brand correspond to a real design system (Honesty Map above)? If so, note it. If not, note the honest implementation approach.
+3. **Stack convention**: Note any overrides to the default code stack (rare for these brands, but possible).
+
+### Step A4: Run Shared Enrichment Pipeline
+
+Execute all five Enrichment Steps from the Shared Pipeline above.
+
+---
+
+## Workflow B: Reverse-Engineer a Website
+
+### Step B1: Fetch the Page
+
+Use `web_fetch` to grab the rendered page content. Extract HTML/CSS signals from the response. If a Firecrawl CLI is available, use it for richer extraction:
+
+**B1-alt (Firecrawl if available):**
+```bash
+firecrawl scrape "<url>" --format rawHtml,branding,screenshot --only-main-content --wait-for 3000 -o .firecrawl/design-data.json --json --pretty
+```
+
+After scraping, spot-check with quick greps:
+```bash
+# Dominant font
+grep -oP "font-family:\s*[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
+
+# Border-radius patterns
+grep -oP "border-radius:\s*\d+px" .firecrawl/design-data.json | sort | uniq -c | sort -rn
+
+# All hex colors
+grep -oP "#[0-9a-fA-F]{3,8}" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -15
+```
+
+If the page requires login or interaction:
+```bash
+firecrawl scrape "<url>"
+firecrawl interact --prompt "Click the login button, then fill credentials"
+firecrawl scrape "<url>" --format rawHtml,branding,screenshot --only-main-content --wait-for 3000 -o .firecrawl/design-data.json --json --pretty
+```
+
+### Step B2: Extract Design Tokens
+
+Work through each dimension systematically. For every value, assign a **semantic role** -- never just "blue: #0064E0" but "Primary CTA (#0064E0) -- all purchase buttons, signup CTAs, active nav links."
+
+**Colors**: Map recurring hex values to semantic roles. Count occurrences to separate signal from noise. Identify the color system: monochrome+accent, multi-accent, gradient-driven.
+
+**Typography**: Identify dominant font family, build the size scale, note weight patterns, measure line-height. Detect if the site uses a proprietary font and note the CDN substitution.
+
+**Spacing**: Extract section gaps, card padding, button padding. Detect grid base unit (8px, 10px, 12px).
+
+**Components**: For buttons, cards, inputs, nav -- extract border-radius, min-height, padding, shadow formulas, focus ring styles. Note variants (solid vs outline vs ghost).
+
+**Shapes & Elevation**: Map the 2-3 most common border-radius values to sm/md/lg. Count distinct box-shadow values to build an elevation scale.
+
+**Dial inference**: Based on the extracted patterns, infer VARIANCE (layout symmetry vs asymmetry), MOTION (presence and intensity of animations), and DENSITY (information per viewport, section padding). Note: extraction can't always get MOTION -- infer from the brand category when uncertain.
+
+**Design system detection**: Does the site use a recognizable design system (Material, Fluent, Carbon, Primer, GOV.UK)? If yes, note it for the Honesty Map.
+
+### Step B3: Generate the Deep DESIGN.md
+
+Use `reference/design-template.md` as the structure. Fill every section from the extracted tokens. Where extraction can't determine a value, apply the defaults from the template and mark with `<!-- inferred -->`.
+
+### Step B4: Run Shared Enrichment Pipeline
+
+Execute all five Enrichment Steps from the Shared Pipeline above.
+
+### Limitations
+
+- `web_fetch` extracts rendered text -- CSS values may be partial. Firecrawl gives richer data.
+- Interactive states (hover, focus, active) are inferred from class name patterns, not directly observed.
+- For highly dynamic SPAs, increase `--wait-for` or use `firecrawl interact`.
+- The dial values for MOTION are the hardest to extract -- infer from the brand category when the site doesn't signal clearly.
+
+---
+
+## Workflow C: AI Recommendation (No Brand Reference)
+
+### Step C1: Understand the Product
+
+If not already captured during Brief Inference, ask for: industry, product type, target audience. Examples:
+- Medical SaaS platform, admin backend for doctors
+- Sports brand e-commerce, selling running shoes and fitness gear
+- Children's education app, targeting parents
+
+### Step C2: Reason Through the Design Direction
+
+Based on the product description and Brief Inference, systematically reason:
+
+1. **Register**: Is this brand (design IS the product -- landing page, marketing) or product (design SERVES the product -- dashboard, tool, app)?
+2. **Vibe**: What aesthetic family fits? Pick from: minimalist/Linear-style, premium-consumer/Apple-y, playful/creative, editorial/luxury, dark-tech, trust-first/public-sector, brutalist/industrial, soft/warm-consumer.
+3. **Dial values**: Set DESIGN_VARIANCE, MOTION_INTENSITY, VISUAL_DENSITY using the Dial Inference Table. Justify each value in one sentence tied to the product audience.
+4. **Design system**: Does the product map to a real design system (Honesty Map)? If the brief reads "enterprise B2B dashboard," reach for Carbon or Fluent. If "modern SaaS," shadcn/ui or Tailwind v4. If "creative agency landing page," native CSS + aesthetic direction.
+5. **Closest brand match**: Which brand(s) from the 73-brand catalog are closest in spirit? Name 2-3 with one-line justifications.
+
+### Step C3: Generate the DESIGN.md
+
+Two paths, based on closeness to existing brands:
+
+- **Path C3a (close match exists)**: Fetch the closest brand's DESIGN.md via Workflow A Step A2, then adjust the token values to match the product's specific needs. Change the brand name, adjust accents, swap fonts if needed. Mark changed values with `<!-- adapted from <brand> -->`.
+
+- **Path C3b (genuinely unique)**: Build a fresh DESIGN.md directly from `reference/design-template.md`. Fill every section with the recommended direction. Mark all values as `<!-- generated from product type -->`.
+
+### Step C4: Run Shared Enrichment Pipeline
+
+Execute all five Enrichment Steps from the Shared Pipeline above.
+
+---
 
 ## Brand Catalog (73 brands)
 
@@ -58,295 +414,21 @@ Apple, Dell (1996), HP, IBM, NVIDIA, Pinterest, PlayStation, SpaceX, Spotify, Th
 ### Automotive
 BMW, BMW M, Bugatti, Ferrari, Lamborghini, Renault, Tesla
 
-## How to Use
-
-### Method 1: Fetch from GitHub (recommended)
-
-```bash
-# Clone the collection
-# Clone the collection (uses your fork as primary, falls back to upstream)
-git clone --depth 1 https://github.com/Li-Charles-One/awesome-design-md /tmp/awesome-design-md
-
-# Copy desired brand's DESIGN.md to project root
-cp /tmp/awesome-design-md/design-md/apple/DESIGN.md ./DESIGN.md
-```
-
-### Method 2: Direct download
-
-```bash
-# Download a specific brand
-curl -sL "https://raw.githubusercontent.com/Li-Charles-One/awesome-design-md/main/design-md/apple/DESIGN.md" -o ./DESIGN.md
-```
-
-### Method 3: On-demand fetch script
-
-```bash
-# Use the bundled script
-python scripts/fetch_design_md.py apple ./DESIGN.md
-```
-
-## Workflow
-
-1. **User picks a brand** (or describes desired aesthetic)
-2. **Agent fetches DESIGN.md** from GitHub
-3. **Drop into project root** (`./DESIGN.md`)
-4. **Claude Code / coding agent** reads it automatically
-5. **Generated UI follows brand rules** — colors, fonts, spacing, components
-
-## Custom DESIGN.md
-
-If no brand matches, create a custom one following Google's spec:
-
-```markdown
-# Design System
-
-## Colors
-- Primary: #007AFF
-- Background: #FFFFFF
-- Text: #1D1D1F
-
-## Typography
-- Font: SF Pro Display
-- Headings: 48px bold
-- Body: 17px regular
-
-## Spacing
-- Unit: 8px
-- Section gap: 48px
-
-## Components
-- Buttons: rounded-lg, 44px height
-- Cards: rounded-xl, shadow-md
-
-## Motion
-- Duration: 200ms ease
-- Easing: cubic-bezier(0.25, 0.1, 0.25, 1)
-```
-
-## Fallback Strategy
-
-Primary: fetch from your fork (`Li-Charles-One/awesome-design-md`). If that fails, fall back to the upstream (`VoltAgent/awesome-design-md`). Once a DESIGN.md is placed in the project root, it has zero external dependencies.
-
-## Pitfalls
-
-### ⚠️ DESIGN.md Must Be in Project Root
-AI agents look for `./DESIGN.md` at the project root, not in subdirectories.
-
-### ⚠️ Not All Brands Have Equal Detail
-Some DESIGN.md files are more comprehensive than others. Apple/Stripe/Vercel are very detailed; smaller brands may be simpler.
-
-### ⚠️ Custom Overrides
-If you have both `DESIGN.md` and custom CSS/tokens, the agent may conflict. Keep DESIGN.md as the single source of truth.
-
----
-
-## Workflow B: Reverse-engineer a live website
-
-When the user provides a URL or asks to reverse-engineer a site's design. Uses Firecrawl CLI — handles JS-rendered SPAs, extracts branding info natively.
-
-### Step 1: Scrape with Firecrawl (one command, all formats)
-
-```bash
-firecrawl scrape "<url>" \
-  --format rawHtml,branding,screenshot \
-  --only-main-content \
-  --wait-for 3000 \
-  -o .firecrawl/design-data.json \
-  --json --pretty
-```
-
-| Flag | Purpose |
-|---|---|
-| `rawHtml` | Full rendered HTML — extract class names, inline styles, component structure |
-| `branding` | Firecrawl's AI brand extraction — colors, fonts, tone, logos |
-| `screenshot` | Visual reference — verify extracted tokens match the actual page |
-| `--only-main-content` | Strip nav/footer noise, focus on the design system body |
-| `--wait-for 3000` | Wait for JS frameworks to hydrate. Bump to 5000 for heavy SPAs |
-| `--json --pretty` | Structured output for parsing |
-
-After the scrape, do a quick grep on the raw HTML to spot recurring patterns:
-
-```bash
-# Find the dominant font
-grep -oP "font-family:\s*[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
-
-# Find border-radius patterns
-grep -oP "border-radius:\s*\d+px" .firecrawl/design-data.json | sort | uniq -c | sort -rn
-
-# Find box-shadow levels
-grep -oP "box-shadow:\s*[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
-
-# Find all hex colors used
-grep -oP "#[0-9a-fA-F]{3,8}" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -15
-```
-
-If the page requires login or interaction:
-```bash
-firecrawl scrape "<url>"
-firecrawl interact --prompt "Click the login button, then fill credentials"
-firecrawl scrape "<url>" --format rawHtml,branding,screenshot --only-main-content --wait-for 3000 -o .firecrawl/design-data.json --json --pretty
-```
-
-### Step 2: Extract design tokens
-
-Work through each dimension systematically:
-
-**Colors** — cross-reference `branding` output with hex grep results:
-- Map every recurring hex to a semantic role. A color that appears on every `<button>` = primary CTA. The most common text color = ink.
-- Count occurrences to separate signal from noise (one-off colors are likely errors)
-- Identify the color system: monochrome + single accent? multi-accent? gradient-driven?
-
-**Typography** — from `branding` output + font-family grep:
-- Dominant font family (body) vs accent font (headings)
-- Build the scale: what sizes appear? Look for ratios (1.25x, 1.33x, 1.5x between levels)
-- Weight pattern: bold for headings, regular for body? Or light-and-airy?
-- Line-height: is it tight (1.1-1.2 for headings) or comfortable (1.5-1.6 for body)?
-
-**Spacing** — from `rawHtml`:
-- Section gaps: look for `padding-top`, `padding-bottom`, `margin-bottom` on large containers
-- Card padding: the most common `padding` value inside card-like containers
-- Button padding: `padding` on `<button>` or `.btn-*` elements
-- Grid: detect if the site uses a consistent grid (8px, 10px, 12px base unit)
-
-**Components** — from `rawHtml`, grep for recurring class name patterns:
-- Buttons: dominant border-radius, min-height, padding. Note variants (solid vs outline vs ghost)
-- Cards: shadow formula, border style, rounding. Is there a single pattern or a hierarchy?
-- Inputs: border color, border-radius, height. Focus ring color/style if visible
-- Navigation: is it sticky? What background? What's the link spacing?
-
-**Shapes & Elevation** — from `rawHtml`:
-- Border-radius: the 2-3 most common values → map to sm/md/lg
-- Shadows: count distinct box-shadow values → build elevation scale
-- Border style: are borders common? What color and width?
-
-**Semantic mapping** — the critical step. Every extracted value gets a role:
-- Don't: `blue: #0064E0`
-- Do: `Primary CTA (#0064E0) — all purchase buttons, signup CTAs, active nav links`
-
-### Step 3: Write the DESIGN.md
-
-Output a complete DESIGN.md file following Google's YAML+Markdown spec. The `branding` output gives you the token values; the `rawHtml` output gives you the component patterns. Combine both into:
-
-```markdown
----
-version: alpha
-name: <site-name>-design-analysis
-description: <one-sentence site description + design vibe from branding output>
-colors:
-  primary: "#xxxxxx"
-  background: "#xxxxxx"
-  ink: "#xxxxxx"
-  ...
-typography:
-  display: { fontFamily: "...", fontSize: "...", fontWeight: ... }
-  h1: { ... }
-  body: { ... }
-rounded:
-  sm: "..."
-  md: "..."
-spacing:
-  sm: "..."
-  md: "..."
----
-
-## Overview
-<2-3 sentences describing the visual atmosphere>
-
-## Colors
-<semantic name | hex | role table>
-
-## Typography
-<level | font | size | weight | line-height table>
-
-## Components
-<button, card, input, nav patterns with states>
-
-## Do's and Don'ts
-<3-5 guardrails derived from observed patterns>
-```
-
-### Step 4: Save + apply
-
-Write the generated DESIGN.md to `./DESIGN.md` in the project root. Tell the user it's ready and what the key design decisions are (primary color, font stack, vibe).
-
-### Limitations
-
-- Firecrawl extracts computed styles — matches what users see, not necessarily internal design tokens.
-- Interactive states (hover, focus, active) are inferred from class name patterns, not directly observed.
-- The `branding` format is a best-effort AI analysis; always spot-check against the raw HTML.
-- For highly dynamic SPAs, increase `--wait-for` or use `firecrawl interact`.
-
----
-
-## Workflow C: Generate from product type (via UI UX Pro Max)
-
-When the user doesn't know what brand to reference or what style fits their product.
-
-### Step 1: Ask what they're building
-
-Get a short description: industry, product type, target audience. Examples:
-- 「医疗 SaaS 平台，给医生用的管理后台」
-- 「运动品牌电商，卖跑鞋和健身装备」
-- 「儿童教育 App，面向家长」
-
-### Step 2: Run UI UX Pro Max design system generator
-
-```bash
-python3 skills/ui-ux-pro-max/scripts/search.py "<product description>" --design-system -f markdown
-```
-
-If the skill is installed elsewhere, find `search.py` under the community-skill-hub path or the upstream repo.
-
-This outputs a complete design recommendation:
-- **Layout pattern** (hero-centric, dashboard-grid, etc.)
-- **UI style** (glassmorphism, minimalism, soft UI, etc.)
-- **Color palette** (primary, background, accent, text with hex values)
-- **Typography pairing** (display + body fonts with Google Fonts URL)
-- **Key effects** (shadows, transitions, interactions)
-- **Anti-patterns to avoid** (industry-specific don'ts)
-
-### Step 3: Convert to DESIGN.md
-
-Take the UI UX Pro Max output and translate it into a standard DESIGN.md file:
-
-```
-UI UX Pro Max output          →  DESIGN.md
-─────────────────────────────────────────
-Style: "Soft UI Evolution"    →  Overview section (design atmosphere)
-Primary: #E8B4B8             →  colors.primary in YAML front matter
-Typography: Cormorant / Montserrat → typography section
-Key effects: soft shadows     →  Components section (button/card patterns)
-Anti-patterns: no neon        →  Do's and Don'ts section
-```
-
-### Step 4: Save + apply
-
-Write the generated DESIGN.md to `./DESIGN.md`. Tell the user the key design decisions and offer to refine anything they don't like. Then suggest calling `frontend-design` to build the actual UI.
-
-### Example flow
-
-```
-User: "我要做个宠物医院的管理系统，不知道长什么样"
-  ↓
-Step 1: 识别 → 医疗 + 宠物 + 管理后台
-Step 2: search.py "veterinary clinic management dashboard" --design-system
-Step 3: 输出 → Soft UI, 暖绿配奶油白, M PLUS Rounded 1c + Inter
-Step 4: 写成 DESIGN.md, 建议 frontend-design 实现
-```
-
 ---
 
 ## Font Substitutions
 
 Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alternatives:
 
-| 原始字体 | CDN 替代 | 特征 |
-|---------|---------|------|
-| Geist | Geist (Google Fonts) | 几何、紧凑 |
-| sohne-var (Stripe) | Source Sans 3 | 轻盈优雅 |
-| Airbnb Cereal | DM Sans | 圆润友好 |
-| Circular (Spotify) | DM Sans | 几何温暖 |
-| figmaSans | Inter | 干净人文 |
+| Original Font | CDN Alternative | Character |
+|:--|:--|:--|
+| Geist | Geist (Google Fonts) | Geometric, compact |
+| sohne-var (Stripe) | Source Sans 3 | Light, elegant |
+| Airbnb Cereal | DM Sans | Rounded, friendly |
+| Circular (Spotify) | DM Sans | Geometric, warm |
+| figmaSans | Inter | Clean, humanist |
+
+---
 
 ## Selection Guide
 
@@ -358,9 +440,19 @@ Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alter
 - **Playful / friendly**: PostHog, Figma, Lovable, Zapier, Miro
 - **Premium / luxury**: Apple, BMW, Stripe, Superhuman, Revolut
 
+---
+
+## Fallback Strategy
+
+Primary: fetch from Li-Charles-One/awesome-design-md. Fallback: VoltAgent/awesome-design-md. Once a DESIGN.md is placed in the project root, it has zero external dependencies -- it's a standalone Markdown file any AI agent can read.
+
+---
+
 ## References
 
-- **Google Stitch spec**: https://stitch.withgoogle.com/docs/design-md/overview/
-- **Your fork (primary)**: https://github.com/Li-Charles-One/awesome-design-md
+- **Google DESIGN.md spec**: https://stitch.withgoogle.com/docs/design-md/overview/
+- **Fork (primary)**: https://github.com/Li-Charles-One/awesome-design-md
 - **Upstream (fallback)**: https://github.com/VoltAgent/awesome-design-md
 - **Online catalog**: https://getdesign.md
+- **Anti-slop rules**: taste-skill by Leonxlnx (https://github.com/Leonxlnx/taste-skill)
+- **Impeccable design language**: https://github.com/pbakaus/impeccable
