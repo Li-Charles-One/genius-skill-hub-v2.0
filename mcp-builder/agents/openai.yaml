@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP Builder"
+  short_description: "Build and evaluate MCP servers"
+  default_prompt: "Use $mcp-builder to design, implement, test, and evaluate an MCP server for this external API or service."

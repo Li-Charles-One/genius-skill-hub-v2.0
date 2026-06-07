@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub CLI"
+  short_description: "Check, install, and use gh"
+  default_prompt: "Use $github-cli to verify `gh` is installed and authenticated, then run the requested GitHub CLI task."

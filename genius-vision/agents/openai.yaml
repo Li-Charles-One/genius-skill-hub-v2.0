@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Vision"
+  short_description: "Analyze images and videos via doubao vision API — OCR, UI review, chart data, video frame analysis"
+  default_prompt: "Use $genius-vision to analyze this image or video file. Auto-detects video by extension (.mp4/.mov/.avi/.mkv/.webm). Choose mode: describe, ocr, ui-review, chart-data, object-detect, compare, video-summary, video-ocr, video-review, or video-frame-analysis."
