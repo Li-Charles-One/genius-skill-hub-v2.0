@@ -1,5 +1,0 @@
-interface:
-  display_name: "Genius Code Audit"
-  short_description: "Diff or full code audit with HTML reports"
-  default_prompt: "Use $genius-code-audit to audit this repository in diff mode against origin/main and save the HTML report."
-  brand_color: "#F85149"

@@ -1,6 +1,0 @@
-interface:
-  display_name: "Genius Skill Creator"
-  short_description: "Build, validate, and evaluate skills"
-  icon_small: "./assets/skill-creator-small.svg"
-  icon_large: "./assets/skill-creator.png"
-  default_prompt: "Use $genius-skill-creator to create, repair, validate, evaluate, or optimize a Codex/Claude-style skill."

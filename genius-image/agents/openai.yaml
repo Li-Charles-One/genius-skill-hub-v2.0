@@ -1,4 +1,0 @@
-interface:
-  display_name: "Genius Image"
-  short_description: "Generate images and visual assets"
-  default_prompt: "Use $genius-image to generate an image, pick the right model and aspect ratio, and return the result."
