@@ -89,9 +89,36 @@ imageSize: 1K / 2K / 4K
 
 ## 流程
 
-> **OS 实测**: Windows (PowerShell) ✅ · macOS/Linux (bash) 未实测，预期可移植
+> **OS 实测**: Windows (Python / PowerShell) ✅ · macOS/Linux (Python) 未实测，预期可移植
 >
-> 执行请求前先确认 `GRSAI_API_KEY` 已在当前进程环境中。Windows PowerShell 优先用 `python`/`Invoke-RestMethod`，Unix shell 可用 `python3`/`curl`。
+> 首选 `scripts/generate.py`（跨平台，一行命令）。curl / PowerShell 示例作为参考备用。
+
+### 首选：Python 脚本
+
+```bash
+# 单张
+python scripts/generate.py "提示词"
+
+# 批量（并发）
+python scripts/generate.py "提示词1" "提示词2" "提示词3" --concurrency 3
+python scripts/generate.py --batch prompts.txt --model gpt-image-2-vip --concurrency 5
+
+# 异步轮询（长耗时单张）
+python scripts/generate.py "提示词" --async
+
+# 参考图
+python scripts/generate.py "提示词" --ref image.png
+python scripts/generate.py "提示词" --ref https://example.com/ref.png
+
+# JSON 输出
+python scripts/generate.py "提示词" --json
+```
+
+详细选项: `python scripts/generate.py --help`。
+
+执行前确认 `GRSAI_API_KEY` 已在环境变量或 `~/.codex/.env` 中。
+
+### 备选：curl / PowerShell 直连
 
 PowerShell 如需加载 `$HOME/.codex/.env`：
 
