@@ -15,7 +15,7 @@ prompt as ground truth and displayed in the output for verification.
 
 Environment:
     ARK_API_KEY    — Volcengine Ark API key (required)
-    VISION_MODEL   — Model name (default: doubao-seed-2.0-lite)
+    VISION_MODEL   — Model name (default: doubao-seed-2.0-lite-260428)
 """
 
 import argparse

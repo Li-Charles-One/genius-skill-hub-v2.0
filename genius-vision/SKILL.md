@@ -146,16 +146,15 @@ Default: 火山引擎 Ark (doubao-seed-2.0-lite)
 | Env Variable | Description | Default |
 |---|---|---|
 | `ARK_API_KEY` | Volcengine Ark API key | (required) |
-| `VISION_MODEL` | Model name | `doubao-seed-2.0-lite` |
+| `VISION_MODEL` | Model name | `doubao-seed-2.0-lite-260428` |
 | `VISION_BASE_URL` | API base URL | `https://ark.cn-beijing.volces.com/api/coding/v3` |
 
 ### Quality Levels
 
 | Level | Model | Speed | Cost |
 |---|---|---|---|
-| fast | doubao-seed-2.0-lite | ~1s | Free tier |
-| balanced | doubao-seed-2.0 | ~2s | Low |
-| best | doubao-seed-2.0-pro | ~3s | Medium |
+| fast | doubao-seed-2.0-lite-260428 | ~1s | Free tier |
+| best | doubao-seed-2.0-pro-260215 | ~3s | Medium |
 
 Set via `VISION_MODEL` env or pass `--model` flag.
 
