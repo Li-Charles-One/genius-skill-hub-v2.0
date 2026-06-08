@@ -238,7 +238,7 @@ def analyze_media(
     if not api_key:
         raise ValueError("ARK_API_KEY not found. Set env var or create .env file.")
 
-    model = model or os.environ.get("VISION_MODEL", "doubao-seed-2.0-lite")
+    model = model or os.environ.get("VISION_MODEL", "doubao-seed-2.0-lite-260428")
     base_url = base_url or os.environ.get(
         "VISION_BASE_URL", "https://ark.cn-beijing.volces.com/api/coding/v3"
     )

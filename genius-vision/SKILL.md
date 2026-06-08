@@ -139,7 +139,7 @@ echo 'ARK_API_KEY=your-key' > /path/to/genius-vision/scripts/.env
 ## Configuration
 
 ### API Provider
-Default: 火山引擎 Ark (doubao-seed-2.0-lite)
+Default: 火山引擎 Ark (doubao-seed-2.0-lite-260428)
 
 **⚠️ Volcengine Ark 端点陷阱**：coding 端点用 `/api/coding/v3`，不要用 `/api/v3`（会 404）。
 
