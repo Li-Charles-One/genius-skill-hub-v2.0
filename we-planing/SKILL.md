@@ -105,6 +105,13 @@ If WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you wa
 - Keep memory concise: facts, decisions, files, verification, blockers, and exact next step.
 - If check fails: stop, inspect the error, repair or correct the files, then rerun check.
 - For exact schema details, read `references/weplaning-v2.3-protocol.md`.
+- **项目类型与同步策略**：
+  - 初始化时判断项目类型：扫描目录是否有代码文件（.js/.py/.ts/.go 等），询问用户项目用途，综合判断
+  - **有代码** → 必须 git 管理代码版本，WePlaning 管项目状态，git 管代码
+  - **无代码（ops/doc）** → WePlaning 独立工作，同步交给外部工具（Syncthing 等）
+  - 过程中出现代码文件 → 引入 git
+  - 多端多地同步工具（Syncthing、坚果云、网盘等）的选择和配置不是 WePlaning 的职责，WePlaning 只管 `.agent-memory/` 状态
+  - 将项目类型和同步配置记录到 `CURRENT.md` 的 `Project Config` 部分，方便后续 Agent 接力时读取
 
 ## Pitfalls
 
