@@ -1,0 +1,47 @@
+{
+  "skill_name": "genius-image",
+  "evals": [
+    {
+      "id": "single-image-basic",
+      "prompt": "帮我生成一张图：一只可爱的柴犬坐在樱花树下",
+      "expected_output": "If this is the first generation request in the session, runs `--preflight --no-gen` first. Then runs the genius.py script by absolute path with workdir set to the current session workspace, and reports the generated file path under `<workspace>/genius_output/`, task_id, media_urls, duration, and credits used.",
+      "files": []
+    },
+    {
+      "id": "preflight-no-gen",
+      "prompt": "生成前先检查一下环境，不要真的生图",
+      "expected_output": "Runs genius.py by absolute path with `--preflight --no-gen` from the current session workspace and reports key/workdir/tunnel pass/fail without creating a generation task.",
+      "files": []
+    },
+    {
+      "id": "model-comparison",
+      "prompt": "用4个模型跑一下同一张图对比效果，prompt是\"赛博朋克夜景\"",
+      "expected_output": "Generates `genius_output/Tmp/batch_<timestamp>.json` in the current workspace, runs genius.py by absolute path with `--batch` and `--concurrent 4`, reports all 4 file paths plus task_ids/media_urls, and deletes the batch config after completion.",
+      "files": []
+    },
+    {
+      "id": "balance-check",
+      "prompt": "查一下我现在还有多少积分",
+      "expected_output": "Runs genius.py by absolute path with `--balance` from the current workspace and reports the credit count.",
+      "files": []
+    },
+    {
+      "id": "self-test",
+      "prompt": "测试一下这个 skill 能不能用",
+      "expected_output": "Runs the lightweight `scripts/test.py` by absolute path only because the user explicitly asked to test the skill, then reports pass/fail.",
+      "files": []
+    },
+    {
+      "id": "premium-quality",
+      "prompt": "用 premium 模型生成一张 3K 高质量的咖啡机产品图",
+      "expected_output": "Runs genius.py by absolute path with `--model gpt-image-2-premium --resolution 3K --quality high` and workdir set to the current session workspace.",
+      "files": []
+    },
+    {
+      "id": "google-search",
+      "prompt": "画一张 iPhone 17 Pro 的产品图",
+      "expected_output": "Runs with --model nano-banana-2 --google-search to ensure the model references real product images.",
+      "files": []
+    }
+  ]
+}
