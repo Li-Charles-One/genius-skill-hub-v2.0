@@ -1,0 +1,129 @@
+---
+name: genius-image
+description: "Generate images using Crun.ai API with 4 model options (gpt-image-2, gpt-image-2-premium, nano-banana-2, nano-banana-pro). Supports single image, batch concurrent generation, async webhook mode, auto-retry on 501 upstream timeouts, and JSONL logging with 10MB rotation / 7-day cleanup. Use when user wants to generate AI images, run multi-model comparisons, or batch-generate from a list of prompts. Triggers on 'genius image', 'crun image', 'batch image generation', or any request to generate images via Crun API."
+---
+
+# Genius Image
+
+## Overview
+
+Generate AI images via Crun.ai (https://crun.ai) using async webhook pattern. The script lives in this skill folder, but every normal run must use the current session workspace as `workdir` so outputs land in that workspace's `genius_output/`. Single command can run one image or batch-concurrent multiple images across different models. All complexity (cloudflared tunnel, webhook server, retry logic, log rotation) is hidden from the user.
+
+## Start Here
+
+Classify the request:
+
+- **Single image**: "generate one image with prompt X" → run directly
+- **Multi-model compare**: "compare 4 models on prompt X" → auto-generate batch.json
+- **Batch generation**: "generate 5 prompts" → auto-generate batch.json
+- **Preflight**: first generation request in a session → run `--preflight --no-gen` once
+- **Check balance**: "how many credits left" → run with `--balance`
+- **Self-test**: "test the skill" → run `C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\test.py`
+
+Inspect the smallest useful evidence:
+- User's prompt(s)
+- Desired model(s), aspect ratio, resolution (or use defaults)
+- Whether comparison/batch mode is needed
+
+## Non-Negotiables
+
+> ⚠️ **#1 常见错误：把 `workdir` 设成了 skill 自己的目录**
+>
+> 脚本里所有路径都是 `<cwd>/genius_output/...`。如果你直接 `cd` 进 skill 目录再跑命令（或者 `workdir` 指向 `~/.config/opencode/skills/genius-image`），生成的图片、日志、临时 batch 文件全部会落到 skill 目录里，用户工作区里什么都没有。
+>
+> **正确做法**：调用 `genius.py` 时永远 `workdir=<用户当前工作区>`，例如 `C:\Users\jinhu\Documents\opencode_workspace`。
+>
+> **如果不知道工作区在哪，不要猜，直接问用户**——宁可多问一句也不要再把文件丢错地方。下方所有示例都假设 `workdir` 已正确指向工作区。
+
+1. **API key from environment**: `CRUN_API_KEY` must be set; never hardcode, never commit
+2. **Always use cloudflared tunnel**: webhook mode is required (avoids polling delays and rate limits)
+3. **Always clean up tunnel + webhook server**: use `finally` block
+4. **JSONL log rotation**: 10MB → archive, 7 days → delete
+5. **501 auto-retry**: retry only when completed task payload has `result.code == 501`, up to 3 times, 5s delay
+6. **User does not see batch.json**: AI generates and cleans up the file
+7. **Do not run self-test before ordinary generation**: run `scripts/test.py` only when the user asks, after editing this skill, or while debugging setup failures
+8. **`workdir` MUST be the current session workspace, not the skill's own directory**: scripts write outputs to `<cwd>/genius_output/`. If you run from inside the skill folder, files land in the skill directory, not the user's workspace. Always pass `workdir=<current_session_workspace>` when invoking the script.
+9. **If the current session workspace is unknown, ask before generating**: do not guess and do not fall back to the skill directory
+10. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `workdir`, not by where the script file lives
+11. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
+
+## Workflow
+
+> 下方所有命令都假设 `workdir` 已指向用户工作区（例如 `C:\Users\jinhu\Documents\opencode_workspace`），不要改成 skill 自己的目录。
+
+### Single image
+```bash
+# workdir = user's workspace (e.g. C:\Users\jinhu\Documents\opencode_workspace)
+python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K
+```
+
+### Preflight (once per session)
+```bash
+python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --preflight --no-gen
+```
+
+### Batch (auto-generate config)
+AI creates `batch_<timestamp>.json` in the **`genius_output/Tmp/` subdirectory** (clearly separated from artifacts), runs, then deletes the file:
+```bash
+# AI writes: <cwd>/genius_output/Tmp/batch_<timestamp>.json
+# AI runs:
+python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --batch <cwd>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3
+# AI deletes the batch file immediately after
+```
+**Always** put batch.json in `genius_output/Tmp/` — never in the working directory root, and never alongside the generated images.
+
+## Project Directory Structure
+
+所有产物（图片、日志、临时 batch）都落在 `workdir` 指向的用户工作区下，**不是 skill 自己的目录**：
+
+```
+<user_workspace>/genius_output/     ← 这里的 <user_workspace> 就是 workdir
+├── Tmp/                            ← temporary batch configs (deleted after run)
+├── Logs/                           ← JSONL logs (current + auto-archived)
+│   ├── genius_log.jsonl
+│   └── genius_log_YYYYMMDD_HHMMSS.jsonl
+└── *.png                           ← generated images
+```
+
+### Check balance
+```bash
+python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --balance
+```
+
+### Self-test
+```bash
+python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\test.py"
+```
+
+## Models
+
+| Key | Crun ID | Resolutions | Special params |
+|---|---|---|---|
+| `gpt-image-2` | `openai/gpt-image-2` | 1K/2K/4K | - |
+| `gpt-image-2-premium` | `openai/gpt-image-2-premium` | 1K/2K/3K | `--quality` (low/medium/high, default medium) |
+| `nano-banana-2` | `google/nano-banana-2` | 1K/2K/4K | `--google-search`, `--output-format` |
+| `nano-banana-pro` | `google/nano-banana-pro` | 1K/2K/4K | `--output-format` |
+
+## Resource Map
+
+- `scripts/genius.py`: main script (single + batch + balance)
+- `scripts/test.py`: lightweight health checks (run on request, after edits, or when debugging)
+- `bin/cloudflared.exe`: tunnel binary (Windows, ~54MB) — **not in repo**, download from https://github.com/cloudflare/cloudflared/releases/latest and place at `bin/cloudflared.exe` (or have `cloudflared` on PATH)
+- `references/usage.md`: detailed usage with examples
+- `references/troubleshooting.md`: common errors and fixes
+- `evals/evals.json`: test prompts and expected behavior
+
+## Output Contract
+
+Always report:
+- **Output location confirmation**: 文件必须落在 `<user_workspace>/genius_output/`，不是 skill 目录
+- **Models used** and their order
+- **Total duration** per model
+- **File paths** in `genius_output/`
+- **Task IDs and media URLs** from log `genius_output/Logs/genius_log.jsonl`
+- **Credits consumed** (from log `genius_output/Logs/genius_log.jsonl`)
+- **Cleanup status** (tunnel closed, batch.json deleted)
+
+## Final Response
+
+Report: what was generated, where files live, credits spent, and any failures with retry status.

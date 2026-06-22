@@ -13,7 +13,7 @@ This repository is the source hub for reusable skills, local skill mirrors, and 
 | cli-creator | `cli-creator/` | Build durable command-line tools from APIs, specs, SDKs, or local scripts. |
 | genius-code-audit | `genius-code-audit/` | Run diff or full code audits with Codex and Reasonix adapters. |
 | genius-design | `genius-design/` | Brand design systems for AI: pick from prebuilt DESIGN.md templates, or reverse-engineer a site into one. |
-| genius-image | `genius-image/` | Use the Genius Image / GRSai image generation provider when explicitly requested. |
+| genius-image | `genius-image/` | AI image generation via Crun.ai: 4 models, single + batch + multi-model compare. Triggers on 'genius image', 'crun image', 'batch image generation', or any Crun image request. |
 | genius-skill-creator | `genius-skill-creator/` | Create, repair, validate, evaluate, and optimize skills. |
 | genius-vision | `genius-vision/` | Universal image and video analysis (OCR, UI review, chart data, video summary) via the doubao vision API. |
 | github-cli | `github-cli/` | Use GitHub CLI for repo, auth, PR, issue, Actions, and API work. |

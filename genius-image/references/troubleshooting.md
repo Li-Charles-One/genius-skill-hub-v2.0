@@ -1,0 +1,63 @@
+# Troubleshooting
+
+## `ERROR: set $env:CRUN_API_KEY first`
+
+API key not in environment. Set it:
+```powershell
+[System.Environment]::SetEnvironmentVariable("CRUN_API_KEY", "your_key", "User")
+```
+Restart PowerShell.
+
+## `ERROR: cloudflared not found at ...`
+
+The `bin/cloudflared.exe` file is missing. Re-download:
+```powershell
+Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "bin/cloudflared.exe"
+```
+
+## `cloudflared 60 秒内未拿到公网 URL`
+
+Network issue. Check:
+- Is your proxy (TUN mode) on? Cloudflared needs outbound access
+- Try: `bin\cloudflared.exe tunnel --url http://localhost:8765 --no-autoupdate` manually to see logs
+
+## `submit fail [401]: API Key 无效`
+
+Key invalid or revoked. Get a new one at https://crun.ai/user-api-key
+
+## `submit fail [402]: 积分不足`
+
+Out of credits. Top up at https://crun.ai
+
+## `submit fail [422]: 参数错误`
+
+Model doesn't support this parameter. Check:
+- `gpt-image-2-premium` supports 1K/2K/3K, not 4K
+- `gpt-image-2-premium` supports 9 aspect ratios (no 21:9, no 1:8, no auto)
+- `--quality` only works with `gpt-image-2-premium`
+- `--google-search` only works with `nano-banana-2`
+
+## `任务失败: 501 generation failed`
+
+Upstream API timeout (OpenAI/Google). The script auto-retries up to 3 times only when the completed task payload has `result.code == 501`. If still failing:
+- Wait 10-30 minutes (upstream load)
+- Try a different model
+- Simplify the prompt
+
+## Webhook never received
+
+Check:
+- cloudflared tunnel is running (look for "公网 URL" line)
+- callback_url is correctly passed to Crun
+- Try `bin\cloudflared.exe tunnel --url http://localhost:8765` in another terminal to see real-time logs
+
+## File naming shows weird characters
+
+Prompt is non-English. The script keeps alphanumeric (which includes Chinese) and replaces punctuation with `_`. If you see garbled text, check the prompt encoding.
+
+## Concurrent batch fails partially
+
+The 501 auto-retry handles generation failures. If a task fails after 3 retries, check the log:
+```bash
+cat genius_output/genius_log.jsonl | grep failed
+```

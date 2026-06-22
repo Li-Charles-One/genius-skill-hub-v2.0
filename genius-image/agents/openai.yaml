@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Image"
+  short_description: "Crun API image generation, 4 models, batch"
+  default_prompt: "Use $genius-image to generate or batch-generate AI images via Crun. Run --preflight --no-gen once before the first generation request in a session. Run the skill script by absolute path, set workdir to the current session workspace so outputs land in genius_output there, and ask for the workspace before generating if it is unknown."
