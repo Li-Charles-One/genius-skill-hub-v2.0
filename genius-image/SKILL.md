@@ -57,6 +57,19 @@ Inspect the smallest useful evidence:
 python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K
 ```
 
+### 参考图 / 图生图（--ref）
+`--ref` 接受一张或多张参考图，用于保持人物 / 风格一致性（如角色转面、同一个人多角度）。每一项可以是：
+- **http(s) URL** —— 原样传给 API
+- **本地文件路径** —— 脚本自动读取并编码成 `data:image/...;base64,...`（API 只收 URL 或 base64，本地路径会被自动转换，无需手动处理）
+
+```bash
+# 本地图（自动转 base64）
+python "...\genius.py" "同一个人的 3x3 九宫格多角度转面图" --model nano-banana-pro --aspect 16:9 --resolution 1K --ref "genius_output\some_photo.png"
+# 远程 URL，或多张混用
+python "...\genius.py" "..." --ref "https://example.com/a.png" "genius_output\b.png"
+```
+> 注意：base64 会让请求体增大约 33%，传超大图或多张参考图时 body 可能偏大。需要稳定时优先用 http(s) URL。本地文件找不到会直接报错，不会把无效路径丢给服务端。batch.json 里对应字段是 `ref`（数组）或兼容写法 `img_urls`。
+
 ### Preflight (once per session)
 ```bash
 python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --preflight --no-gen

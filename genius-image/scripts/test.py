@@ -21,7 +21,7 @@ OUT_DIR.mkdir(exist_ok=True)
 print('=== Skill 加载健康检查 ===')
 required = ['build_payload', 'submit', 'get_balance', 'find_next_filename', 'write_log',
             'clean_old_logs', 'load_batch', 'validate_task', 'extract_media_urls',
-            'run_preflight', 'run_single', 'run_batch', 'main']
+            'resolve_refs', 'run_preflight', 'run_single', 'run_batch', 'main']
 missing = [f for f in required if not hasattr(genius, f)]
 if missing:
     print(f'  FAIL: missing {missing}')
@@ -88,6 +88,16 @@ for model, limit in [('gpt-image-2', 16), ('gpt-image-2-premium', 14), ('nano-ba
         print(f'  {model}: PASS (上限 {limit})')
         ok += 1
 print(f'  Summary: {ok}/4 models enforce limits')
+
+print()
+print('=== 本地参考图转 base64 测试 ===')
+ref_file = TMP_ROOT / 'ref.png'
+ref_file.write_bytes(b'\x89PNG\r\n\x1a\n')
+resolved = genius.resolve_refs([str(ref_file), 'https://example.com/ref.png'])
+if resolved[0].startswith('data:image/png;base64,') and resolved[1] == 'https://example.com/ref.png':
+    print('  PASS: local path converted and URL preserved')
+else:
+    print(f'  FAIL: {resolved}')
 
 print()
 print('=== 模型参数约束测试 ===')

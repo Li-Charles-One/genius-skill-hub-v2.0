@@ -1,4 +1,4 @@
-import os, sys, time, json, re, argparse, subprocess, threading, requests
+import os, sys, time, json, re, argparse, subprocess, threading, requests, base64, mimetypes, shutil
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from datetime import datetime
@@ -10,15 +10,8 @@ API_KEY = os.getenv("CRUN_API_KEY")
 BASE = "https://api.crun.ai"
 HERE = Path(__file__).parent
 SKILL_ROOT = HERE.parent
-CLOUDFLARED = SKILL_ROOT / "bin" / "cloudflared.exe"
-if not CLOUDFLARED.exists():
-    candidates = [HERE / "bin" / "cloudflared.exe", SKILL_ROOT / "bin" / "cloudflared.exe", Path("bin/cloudflared.exe")]
-    for c in candidates:
-        if c.exists():
-            CLOUDFLARED = c
-            break
-    else:
-        sys.exit(f"ERROR: cloudflared not found. Searched: {[str(c) for c in candidates]}")
+CLOUDFLARED_CANDIDATES = [HERE / "bin" / "cloudflared.exe", SKILL_ROOT / "bin" / "cloudflared.exe", Path("bin/cloudflared.exe")]
+CLOUDFLARED = next((str(c) for c in CLOUDFLARED_CANDIDATES if c.exists()), None) or shutil.which("cloudflared")
 OUT_DIR = Path.cwd() / "genius_output"
 LOG_DIR = OUT_DIR / "Logs"
 LOG_FILE = LOG_DIR / "genius_log.jsonl"
@@ -87,8 +80,11 @@ def start_webhook(port):
     return server
 
 def start_tunnel(port):
+    if not CLOUDFLARED:
+        searched = [str(c) for c in CLOUDFLARED_CANDIDATES] + ["PATH: cloudflared"]
+        raise RuntimeError(f"cloudflared not found. Searched: {searched}")
     proc = subprocess.Popen(
-        [str(CLOUDFLARED), "tunnel", "--url", f"http://localhost:{port}", "--no-autoupdate"],
+        [CLOUDFLARED, "tunnel", "--url", f"http://localhost:{port}", "--no-autoupdate"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
     lines = Queue()
@@ -199,12 +195,36 @@ def wait_for_completion(tid, deadline):
     status = info.get("status") if isinstance(info, dict) else "unknown"
     raise TimeoutError(f"回调超时 {TIMEOUT_CALLBACK}s，TaskInfo 状态: {status}")
 
+def resolve_refs(refs):
+    """把参考图列表里的每一项归一化成 API 能收的格式：
+    - http:// 或 https:// URL → 原样保留
+    - data:image base64 → 原样保留
+    - 其余按本地文件路径处理 → 读出来编码成 data:image/<mime>;base64,<...>
+    缺失的本地文件直接报错，避免把无效字符串丢给服务端拿 502。
+    """
+    resolved = []
+    for ref in refs:
+        if not isinstance(ref, str):
+            raise RuntimeError(f"参考图必须是字符串（URL 或本地路径），实际是 {type(ref).__name__}")
+        low = ref.lower()
+        if low.startswith(("http://", "https://", "data:")):
+            resolved.append(ref)
+            continue
+        # 当作本地文件
+        p = Path(ref).expanduser()
+        if not p.is_file():
+            raise RuntimeError(f"参考图不是 http(s) URL 也找不到本地文件：{ref}")
+        mime = mimetypes.guess_type(p.name)[0] or "image/png"
+        b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+        resolved.append(f"data:{mime};base64,{b64}")
+    return resolved
+
 def build_payload(task, callback_url):
     task = validate_task(task)
     cfg = MODELS[task["model"]]
     inp = {"prompt": task["prompt"], "aspect_ratio": task["aspect"], "resolution": task["resolution"]}
     if task.get("ref"):
-        inp["img_urls"] = task["ref"]
+        inp["img_urls"] = resolve_refs(task["ref"])
     if "google_search" in cfg["extra"] and task.get("google_search"):
         inp["google_search"] = True
     if "output_format" in cfg["extra"] and task.get("output_format", "png") != "png":
@@ -551,7 +571,7 @@ def main():
     ap.add_argument("--aspect", default=None, choices=ASPECTS, help="宽高比（不传则使用模型默认值）")
     ap.add_argument("--resolution", default=None, choices=["1K","2K","3K","4K"], help="分辨率（不传则使用模型默认值）")
     ap.add_argument("--quality", default=None, choices=["low","medium","high"], help="画质（仅 gpt-image-2-premium，不传则使用模型默认值）")
-    ap.add_argument("--ref", nargs="+")
+    ap.add_argument("--ref", nargs="+", help="参考图 URL 或本地图片路径；本地文件会自动转 base64")
     ap.add_argument("--google-search", dest="google_search", action="store_true")
     ap.add_argument("--output-format", default="png", choices=["png","jpg"])
     ap.add_argument("--balance", action="store_true")
