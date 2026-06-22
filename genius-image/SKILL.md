@@ -72,6 +72,19 @@ python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" -
 ```
 **Always** put batch.json in `genius_output/Tmp/` — never in the working directory root, and never alongside the generated images.
 
+#### batch.json 格式
+
+顶层是一个**任务数组**（不是带 `concurrent`/`tasks` 包装的对象）。并发数由命令行 `--concurrent` 控制，不写在文件里。每个任务对象至少要有 `prompt`，其余字段（`model`/`aspect`/`resolution` 等）可选，缺省走默认值：
+
+```json
+[
+  { "prompt": "一只可爱的小猫", "model": "nano-banana-pro", "aspect": "16:9", "resolution": "2K" },
+  { "prompt": "赛博朋克城市夜景", "model": "gpt-image-2", "aspect": "1:1", "resolution": "1K" }
+]
+```
+
+> 也兼容 `{ "tasks": [ ... ] }` 包装写法，但推荐用纯数组。顶层若不是数组也不是含 `tasks` 的对象，脚本会直接报错提示格式。
+
 ## Project Directory Structure
 
 所有产物（图片、日志、临时 batch）都落在 `workdir` 指向的用户工作区下，**不是 skill 自己的目录**：

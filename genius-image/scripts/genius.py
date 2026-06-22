@@ -304,10 +304,23 @@ def run_preflight(no_gen):
 
 def load_batch(path):
     with open(path, "r", encoding="utf-8") as f:
-        tasks = json.load(f)
+        data = json.load(f)
+    # 兼容两种顶层格式：纯任务数组 [ {...}, {...} ]，或包装对象 { "tasks": [...] }
+    if isinstance(data, dict) and "tasks" in data:
+        tasks = data["tasks"]
+    else:
+        tasks = data
+    if not isinstance(tasks, list):
+        raise RuntimeError(
+            "batch 文件顶层必须是任务数组 [ {...}, {...} ]，"
+            "或包含 \"tasks\" 数组的对象 { \"tasks\": [...] }；"
+            f"实际拿到的是 {type(tasks).__name__}"
+        )
     if not tasks:
         raise RuntimeError("批量任务不能为空")
-    for t in tasks:
+    for i, t in enumerate(tasks):
+        if not isinstance(t, dict):
+            raise RuntimeError(f"第 {i+1} 个任务必须是对象 {{...}}，实际是 {type(t).__name__}")
         if "model" not in t: t["model"] = "gpt-image-2-premium"
         validate_task(t)
     return tasks
