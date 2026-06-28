@@ -1,0 +1,86 @@
+{
+  "skill_name": "lark",
+  "evals": [
+    {
+      "id": "health-check-trigger",
+      "prompt": "帮我检查一下飞书 CLI 能不能用",
+      "trigger_expected": true,
+      "expected_output": "Use lark health-check workflow and run safe CLI discovery/status checks.",
+      "files": [
+        "SKILL.md",
+        "references/health-check.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "lark-cli"
+        }
+      ]
+    },
+    {
+      "id": "doc-create-route",
+      "prompt": "把这个 Markdown 内容创建成飞书文档",
+      "trigger_expected": true,
+      "expected_output": "Route to lark-doc/docs and check safety rules before creating remote content.",
+      "files": [
+        "SKILL.md",
+        "references/routing.md",
+        "references/safety.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "lark-doc"
+        }
+      ]
+    },
+    {
+      "id": "calendar-task-route",
+      "prompt": "查一下今天日程和未完成任务",
+      "trigger_expected": true,
+      "expected_output": "Route to lark-calendar and lark-task with read-only command handling.",
+      "files": [
+        "SKILL.md",
+        "references/routing.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "lark-calendar"
+        }
+      ]
+    },
+    {
+      "id": "im-send-confirmation",
+      "prompt": "给销售群发一条消息说报价单已更新",
+      "trigger_expected": true,
+      "expected_output": "Route to lark-im and require explicit confirmation before sending the message.",
+      "files": [
+        "SKILL.md",
+        "references/routing.md",
+        "references/safety.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "confirmation"
+        }
+      ]
+    },
+    {
+      "id": "local-docx-non-trigger",
+      "prompt": "帮我改一下本地 Word 简历格式，不要上传飞书",
+      "trigger_expected": false,
+      "expected_output": "Do not use lark; this should route to local document editing instead.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "lark-cli auth login"
+        }
+      ]
+    }
+  ]
+}

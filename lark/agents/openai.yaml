@@ -1,0 +1,8 @@
+interface:
+  display_name: "Lark / Feishu CLI"
+  short_description: "Unified Lark/Feishu CLI router"
+  brand_color: "#2563EB"
+  default_prompt: "Use $lark to check my Lark CLI status and route the right Feishu command."
+
+policy:
+  allow_implicit_invocation: true
