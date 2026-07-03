@@ -307,7 +307,7 @@ def analyze_media(
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 4096,
+        "max_tokens": 32768,
     }
 
     with httpx.Client(timeout=timeout) as client:
