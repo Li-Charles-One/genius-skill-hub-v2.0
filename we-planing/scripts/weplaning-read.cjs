@@ -63,18 +63,20 @@ const D = "─".repeat(52);
 let out = `\n${D}\n WePlaning · ${utcNow()}\n${D}\n`;
 
 out += `\n📌 Goal:\n${current.activeGoal}\n`;
-out += `\n📊 Current State:\n${current.currentState}\n`;
+out += `\n📊 Current State (mainline):\n${current.currentState}\n`;
+
+if (unmerged.length > 0) {
+  out += `\n📝 Quick Notes since last closeout (newest first):\n`;
+  for (const row of unmerged) {
+    out += `  · ${row.id}  ${row.summary}\n`;
+  }
+  out += `  ↑ These are the most recent updates — treat as current truth.\n`;
+}
+
 out += `\n✅ Next Steps:\n${current.acceptedNextSteps}\n`;
 
 if (current.openBlockers && current.openBlockers.toLowerCase() !== "none") {
   out += `\n🚧 Blockers:\n${current.openBlockers}\n`;
-}
-
-if (unmerged.length > 0) {
-  out += `\n🗒  Recent Unmerged Notes (${unmerged.length}):\n`;
-  for (const row of unmerged) {
-    out += `  [${row.status}] ${row.id}  ${row.summary}\n`;
-  }
 }
 
 out += `\n📋 Recent Changes:\n${changesTail}\n`;
