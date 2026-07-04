@@ -48,6 +48,7 @@ Inspect the smallest useful evidence:
 11. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
 12. **cloudflared must be available before generating**: check `bin/cloudflared.exe` (relative to `<skill_dir>`) or `cloudflared` on PATH. If neither exists, report the missing binary and exit — do not attempt generation without it. Download from https://github.com/cloudflare/cloudflared/releases/latest and place at `<skill_dir>/bin/cloudflared.exe`.
 13. **Webhook port 8765 is hardcoded**: if the port is already in use, the script will fail with `Address already in use`. Fix: kill the process occupying 8765 (`netstat -ano | findstr :8765` on Windows), then retry.
+14. **回调超时最长 300 秒（5分钟）**：高分辨率或复杂 prompt 的生成任务可能接近5分钟。在长任务开始前告知用户预计等待时间；若 agent runtime 自身有工具调用超时限制，建议优先使用较轻量的模型（如 `gpt-image-2` 或 `nano-banana-2-lite`）或降低分辨率。
 
 ## Path Resolution
 
@@ -159,6 +160,21 @@ python "<skill_dir>/scripts/test.py"
 - `references/usage.md`: detailed usage with examples
 - `references/troubleshooting.md`: common errors and fixes
 - `evals/evals.json`: test prompts and expected behavior
+
+## Error Reference
+
+| 错误码 | 含义 | 应对策略 |
+|:--|:--|:--|
+| `401` | API Key 无效或缺失 | 检查 `CRUN_API_KEY` 环境变量是否正确设置 |
+| `402` | 积分不足 | 告知用户充值，可先用 `--balance` 查询当前余额 |
+| `403` | API Key 已禁用 | 联系 Crun.ai 支持，Key 可能被封禁 |
+| `404` | 任务不存在 | `task_id` 有误，用 `--balance` 或重新提交 |
+| `422` | 参数校验错误 | 检查 prompt/aspect/resolution 是否符合模型限制 |
+| `429` | 触发速率限制 | 等待后重试，批量任务降低 `--concurrent` |
+| `455` | 服务维护中 | 等待数分钟后重试，无需修改参数 |
+| `500` | 服务器内部错误 | 等待数分钟后重试一次 |
+| `501` | 生成失败 | 脚本会自动重试最多3次；持续失败可换模型或简化 prompt |
+| `505` | 功能已禁用 | 该模型或功能当前不可用，换其他模型 |
 
 ## Output Contract
 
