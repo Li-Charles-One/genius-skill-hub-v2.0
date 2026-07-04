@@ -1,6 +1,7 @@
 ---
 name: we-planing
-description: Maintain lightweight WePlaning v2.3 project memory only when the user asks to initialize, persist, resume, hand off, close out, repair, or verify `.agent-memory/` state across Agent sessions. Do not use for ordinary summaries or code-only edits unless project memory must be updated.
+version: 1.1.0
+description: "Maintain lightweight WePlaning v2.3 project memory. Triggers: initialize project memory, persist session, resume project, hand off, close out, repair memory, verify .agent-memory state, 读取项目记忆, 持久化到项目记忆, 记一笔, 查看项目进度. Do not use for ordinary summaries or code-only edits unless project memory must be updated."
 ---
 
 # WePlaning
@@ -55,8 +56,8 @@ Do not create a session for read-only inspection.
 Use this when the user wants a durable note but not a mainline merge:
 
 ```bash
-node <skill-dir>/scripts/new-session.cjs <project-root> --role <role> --summary "<summary>" --goal "<goal>"
-node <skill-dir>/scripts/safe-edit.cjs <project-root> --lite --session <id> --changed "<durable note>"
+node <skill_dir>/scripts/new-session.cjs <project-root> --agent <agent-name> --role <role> --summary "<summary>" --goal "<goal>"
+node <skill_dir>/scripts/safe-edit.cjs <project-root> --lite --session <id> --changed "<durable note>"
 ```
 
 ## Closeout Flow
@@ -64,7 +65,7 @@ node <skill-dir>/scripts/safe-edit.cjs <project-root> --lite --session <id> --ch
 Use this when accepted work should become mainline:
 
 ```bash
-node <skill-dir>/scripts/safe-edit.cjs <project-root> --close --session <id> \
+node <skill_dir>/scripts/safe-edit.cjs <project-root> --close --session <id> \
   --changed "<what changed>" --file "<path>" --verification "<check run>"
 ```
 
@@ -73,15 +74,19 @@ This runs pre-check, appends `CHANGES.md`, merges the session, runs post-check, 
 ## Maintenance
 
 ```bash
-node <skill-dir>/scripts/init-memory.cjs <project-root> --project "<name>" --goal "<goal>"
-node <skill-dir>/scripts/check-memory.cjs <project-root>
-node <skill-dir>/scripts/check-memory.cjs <project-root> --audit
-node <skill-dir>/scripts/repair-memory.cjs <project-root>
+node <skill_dir>/scripts/init-memory.cjs <project-root> --agent <agent-name> --project "<name>" --goal "<goal>"
+node <skill_dir>/scripts/check-memory.cjs <project-root>
+node <skill_dir>/scripts/check-memory.cjs <project-root> --audit
+node <skill_dir>/scripts/repair-memory.cjs <project-root>
 ```
 
-Core closeout uses `scripts/append-change.cjs` and `scripts/merge-session.cjs`; shared helpers live in `scripts/weplaning-utils.cjs`.
+## Verification
 
-Use `repair-memory.cjs` only after `check-memory.cjs` fails and the cause is understood.
+- [ ] Smoke test passes: `node <skill_dir>/tools/smoke-weplaning.cjs` prints all `[ok]` and exits 0
+- [ ] `init-memory.cjs` completes without error (run with `--agent <name>`)
+- [ ] `check-memory.cjs` passes on a freshly initialized project
+- [ ] Lite flow: `new-session.cjs` + `safe-edit --lite` completes and `check-memory.cjs` still passes
+- [ ] Closeout flow: `safe-edit --close` completes, session appears as `merged` in `THREADS.md`
 
 ## Installing WePlaning into Hermes (when shipping from a hub repo)
 
@@ -115,11 +120,26 @@ If WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you wa
 
 ## Pitfalls
 
-- **Don't init memory before the smoke test passes.** A broken init cascade is harder to recover from than a smoke-test failure caught up front.
-- **Don't run `closeout` for "just a quick note"** — use the Lite flow. The Closeout flow rewrites `CHANGES.md` and merges the session; running it for transient state pollutes the mainline ledger.
-- **Junction target disappears → broken link.** If the hub repo is moved or deleted, the junction in `hermes/skills/` becomes a dangling empty directory. Hermes won't auto-clean it. If you delete the hub, `rmdir` the junction on the Hermes side too.
-- **Junction is a live mirror — git operations on the hub affect Hermes instantly.** A Windows directory junction (`mklink /J`) is a filesystem-level mirror, not a snapshot. Any operation that rewrites files inside the hub repo's working tree — `git checkout -- <file>`, `git stash`, `git reset --hard`, `git restore`, even `git pull` with conflicts — propagates to `hermes/skills/<category>/<skill>` **immediately**, with no reload and no warning. If the hub has uncommitted skill edits (e.g. expanded `SKILL.md`), they vanish from Hermes the moment those commands run. Don't recommend `git stash` or `git checkout --` as a "clean up the working tree" move when the junction target contains skill files the live Hermes install depends on. To archive hub working-tree edits without losing them from the live install, **commit** them (local or remote) — not stash.
-- **Cross-platform paths in scripts.** The skill scripts use forward slashes; on Windows they work via Node's path normalization. Don't edit them to use `\\` — they'll break on Linux/macOS usage.
-- **When `clarify` offers options, every option's stated consequence must be true.** This is the meta-lesson behind the "Junction is live mirror" pitfall: a tempting "non-destructive" path (e.g. `git stash` on a hub repo whose `skills/` is junctioned into Hermes) turns destructive the moment the junction is live. Before offering choices on a destructive command, run the consequence in your head against the actual environment — junction semantics, process locks, schema invariants — not just the obvious git/filesystem semantics. If you cannot verify the consequence, say so in the option text ("I'm not sure if X is safe — verify before choosing") instead of writing a confident wrong description. Users pick options that look clean; a wrong "clean" option will be picked and you'll have to walk it back.
-- **`safe-edit.cjs` business errors can leak the `.weplaning.lock` directory.** `withMemoryLock` (in `scripts/weplaning-utils.cjs`) takes the lock via `fs.mkdirSync` inside a `while(true)` loop, then runs the callback inside a `try/finally` that removes the lock. However, errors thrown **before** the callback (e.g. `ensureFreshMainline`'s "Stale write blocked" or "Mainline mismatch" thrown during the `readThreads` / `readMemory` step) abort inside the `while` loop, never entering the `try/finally`, so the lock directory is left on disk. The next `safe-edit` call then times out after 30s reporting "Timed out waiting for WePlaning lock held by pid <N>" against a PID that is already dead. Recovery: `rm -rf <project>/.agent-memory/.weplaning.lock`. Prevention: if you anticipate a stale-write check failing (e.g. you just changed a session's `Parent session:` field by hand and now want to close it), set `WEPLANING_LOCK_STALE_MS=1000` so the next run auto-clears any leaked lock after 1s. The script's own 120s default `staleMs` is for live-but-slow writers, not for leaked locks.
-- **`safe-edit.cjs --close` requires the session's `Parent session:` to equal `THREADS.md` mainline.** `ensureFreshMainline` throws "Stale write blocked" if `parent !== threads.mainline && sessionId !== threads.mainline`. `new-session.cjs` defaults `--parent` to the **current** `THREADS.md` mainline at the time of session creation — if the previous session is still marked `active` (even when it was effectively a no-op read-only handoff), the new session inherits the active parent and `safe-edit --close` then blocks. Fix: either close the active predecessor first (recommended — it makes the tree honest), or manually edit `sessions/<id>.md` to point `Parent session:` at the true mainline before running `--close`. Choosing the wrong parent because it "looks right" is the common failure mode.
+**1. Don't init memory before the smoke test passes.**
+A broken init cascade is harder to recover from than a smoke-test failure caught up front.
+
+**2. Don't run `closeout` for "just a quick note"** — use the Lite flow.
+The Closeout flow rewrites `CHANGES.md` and merges the session; running it for transient state pollutes the mainline ledger.
+
+**3. Junction target disappears → broken link.**
+If the hub repo is moved or deleted, the junction in `hermes/skills/` becomes a dangling empty directory. Hermes won't auto-clean it. If you delete the hub, `rmdir` the junction on the Hermes side too.
+
+**4. Junction is a live mirror — git operations on the hub affect Hermes instantly.**
+A Windows directory junction (`mklink /J`) is a filesystem-level mirror, not a snapshot. Any operation that rewrites files inside the hub repo's working tree — `git checkout -- <file>`, `git stash`, `git reset --hard`, `git restore`, even `git pull` with conflicts — propagates to `hermes/skills/<category>/<skill>` **immediately**, with no reload and no warning. To archive hub working-tree edits without losing them from the live install, **commit** them (local or remote) — not stash.
+
+**5. Cross-platform paths in scripts.**
+The skill scripts use forward slashes; on Windows they work via Node's path normalization. Don't edit them to use `\\` — they'll break on Linux/macOS usage.
+
+**6. When `clarify` offers options, every option's stated consequence must be true.**
+Before offering choices on a destructive command, verify the consequence against the actual environment — junction semantics, process locks, schema invariants. If you cannot verify, say so in the option text ("I'm not sure if X is safe — verify before choosing") instead of writing a confident wrong description.
+
+**7. `safe-edit.cjs` business errors can leak the `.weplaning.lock` directory.**
+`withMemoryLock` takes the lock via `fs.mkdirSync` but errors thrown *before* the callback (e.g. "Stale write blocked") abort without releasing it. Recovery: `rm -rf <project>/.agent-memory/.weplaning.lock`. Prevention: set `WEPLANING_LOCK_STALE_MS=1000` if you anticipate a stale-write check failing.
+
+**8. `safe-edit.cjs --close` requires the session's `Parent session:` to equal `THREADS.md` mainline.**
+`ensureFreshMainline` throws "Stale write blocked" if `parent !== threads.mainline`. Fix: close the active predecessor first, or manually edit `sessions/<id>.md` to point `Parent session:` at the true mainline before running `--close`.
