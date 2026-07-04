@@ -27,13 +27,13 @@ Inspect the smallest useful evidence:
 
 ## Non-Negotiables
 
-> ⚠️ **#1 常见错误：把 `workdir` 设成了 skill 自己的目录**
+> ⚠️ **#1 常见错误：把输出目录搞错**
 >
-> 脚本里所有路径都是 `<cwd>/genius_output/...`。如果你直接 `cd` 进 skill 目录再跑命令（或者 `workdir` 指向 `~/.config/opencode/skills/genius-image`），生成的图片、日志、临时 batch 文件全部会落到 skill 目录里，用户工作区里什么都没有。
+> 脚本默认把所有产物写入 `<cwd>/genius_output/`。如果 cwd 不是用户工作区，图片会落在错误位置。
 >
-> **正确做法**：调用 `genius.py` 时永远 `workdir=<用户当前工作区>`，例如 `C:\Users\jinhu\Documents\opencode_workspace`。
+> **根本解法：始终传 `--out "<workspace>/genius_output"` 明确指定输出目录**，彻底消除 cwd 歧义。
 >
-> **如果不知道工作区在哪，不要猜，直接问用户**——宁可多问一句也不要再把文件丢错地方。下方所有示例都假设 `workdir` 已正确指向工作区。
+> **不知道工作区路径时，直接问用户**——宁可多问一句。
 
 1. **API key from environment**: `CRUN_API_KEY` must be set; never hardcode, never commit
 2. **Always use cloudflared tunnel**: webhook mode is required (avoids polling delays and rate limits)
@@ -42,11 +42,12 @@ Inspect the smallest useful evidence:
 5. **501 auto-retry**: retry only when completed task payload has `result.code == 501`, up to 3 times, 5s delay
 6. **User does not see batch.json**: AI generates and cleans up the file
 7. **Do not run self-test before ordinary generation**: run `scripts/test.py` only when the user asks, after editing this skill, or while debugging setup failures
-8. **`workdir` MUST be the current session workspace, not the skill's own directory**: scripts write outputs to `<cwd>/genius_output/`. If you run from inside the skill folder, files land in the skill directory, not the user's workspace. Always pass `workdir=<current_session_workspace>` when invoking the script.
-9. **If the current session workspace is unknown, ask before generating**: do not guess and do not fall back to the skill directory
-10. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `workdir`, not by where the script file lives
+8. **推荐用 `--out` 明确指定输出目录**：直接传绝对路径，彻底消除 workdir 歧义。例如 `--out "C:/Users/jinhu/Documents/workspace/genius_output"`。不传时脚本写入 `<cwd>/genius_output/`，仍需保证 cwd 是用户工作区。
+9. **不知道工作区路径时，问用户或使用 `--out`**：不要猜测，宁可多问一句。
+10. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `--out` or `workdir`, not by where the script file lives
 11. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
 12. **cloudflared must be available before generating**: check `bin/cloudflared.exe` (relative to `<skill_dir>`) or `cloudflared` on PATH. If neither exists, report the missing binary and exit — do not attempt generation without it. Download from https://github.com/cloudflare/cloudflared/releases/latest and place at `<skill_dir>/bin/cloudflared.exe`.
+13. **Webhook port 8765 is hardcoded**: if the port is already in use, the script will fail with `Address already in use`. Fix: kill the process occupying 8765 (`netstat -ano | findstr :8765` on Windows), then retry.
 
 ## Path Resolution
 
@@ -59,12 +60,12 @@ Use `<skill_dir>` in all script paths below. Never hardcode a user-specific abso
 
 ## Workflow
 
-> 下方所有命令都假设 `workdir` 已指向用户工作区，不要改成 skill 自己的目录。`<skill_dir>` 见上方说明。
+> 下方命令均使用 `<skill_dir>` 指向脚本，用 `<workspace>` 指向用户工作区。**推荐始终传 `--out "<workspace>/genius_output"` 明确指定输出路径，避免 cwd 问题。** `<skill_dir>` 见上方 Path Resolution 说明。
 
 ### Single image
 ```bash
-# workdir = user's workspace
-python "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K
+# 推荐：用 --out 明确指定输出目录，彻底消除 workdir 歧义
+python "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K --out "<workspace>/genius_output"
 ```
 
 ### 参考图 / 图生图（--ref）
@@ -82,15 +83,15 @@ python "...\genius.py" "..." --ref "https://example.com/a.png" "genius_output\b.
 
 ### Preflight (once per session)
 ```bash
-python "<skill_dir>/scripts/genius.py" --preflight --no-gen
+python "<skill_dir>/scripts/genius.py" --preflight --no-gen --out "<workspace>/genius_output"
 ```
 
 ### Batch (auto-generate config)
 AI creates `batch_<timestamp>.json` in the **`genius_output/Tmp/` subdirectory** (clearly separated from artifacts), runs, then deletes the file:
 ```bash
-# AI writes: <cwd>/genius_output/Tmp/batch_<timestamp>.json
+# AI writes: <workspace>/genius_output/Tmp/batch_<timestamp>.json
 # AI runs:
-python "<skill_dir>/scripts/genius.py" --batch <cwd>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3
+python "<skill_dir>/scripts/genius.py" --batch <workspace>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3 --out "<workspace>/genius_output"
 # AI deletes the batch file immediately after
 ```
 **Always** put batch.json in `genius_output/Tmp/` — never in the working directory root, and never alongside the generated images.

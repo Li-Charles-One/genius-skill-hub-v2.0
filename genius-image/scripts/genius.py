@@ -230,7 +230,7 @@ def build_payload(task, callback_url):
     if "output_format" in cfg["extra"] and task.get("output_format", "png") != "png":
         inp["output_format"] = task["output_format"]
     if "quality" in cfg["extra"]:
-        inp["quality"] = task.get("quality", "low")
+        inp["quality"] = task.get("quality", cfg.get("default_quality", "medium"))
     return {"model": cfg["id"], "callback_url": callback_url, "input": inp}
 
 def submit(payload):
