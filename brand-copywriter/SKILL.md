@@ -1,6 +1,6 @@
 ---
 name: brand-copywriter
-description: "Use when user needs to write advertising copy, landing pages, email sequences, social media posts, or brand marketing content in English or Chinese. 品牌营销文案生成器 — 14种经典框架双版本对比输出，覆盖14个中外平台（微信公众号/小红书/抖音/微博/知乎/B站 + Facebook/TikTok/YouTube/LinkedIn/Email/Landing Page），严格AI禁用词过滤（中英双语），7位西方大师 + 5位中国营销方法论 + 8家4A/本土机构。"
+description: "Use when user needs advertising copy, landing pages, email sequences, social media posts, or brand marketing content in English or Chinese. 品牌营销文案生成器：14种框架双版本对比，覆盖14个中外平台，严格AI禁用词过滤。"
 license: MIT
 metadata:
   version: 2.0.0
@@ -21,6 +21,8 @@ metadata:
 ## 工作流程
 
 ### Step 1：读取参考文件（必须）
+
+**前置检查**：以下5个文件必须全部可读，任一缺失则立即停止并提示用户修复路径，禁止在文件缺失情况下继续生成（否则框架/禁用词将凭空编造，输出完全不可信）：
 
 ```
 references/copy_frameworks.md    ← 14种框架详解 + 28行中英文平台选择矩阵
@@ -49,7 +51,9 @@ references/quality-checklist.md  ← 中英文双轨自检清单
 
 ### Step 6：输出后净化（必须，不可跳过）
 
-写完文案后，**执行 `references/anti-slop-pass.md` 完整流水线**：门检→四遍审校→冲突仲裁树→10问自检→5维评分（<30/50重写）→强制附打磨报告。
+写完文案后，**执行 `references/anti-slop-pass.md` 完整流水线**：门检→四遍审校→冲突仲裁树→10问自检→5维评分→强制附打磨报告。
+
+**重写上限**：若评分 <30/50 需重写，最多重写 **2次**。第2次结束后无论得分如何，输出当前最优版本并附注：`⚠️ 本版本未完全达到反AI腔标准（<30/50），建议人工审查后使用。`
 
 ---
 

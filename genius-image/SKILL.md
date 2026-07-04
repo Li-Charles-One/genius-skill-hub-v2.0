@@ -18,7 +18,7 @@ Classify the request:
 - **Batch generation**: "generate 5 prompts" → auto-generate batch.json
 - **Preflight**: first generation request in a session → run `--preflight --no-gen` once
 - **Check balance**: "how many credits left" → run with `--balance`
-- **Self-test**: "test the skill" → run `C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\test.py`
+- **Self-test**: "test the skill" → run `<skill_dir>/scripts/test.py`
 
 Inspect the smallest useful evidence:
 - User's prompt(s)
@@ -46,15 +46,25 @@ Inspect the smallest useful evidence:
 9. **If the current session workspace is unknown, ask before generating**: do not guess and do not fall back to the skill directory
 10. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `workdir`, not by where the script file lives
 11. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
+12. **cloudflared must be available before generating**: check `bin/cloudflared.exe` (relative to `<skill_dir>`) or `cloudflared` on PATH. If neither exists, report the missing binary and exit — do not attempt generation without it. Download from https://github.com/cloudflare/cloudflared/releases/latest and place at `<skill_dir>/bin/cloudflared.exe`.
+
+## Path Resolution
+
+**`<skill_dir>`** = the directory containing this SKILL.md file. The agent must resolve it at runtime before running any command. Examples:
+- ZCode / Kiro / OpenCode: use the skill's install path (e.g. `~/.zcode/skills/genius-image/`)
+- Hermes / Reasonix: the path where this SKILL.md was loaded from
+- When unsure: run `find ~/.config ~/.zcode ~/.hermes ~/.reasonix -name "genius-image" -type d 2>/dev/null | head -1`
+
+Use `<skill_dir>` in all script paths below. Never hardcode a user-specific absolute path.
 
 ## Workflow
 
-> 下方所有命令都假设 `workdir` 已指向用户工作区（例如 `C:\Users\jinhu\Documents\opencode_workspace`），不要改成 skill 自己的目录。
+> 下方所有命令都假设 `workdir` 已指向用户工作区，不要改成 skill 自己的目录。`<skill_dir>` 见上方说明。
 
 ### Single image
 ```bash
-# workdir = user's workspace (e.g. C:\Users\jinhu\Documents\opencode_workspace)
-python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K
+# workdir = user's workspace
+python "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K
 ```
 
 ### 参考图 / 图生图（--ref）
@@ -72,7 +82,7 @@ python "...\genius.py" "..." --ref "https://example.com/a.png" "genius_output\b.
 
 ### Preflight (once per session)
 ```bash
-python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --preflight --no-gen
+python "<skill_dir>/scripts/genius.py" --preflight --no-gen
 ```
 
 ### Batch (auto-generate config)
@@ -80,7 +90,7 @@ AI creates `batch_<timestamp>.json` in the **`genius_output/Tmp/` subdirectory**
 ```bash
 # AI writes: <cwd>/genius_output/Tmp/batch_<timestamp>.json
 # AI runs:
-python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --batch <cwd>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3
+python "<skill_dir>/scripts/genius.py" --batch <cwd>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3
 # AI deletes the batch file immediately after
 ```
 **Always** put batch.json in `genius_output/Tmp/` — never in the working directory root, and never alongside the generated images.
@@ -113,12 +123,12 @@ python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" -
 
 ### Check balance
 ```bash
-python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\genius.py" --balance
+python "<skill_dir>/scripts/genius.py" --balance
 ```
 
 ### Self-test
 ```bash
-python "C:\Users\jinhu\.config\opencode\skills\genius-image\scripts\test.py"
+python "<skill_dir>/scripts/test.py"
 ```
 
 ## Models

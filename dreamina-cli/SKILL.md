@@ -30,7 +30,7 @@ Use it for:
 
 When using this CLI as an agent:
 
-1. Start with `dreamina -h`.
+1. **Preflight:** verify the CLI is available before doing anything else. Run `dreamina -h`. If the command is not found, stop and report: the `dreamina` CLI is not installed or not on PATH. Do not proceed until the user confirms it is available.
 2. Before using any command for real, run `dreamina <subcommand> -h`.
 3. Reuse the current login state unless the user explicitly asks you to `login`, `relogin`, `logout`, or finish a headless login with `checklogin`.
 4. When login is required, run `dreamina login` or `dreamina relogin`. The CLI uses OAuth Device Flow and prints `verification_uri`, `user_code`, and `device_code`.
@@ -100,11 +100,23 @@ If `gen_status` is `fail`, inspect `fail_reason` and reply proactively with the 
 
 After a submit returns `querying`:
 
-1. Save the `submit_id`.
+1. Save the `submit_id` — write it to a local file (e.g. `.dreamina_tasks.txt`, one line per entry: `<timestamp> <command> <submit_id>`) before polling. This prevents re-submission if the session resets or the agent context reloads.
 2. Use `query_result --submit_id=<id>` for follow-up.
 3. Use `list_task` when you want to review saved tasks in bulk.
 
+Before re-submitting any paid task, check the saved log to confirm no in-progress submit_id already exists for this request.
+
 If you are running a test sweep, keep results in a machine-readable format so you can query the returned `submit_id` values later.
+
+## Common failure handling
+
+| Error / symptom | Action |
+|:--|:--|
+| `dreamina: command not found` | CLI not installed or not on PATH — stop, report to user |
+| `AigcComplianceConfirmationRequired` | Ask user to complete web-side authorization at Dreamina, then retry once |
+| Network timeout / connection error | Wait 10–30s and retry once; if it fails again, report the error and let the user decide |
+| Rate limit / quota exceeded | Report the exact message; do not retry automatically — wait for user confirmation |
+| `gen_status: fail` + `fail_reason` | Report `fail_reason` verbatim; do not silently retry |
 
 ## Important user-facing rules
 

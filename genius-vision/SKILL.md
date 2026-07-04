@@ -67,10 +67,12 @@ vision_analyze(image_url="path/to/image.png", question="[mode prompt below]")
 
 ## Usage (Other Agents — Python Script)
 
-For agents without native vision tools, use the bundled script. Auto-detects video by extension:
+For agents without native vision tools, use the bundled script. Auto-detects video by extension.
+
+**`<skill_dir>`** = the directory containing this SKILL.md. Resolve it at runtime before running commands (e.g. `~/.zcode/skills/genius-vision/`).
 
 ```bash
-python /path/to/scripts/vision.py <file_path_or_url> <mode> [--output json|text]
+python "<skill_dir>/scripts/vision.py" <file_path_or_url> <mode> [--output json|text]
 ```
 
 ### Image Modes
@@ -105,8 +107,19 @@ python vision.py presentation.mp4 video-ocr --output json
 export ARK_API_KEY="your-volcengine-ark-api-key"
 
 # Or create .env file in skill directory
-echo 'ARK_API_KEY=your-key' > /path/to/genius-vision/scripts/.env
+echo 'ARK_API_KEY=your-key' > "<skill_dir>/scripts/.env"
 ```
+
+**ffprobe (required for video modes):** ffprobe ships with ffmpeg. Install if missing:
+```bash
+# macOS
+brew install ffmpeg
+# Windows
+winget install Gyan.FFmpeg
+# Ubuntu / Debian
+sudo apt install ffmpeg
+```
+Verify: `ffprobe -version`. Without ffprobe, duration verification is skipped and video analysis may time out silently.
 
 ## Output Format
 
@@ -173,6 +186,7 @@ Set via `VISION_MODEL` env or pass `--model` flag.
 ## Verification
 
 - [ ] `ARK_API_KEY` is set and valid
-- [ ] Test with a simple image: `python3 vision.py test.jpg describe`
-- [ ] Verify JSON output: `python3 vision.py test.jpg ocr --output json`
+- [ ] Test with a simple image: `python3 "<skill_dir>/scripts/vision.py" test.jpg describe`
+- [ ] Verify JSON output: `python3 "<skill_dir>/scripts/vision.py" test.jpg ocr --output json`
 - [ ] Check that Chinese text is recognized correctly
+- [ ] `ffprobe -version` returns successfully (required for video modes)

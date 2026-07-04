@@ -30,6 +30,8 @@ Check your available tools against these fingerprints. Match the FIRST row where
 | **Codex** | `read_file`, `search_content`, `search_files`, `directory_tree`, `write_file`, `run_command` | `/skill-name` or `$skill-name` in prompt | `.agents/skills/<name>/` |
 | **Cursor** | `search_file`, `search_content`, `read_file`, `write`, `execute_command`, `editor_edit_file` | `/<skill-name>` in chat | `.cursor/skills/<name>/` |
 | **Claude Code** | `Read`, `Write`, `Edit`, `Grep`, `Glob`, `Bash`, `Task` | `/skill-name` in chat | `.claude/skills/<name>/` or `~/.claude/skills/<name>/` |
+| **ZCode / Kiro** | `Read`, `Write`, `Edit`, `Bash`, `Agent`, `Skill` | `/skill-name` in chat or via Skill tool | `~/.zcode/skills/<name>/` (ZCode) · `~/.kiro/skills/<name>/` (Kiro) |
+| **Hermes** | `read_file`, `write_file`, `bash`, `run_skill` | `run_skill({ name: "<skill>" })` | `~/.hermes/skills/<category>/<name>/` (or junction target) |
 
 If none match, or you're unsure, ask the user: *"Which AI agent are you currently running on? (Reasonix / Codex / Cursor / Claude Code / other)"* Then use the answer to look up the right mapping.
 

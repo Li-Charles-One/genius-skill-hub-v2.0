@@ -60,7 +60,7 @@ Only use when the user explicitly asks to brainstorm OR the task involves a new 
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `specs/YYYY-MM-DD-<topic>-design.md` and commit
+6. **Write design doc** — before writing, check if `specs/YYYY-MM-DD-<topic>-design.md` already exists. If it does, tell the user the file exists and confirm whether to overwrite or use a different name. Then save and commit.
 7. **Spec review loop** — dispatch a review subagent with the review prompt from `spec-document-reviewer-prompt.md`; fix issues and re-dispatch until approved (max 5 iterations, then surface to human).
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan

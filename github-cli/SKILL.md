@@ -115,3 +115,11 @@ gh search issues -- "query -label:bug"
 ```
 
 For structured output, prefer `--json`, `--jq`, or `--template` when supported. Use `gh help formatting` if output needs filtering or formatting.
+
+## Rate Limits
+
+GitHub REST API allows 5 000 requests/hour per authenticated user. `gh api` calls count toward this limit.
+
+- Prefer `--paginate` to merge multi-page responses into one call instead of looping.
+- When the limit is hit, `gh` returns HTTP 429. Check the reset time with: `gh api rate_limit --jq '.rate.reset'` (Unix timestamp). Wait until that time before retrying.
+- `gh search` and GraphQL via `gh api graphql` have separate, lower limits — check `gh api rate_limit` for the full breakdown.

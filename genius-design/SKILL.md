@@ -47,14 +47,16 @@ If you can confidently infer from context, **do not ask**. Just declare the desi
 
 ### 0.D Ask the User Which Path
 
-After declaring the Design Read, ask:
+After declaring the Design Read, check first: **if the user has already provided a URL in their request, skip this question and go straight to Workflow B.**
+
+Otherwise ask:
 
 > Choose your path:
 > - **A. Brand template** -- pick from 73 brands (Stripe, Apple, Linear, Vercel...)
 > - **B. Reverse-engineer** -- give me a URL, I analyze its design and generate DESIGN.md
 > - **C. AI recommendation** -- tell me your product type (e.g. "pet hospital management system"), I recommend a design direction
 
-Route to the matching workflow below. If the user has already provided a URL, go straight to Workflow B.
+Route to the matching workflow below.
 
 ---
 
@@ -199,7 +201,14 @@ The following patterns must NEVER appear in any generated DESIGN.md or its deriv
 
 ## Shared Enrichment Pipeline (Steps A3-A5 / B4-B6 / C4-C6)
 
-After the base DESIGN.md exists (fetched, extracted, or generated), run this shared pipeline. Steps are identical across all workflows.
+**Preflight check (run before any enrichment step):** Verify all three reference files exist:
+- `reference/design-template.md`
+- `reference/anti-patterns.md`
+- `reference/preflight-checklist.md`
+
+If any file is missing, stop and report which file(s) are absent. Do not attempt enrichment with incomplete references — the output will be structurally incomplete.
+
+After the base DESIGN.md exists (fetched, extracted, or generated), run this shared pipeline.
 
 ### Enrichment Step 1: Expand Every Section
 
@@ -260,6 +269,8 @@ Show the Selection Guide at the bottom of this file to help the user choose. Or 
 
 ### Step A2: Fetch the Base DESIGN.md
 
+**Overwrite check:** If `./DESIGN.md` already exists, notify the user before proceeding. Either ask for confirmation to overwrite, or automatically back up the existing file as `./DESIGN.md.bak` and note that a backup was created.
+
 ```bash
 # Primary: your fork
 curl -sL "https://raw.githubusercontent.com/Li-Charles-One/awesome-design-md/main/design-md/<slug>/DESIGN.md" -o ./DESIGN.md
@@ -300,14 +311,20 @@ firecrawl scrape "<url>" --format rawHtml,branding,screenshot --only-main-conten
 
 After scraping, spot-check with quick greps:
 ```bash
-# Dominant font
+# Dominant font (Linux/GNU grep)
 grep -oP "font-family:\s*[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
+# macOS (BSD grep, no -P): use -E instead
+grep -oE "font-family:[^;]+" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -5
 
-# Border-radius patterns
+# Border-radius patterns (Linux)
 grep -oP "border-radius:\s*\d+px" .firecrawl/design-data.json | sort | uniq -c | sort -rn
+# macOS
+grep -oE "border-radius:[[:space:]]*[0-9]+px" .firecrawl/design-data.json | sort | uniq -c | sort -rn
 
-# All hex colors
+# All hex colors (Linux)
 grep -oP "#[0-9a-fA-F]{3,8}" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -15
+# macOS
+grep -oE "#[0-9a-fA-F]{3,8}" .firecrawl/design-data.json | sort | uniq -c | sort -rn | head -15
 ```
 
 If the page requires login or interaction:
@@ -336,6 +353,8 @@ Work through each dimension systematically. For every value, assign a **semantic
 **Design system detection**: Does the site use a recognizable design system (Material, Fluent, Carbon, Primer, GOV.UK)? If yes, note it for the Honesty Map.
 
 ### Step B3: Generate the Deep DESIGN.md
+
+**Overwrite check:** If `./DESIGN.md` already exists, notify the user and back up as `./DESIGN.md.bak` before writing.
 
 Use `reference/design-template.md` as the structure. Fill every section from the extracted tokens. Where extraction can't determine a value, apply the defaults from the template and mark with `<!-- inferred -->`.
 
@@ -372,6 +391,8 @@ Based on the product description and Brief Inference, systematically reason:
 5. **Closest brand match**: Which brand(s) from the 73-brand catalog are closest in spirit? Name 2-3 with one-line justifications.
 
 ### Step C3: Generate the DESIGN.md
+
+**Overwrite check:** If `./DESIGN.md` already exists, notify the user and back up as `./DESIGN.md.bak` before writing.
 
 Two paths, based on closeness to existing brands:
 
