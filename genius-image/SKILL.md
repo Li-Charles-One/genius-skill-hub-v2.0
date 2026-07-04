@@ -1,6 +1,6 @@
 ---
 name: genius-image
-description: "Generate images using Crun.ai API with 4 model options (gpt-image-2, gpt-image-2-premium, nano-banana-2, nano-banana-pro). Supports single image, batch concurrent generation, async webhook mode, auto-retry on 501 upstream timeouts, and JSONL logging with 10MB rotation / 7-day cleanup. Use when user wants to generate AI images, run multi-model comparisons, or batch-generate from a list of prompts. Triggers on 'genius image', 'crun image', 'batch image generation', or any request to generate images via Crun API."
+description: "Generate images using Crun.ai API with 6 model options (gpt-image-2, gpt-image-2-stable, gpt-image-2-premium, nano-banana-2, nano-banana-2-lite, nano-banana-pro). Supports single image, batch concurrent generation, async webhook mode, auto-retry on 501 upstream timeouts, and JSONL logging with 10MB rotation / 7-day cleanup. Use when user wants to generate AI images, run multi-model comparisons, or batch-generate from a list of prompts. Triggers on 'genius image', 'crun image', 'batch image generation', or any request to generate images via Crun API."
 ---
 
 # Genius Image
@@ -42,13 +42,11 @@ Inspect the smallest useful evidence:
 5. **501 auto-retry**: retry only when completed task payload has `result.code == 501`, up to 3 times, 5s delay
 6. **User does not see batch.json**: AI generates and cleans up the file
 7. **Do not run self-test before ordinary generation**: run `scripts/test.py` only when the user asks, after editing this skill, or while debugging setup failures
-8. **推荐用 `--out` 明确指定输出目录**：直接传绝对路径，彻底消除 workdir 歧义。例如 `--out "C:/Users/jinhu/Documents/workspace/genius_output"`。不传时脚本写入 `<cwd>/genius_output/`，仍需保证 cwd 是用户工作区。
-9. **不知道工作区路径时，问用户或使用 `--out`**：不要猜测，宁可多问一句。
-10. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `--out` or `workdir`, not by where the script file lives
-11. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
-12. **cloudflared must be available before generating**: check `bin/cloudflared.exe` (relative to `<skill_dir>`) or `cloudflared` on PATH. If neither exists, report the missing binary and exit — do not attempt generation without it. Download from https://github.com/cloudflare/cloudflared/releases/latest and place at `<skill_dir>/bin/cloudflared.exe`.
-13. **Webhook port 8765 is hardcoded**: if the port is already in use, the script will fail with `Address already in use`. Fix: kill the process occupying 8765 (`netstat -ano | findstr :8765` on Windows), then retry.
-14. **回调超时最长 300 秒（5分钟）**：高分辨率或复杂 prompt 的生成任务可能接近5分钟。在长任务开始前告知用户预计等待时间；若 agent runtime 自身有工具调用超时限制，建议优先使用较轻量的模型（如 `gpt-image-2` 或 `nano-banana-2-lite`）或降低分辨率。
+8. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `--out` or `workdir`, not by where the script file lives
+9. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
+10. **cloudflared must be available before generating**: check `bin/cloudflared.exe` (relative to `<skill_dir>`) or `cloudflared` on PATH. If neither exists, report the missing binary and exit — do not attempt generation without it. Download from https://github.com/cloudflare/cloudflared/releases/latest and place at `<skill_dir>/bin/cloudflared.exe`.
+11. **Webhook port 8765 is hardcoded**: if the port is already in use, the script will fail with `Address already in use`. Fix: kill the process occupying 8765 (`netstat -ano | findstr :8765` on Windows), then retry.
+12. **回调超时最长 300 秒（5分钟）**：高分辨率或复杂 prompt 的生成任务可能接近5分钟。在长任务开始前告知用户预计等待时间；若 agent runtime 自身有工具调用超时限制，建议优先使用较轻量的模型（如 `gpt-image-2` 或 `nano-banana-2-lite`）或降低分辨率。
 
 ## Path Resolution
 
@@ -141,16 +139,17 @@ python "<skill_dir>/scripts/test.py"
 | `gpt-image-2-stable` | `openai/gpt-image-2-stable` | — | `--quality` / `--background` (transparent/**唯一支持透明背景**) / `--moderation` / `--output-format`（default webp） |
 | `gpt-image-2-premium` | `openai/gpt-image-2-premium` | 1K/2K/4K | `--quality`（low/medium/high，default medium） |
 | `nano-banana-2` | `google/nano-banana-2` | 1K/2K/4K | `--google-search` / `--output-format` |
-| `nano-banana-2-lite` | `google/nano-banana-2-lite` | — | 轻量版，max 10张参考图，无 resolution |
+| `nano-banana-2` (v2) | `google/nano-banana-2-v2` | 1K/2K/4K | 比标准版便宜约40%，生成较慢；适合大批量省成本 |
+| `nano-banana-2-lite` | `google/nano-banana-2-lite` | — | 轻量版（2026-06-30新发），极低成本（官方$0.034/1000张），约4秒出图，max 10张参考图，无 resolution，高频草稿首选 |
 | `nano-banana-pro` | `google/nano-banana-pro` | 1K/2K/4K | `--output-format` |
 
 **选型指引：**
-- 速度优先 / 省积分 → `gpt-image-2`
-- 需要**透明背景**或 webp 输出 → `gpt-image-2-stable`
+- 速度优先 / 省积分（**默认模型**）→ `gpt-image-2`
+- 需要**透明背景**或 webp 输出；如需 PNG 须显式传 `--output-format png` → `gpt-image-2-stable`
 - 高质量写实，可控质量档位 → `gpt-image-2-premium`
-- 超长 prompt（最多20000字符）/ 需要谷歌搜索增强 → `nano-banana-2`
-- 轻量快速，无需高分辨率 → `nano-banana-2-lite`
-- 参考图贴合度最高（图生图） → `nano-banana-pro`
+- 超长 prompt（最多20000字符）/ 需要谷歌搜索增强 → `nano-banana-2`（省成本可用 v2 变体）
+- 极速草稿 / 超低成本（约4秒/张，官方$0.034/1000张，原版nano-banana的接班人）→ `nano-banana-2-lite`
+- 参考图贴合度最高（图生图）→ `nano-banana-pro`
 
 ## Resource Map
 
