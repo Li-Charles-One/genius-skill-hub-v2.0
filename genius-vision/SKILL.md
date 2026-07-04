@@ -1,7 +1,7 @@
 ---
 name: genius-vision
 description: "Universal image & video analysis via doubao (豆包) vision API. Use when user asks to analyze, OCR, review, or describe any image or video file. Supports 6 image modes (describe, ocr, ui-review, chart-data, object-detect, compare) and 4 video modes (video-summary, video-ocr, video-review, video-frame-analysis). Triggers: analyze image, analyze video, OCR, extract text, UI review, screenshot, chart, video summary, 看图, 视频分析."
-version: 1.2.0
+version: 1.3.0
 ---
 
 # Genius Vision
@@ -10,8 +10,8 @@ Universal image & video analysis skill for AI agents. Analyzes images and videos
 
 ## Supported Environments
 
-- Hermes Agent (native)
-- Claude Code / Codex / Cursor (via Python script)
+- ZCode / Hermes Agent (native)
+- Claude Code / Codex / OpenCode / Cursor (via Python script)
 
 ## Analysis Modes
 
@@ -37,7 +37,24 @@ Universal image & video analysis skill for AI agents. Analyzes images and videos
 
 **Duration verification**: For all video modes, `ffprobe` automatically extracts actual duration, injects it as ground truth into the prompt, and appends a comparison footer to the output.
 
-## Usage (Hermes Agent)
+## Prerequisites
+
+### ffprobe (required for all video modes)
+
+ffprobe ships with ffmpeg. Install if missing:
+
+```bash
+# macOS
+brew install ffmpeg
+# Windows
+winget install Gyan.FFmpeg
+# Ubuntu / Debian
+sudo apt install ffmpeg
+```
+
+Verify: `ffprobe -version`. Without ffprobe, duration verification is skipped and video analysis may time out silently.
+
+## Usage (ZCode / Hermes Agent)
 
 Call `vision_analyze` with a mode-specific prompt:
 
@@ -65,6 +82,8 @@ vision_analyze(image_url="path/to/image.png", question="[mode prompt below]")
 **compare:**
 > Compare these two images. List: (1) What's the same, (2) What's different, (3) Which version is better and why.
 
+**Note (compare mode):** `vision_analyze` accepts one `image_url` at a time. To compare two images, call it twice and summarize the results, or use the Python script's `--compare-with` flag which handles both images in a single API call.
+
 ## Usage (Other Agents — Python Script)
 
 For agents without native vision tools, use the bundled script. Auto-detects video by extension.
@@ -87,18 +106,23 @@ python "<skill_dir>/scripts/vision.py" <file_path_or_url> <mode> [--output json|
 - `video-summary` — full video understanding with timeline
 - `video-ocr` — extract text visible in video
 - `video-review` — video/screen recording production critique
+- `video-frame-analysis` — frame-level / scene-by-scene breakdown with per-scene timestamps
 
 ### Examples
 ```bash
 # Images
-python vision.py screenshot.png ui-review
-python vision.py document.jpg ocr --output json
-python vision.py before.png compare --compare-with after.png
+python "<skill_dir>/scripts/vision.py" screenshot.png ui-review
+python "<skill_dir>/scripts/vision.py" document.jpg ocr --output json
+python "<skill_dir>/scripts/vision.py" before.png compare --compare-with after.png
+
+# Switch to a higher-quality model
+python "<skill_dir>/scripts/vision.py" diagram.png chart-data --model doubao-seed-2.0-pro-260215
 
 # Videos (auto-detected by .mp4/.mov/.avi/.mkv/.webm extension)
-python vision.py meeting.mp4 video-summary
-python vision.py screencast.mov video-review
-python vision.py presentation.mp4 video-ocr --output json
+python "<skill_dir>/scripts/vision.py" meeting.mp4 video-summary
+python "<skill_dir>/scripts/vision.py" screencast.mov video-review
+python "<skill_dir>/scripts/vision.py" presentation.mp4 video-ocr --output json
+python "<skill_dir>/scripts/vision.py" lecture.mp4 video-frame-analysis
 ```
 
 ### Setup (Other Agents)
@@ -110,17 +134,6 @@ export ARK_API_KEY="your-volcengine-ark-api-key"
 echo 'ARK_API_KEY=your-key' > "<skill_dir>/scripts/.env"
 ```
 
-**ffprobe (required for video modes):** ffprobe ships with ffmpeg. Install if missing:
-```bash
-# macOS
-brew install ffmpeg
-# Windows
-winget install Gyan.FFmpeg
-# Ubuntu / Debian
-sudo apt install ffmpeg
-```
-Verify: `ffprobe -version`. Without ffprobe, duration verification is skipped and video analysis may time out silently.
-
 ## Output Format
 
 ### Text mode (default)
@@ -131,6 +144,8 @@ Verify: `ffprobe -version`. Without ffprobe, duration verification is skipped an
 ```
 
 ### JSON mode (`--output json`)
+
+**ui-review:**
 ```json
 {
   "mode": "ui-review",
@@ -149,6 +164,40 @@ Verify: `ffprobe -version`. Without ffprobe, duration verification is skipped an
 }
 ```
 
+**ocr:**
+```json
+{
+  "mode": "ocr",
+  "image": "document.jpg",
+  "result": {
+    "text": "Full extracted text here, preserving structure...",
+    "language": "zh-CN",
+    "confidence": "high"
+  }
+}
+```
+
+**chart-data:**
+```json
+{
+  "mode": "chart-data",
+  "image": "graph.png",
+  "result": {
+    "chart_type": "bar",
+    "title": "Monthly Sales 2025",
+    "x_label": "Month",
+    "y_label": "Revenue (USD)",
+    "series": [
+      {"label": "Jan", "value": 12000},
+      {"label": "Feb", "value": 15400}
+    ],
+    "insight": "Revenue grew 28% from Jan to Feb."
+  }
+}
+```
+
+**describe / object-detect / compare:** return `{ "mode": "...", "image": "...", "result": { "description": "..." } }`
+
 ## Configuration
 
 ### API Provider
@@ -164,10 +213,10 @@ Default: 火山引擎 Ark (doubao-seed-2.0-lite-260428)
 
 ### Quality Levels
 
-| Level | Model | Speed | Cost |
+| Level | Model ID | Speed | Cost |
 |---|---|---|---|
-| fast | doubao-seed-2.0-lite-260428 | ~1s | Free tier |
-| best | doubao-seed-2.0-pro-260215 | ~3s | Medium |
+| fast | `doubao-seed-2.0-lite-260428` | ~1s | Free tier |
+| best | `doubao-seed-2.0-pro-260215` | ~3s | Medium |
 
 Set via `VISION_MODEL` env or pass `--model` flag.
 
@@ -186,7 +235,9 @@ Set via `VISION_MODEL` env or pass `--model` flag.
 ## Verification
 
 - [ ] `ARK_API_KEY` is set and valid
+- [ ] `ffprobe -version` returns successfully (required for video modes)
 - [ ] Test with a simple image: `python3 "<skill_dir>/scripts/vision.py" test.jpg describe`
 - [ ] Verify JSON output: `python3 "<skill_dir>/scripts/vision.py" test.jpg ocr --output json`
 - [ ] Check that Chinese text is recognized correctly
-- [ ] `ffprobe -version` returns successfully (required for video modes)
+- [ ] Test video mode: `python3 "<skill_dir>/scripts/vision.py" test.mp4 video-summary`
+- [ ] Verify duration footer appears in video output
