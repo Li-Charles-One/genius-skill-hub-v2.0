@@ -136,10 +136,20 @@ python "<skill_dir>/scripts/test.py"
 
 | Key | Crun ID | Resolutions | Special params |
 |---|---|---|---|
-| `gpt-image-2` | `openai/gpt-image-2` | 1K/2K/4K | - |
-| `gpt-image-2-premium` | `openai/gpt-image-2-premium` | 1K/2K/3K | `--quality` (low/medium/high, default medium) |
-| `nano-banana-2` | `google/nano-banana-2` | 1K/2K/4K | `--google-search`, `--output-format` |
+| `gpt-image-2` | `openai/gpt-image-2` | 1K/2K/4K | — |
+| `gpt-image-2-stable` | `openai/gpt-image-2-stable` | — | `--quality` / `--background` (transparent/**唯一支持透明背景**) / `--moderation` / `--output-format`（default webp） |
+| `gpt-image-2-premium` | `openai/gpt-image-2-premium` | 1K/2K/4K | `--quality`（low/medium/high，default medium） |
+| `nano-banana-2` | `google/nano-banana-2` | 1K/2K/4K | `--google-search` / `--output-format` |
+| `nano-banana-2-lite` | `google/nano-banana-2-lite` | — | 轻量版，max 10张参考图，无 resolution |
 | `nano-banana-pro` | `google/nano-banana-pro` | 1K/2K/4K | `--output-format` |
+
+**选型指引：**
+- 速度优先 / 省积分 → `gpt-image-2`
+- 需要**透明背景**或 webp 输出 → `gpt-image-2-stable`
+- 高质量写实，可控质量档位 → `gpt-image-2-premium`
+- 超长 prompt（最多20000字符）/ 需要谷歌搜索增强 → `nano-banana-2`
+- 轻量快速，无需高分辨率 → `nano-banana-2-lite`
+- 参考图贴合度最高（图生图） → `nano-banana-pro`
 
 ## Resource Map
 
