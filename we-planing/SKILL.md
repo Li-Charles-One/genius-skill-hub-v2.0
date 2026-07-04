@@ -1,6 +1,6 @@
 ---
 name: we-planing
-version: 1.1.0
+version: 1.2.0
 description: "Maintain lightweight WePlaning v2.3 project memory. Triggers: initialize project memory, persist session, resume project, hand off, close out, repair memory, verify .agent-memory state, 读取项目记忆, 持久化到项目记忆, 记一笔, 查看项目进度. Do not use for ordinary summaries or code-only edits unless project memory must be updated."
 ---
 
@@ -42,7 +42,37 @@ For multi-step "继续干 #N" prompts, read memory, report Next Step N, then sta
 
 Optional files such as `TOOLS.md`, `PROJECT.md`, `DECISIONS.md`, and `notes/` may exist, but they are not required for the base consistency gate.
 
-## Read-Only Flow
+## Proactive Triggers
+
+The Agent should **proactively offer** to record memory (without waiting for the user to ask) in these situations:
+
+| Situation | Action |
+|---|---|
+| A task phase completes (feature done, bug fixed, config updated) | Run Quick Note, report session ID |
+| User says "完成了" / "done" / "搞定" | Run Quick Note automatically |
+| Multiple files were changed in one session | Suggest Quick Note before ending |
+| A non-obvious decision was made (library choice, architecture trade-off) | Run Quick Note to preserve the reasoning |
+
+Do **not** wait for "持久化到项目记忆" — by then the user has already had to remember to ask.
+
+## Quick Note (one command)
+
+For post-task recording, use `weplaning-note.cjs` instead of the two-step Lite flow:
+
+```bash
+node <skill_dir>/scripts/weplaning-note.cjs <project-root> "<note>" --agent <agent-name>
+```
+
+This does `new-session` + `safe-edit --lite` + consistency check in one call.
+
+```bash
+# Example
+node <skill_dir>/scripts/weplaning-note.cjs . "genius-vision SKILL.md v1.3.0 optimized: 9 fixes, commit 15e3cf5" --agent ZCode
+```
+
+Use `--role` and `--goal` to override defaults (`ops` and the note text respectively).
+
+
 
 1. Read `.agent-memory/CURRENT.md`.
 2. Read `.agent-memory/THREADS.md`.
