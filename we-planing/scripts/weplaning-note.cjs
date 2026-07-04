@@ -6,8 +6,8 @@
  *   node weplaning-note.cjs <project-root> "<note>" [options]
  *
  * Replaces the two-step Lite flow (new-session + safe-edit --lite) with a
- * single command. Designed for post-task quick notes where the Agent should
- * record without user prompting.
+ * single command. Also auto-closes the session after writing, so sessions
+ * don't accumulate as "active" forever.
  *
  * Options:
  *   --agent <name>   Agent name. Default: ZCode
@@ -19,7 +19,18 @@
 
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { parseArgs, usage } = require("./weplaning-utils.cjs");
+const {
+  parseArgs,
+  parseSessionMd,
+  renderSessionMd,
+  readSession,
+  writeSession,
+  readThreads,
+  writeThreads,
+  usage,
+  utcNow,
+  withMemoryLock,
+} = require("./weplaning-utils.cjs");
 
 const help = `
 Usage:
@@ -70,7 +81,7 @@ const sessionId = run(
   "new-session",
   path.join(scriptDir, "new-session.cjs"),
   [root, "--agent", agent, "--role", role, "--summary", note, "--goal", goal, "--no-check"],
-  true   // WEPLANING_INTERNAL_NO_CHECK=1
+  true // WEPLANING_INTERNAL_NO_CHECK=1
 );
 
 // Step 2: write note + run pre/post consistency check
@@ -79,5 +90,19 @@ run(
   path.join(scriptDir, "safe-edit.cjs"),
   [root, "--lite", "--session", sessionId, "--changed", note]
 );
+
+// Step 3: auto-close session — prevents active session accumulation
+withMemoryLock(root, () => {
+  const sessionText = readSession(root, sessionId);
+  const session = parseSessionMd(sessionText);
+  session.status = "closed";
+  session.closed = utcNow();
+  writeSession(root, sessionId, renderSessionMd(session));
+
+  const threads = readThreads(root);
+  const row = threads.rows.find((r) => r.id === sessionId);
+  if (row) row.status = "closed";
+  writeThreads(root, threads, utcNow());
+});
 
 console.log(`\n[weplaning-note] Done. Session: ${sessionId}`);

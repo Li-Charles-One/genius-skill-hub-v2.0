@@ -1,6 +1,6 @@
 ---
 name: we-planing
-version: 1.2.0
+version: 1.3.0
 description: "Maintain lightweight WePlaning v2.3 project memory. Triggers: initialize project memory, persist session, resume project, hand off, close out, repair memory, verify .agent-memory state, 读取项目记忆, 持久化到项目记忆, 记一笔, 查看项目进度. Do not use for ordinary summaries or code-only edits unless project memory must be updated."
 ---
 
@@ -73,6 +73,18 @@ node <skill_dir>/scripts/weplaning-note.cjs . "genius-vision SKILL.md v1.3.0 opt
 Use `--role` and `--goal` to override defaults (`ops` and the note text respectively).
 
 
+
+## Read-Only Flow
+
+**Preferred: one command**
+
+```bash
+node <skill_dir>/scripts/weplaning-read.cjs <project-root>
+```
+
+Outputs goal + current state + next steps + recent unmerged notes + recent changes in one structured briefing.
+
+**Manual (fallback):**
 
 1. Read `.agent-memory/CURRENT.md`.
 2. Read `.agent-memory/THREADS.md`.
