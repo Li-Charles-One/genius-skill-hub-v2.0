@@ -79,7 +79,7 @@ Last merged session: <session-id>
 
 | Session ID | Parent | Agent | OS | Role | Status | Summary |
 |:--|:--|:--|:--|:--|:--|:--|
-| <id> | <parent> | <agent> | <os> | <role> | active|merged|paused|abandoned | <summary> |
+| <id> | <parent> | <agent> | <os> | <role> | active|merged|paused|abandoned|closed | <summary> |
 ```
 
 ## CHANGES.md
@@ -120,7 +120,9 @@ Adapter: <adapter>
 OS: <os>
 Role: <role>
 Parent session: <id>
-Status: active|merged|paused|abandoned
+Status: active|merged|paused|abandoned|closed
+
+`closed` is a terminal status for Lite/Quick-Note sessions that are finished but were never merged into the mainline (used by `weplaning-note.cjs` auto-close). It is valid for non-mainline rows; the consistency gate still requires the mainline session to be `merged`.
 Started: <iso-time>
 Closed: <iso-time|unknown>
 

@@ -13,7 +13,7 @@ _(Skill package v1.5.0; implements WePlaning protocol v2.3)_
 - Multiple Agent sessions need shared durable state in `.agent-memory/`.
 - You will write accepted project state, session notes, or a change ledger entry.
 
-Do not use for ordinary summaries, one-off answers, or code-only edits unless the user explicitly wants project memory persisted.
+Do not use for ordinary summaries, one-off answers, or trivial code-only edits unless the user explicitly wants project memory persisted. (The Proactive Triggers below are the deliberate exception — they fire only for durable, cross-session-relevant work, not routine Q&A or cosmetic one-off edits.)
 
 ## User-Facing Trigger Phrases (pinned to this skill)
 
@@ -28,7 +28,7 @@ When the user says any of these, **read the project memory** — don't ask "what
 | "完成了 / close out / 提交主线" | Closeout flow (safe-edit --close) |
 | "修一下记忆" / "memory 坏了" | `check-memory.cjs` first, then `repair-memory.cjs` if cause is known |
 | "项目叫什么" / "现在目标是什么" / "查看项目进度" | Read CURRENT.md "Active Goal" only |
-| "继续干 #N" | Read memory → report Next Step N → start work |
+| "继续干 #N" | Read memory → report Next Step #N (the numbered item under CURRENT.md "Accepted Next Steps") → start work |
 
 ## Files
 
@@ -52,7 +52,7 @@ The Agent should **automatically run Quick Note** (without waiting for the user 
 |---|---|
 | A task phase completes (feature done, bug fixed, config updated) | Run `weplaning-note.cjs` automatically, report session ID |
 | User says "完成了" / "done" / "搞定" | Run `weplaning-note.cjs` automatically |
-| Multiple files were changed in one session | Run `weplaning-note.cjs` automatically before ending |
+| Multiple files were changed for durable, cross-session-relevant work (not routine one-off edits) | Run `weplaning-note.cjs` automatically before ending |
 | A non-obvious decision was made (library choice, architecture trade-off) | Run `weplaning-note.cjs` automatically to preserve the reasoning |
 
 Do **not** wait for "持久化到项目记忆" — by then the user has already had to remember to ask.
@@ -65,7 +65,7 @@ For post-task recording, use `weplaning-note.cjs` instead of the two-step Lite f
 node <skill_dir>/scripts/weplaning-note.cjs <project-root> "<note>" --agent <agent-name>
 ```
 
-This does `new-session` + `safe-edit --lite` + consistency check in one call.
+This runs `new-session` + `safe-edit --lite` + consistency check, then **auto-closes** the session (status `closed`) so Lite notes don't accumulate as `active`.
 
 ```bash
 # Example
@@ -106,7 +106,7 @@ node <skill_dir>/scripts/safe-edit.cjs <project-root> --lite --session <id> --ch
 ```bash
 # Example
 node <skill_dir>/scripts/new-session.cjs . --agent ZCode --role ops --summary "update config" --goal "enable dark mode"
-node <skill_dir>/scripts/safe-edit.cjs . --lite --session sess_20260708_001 --changed "Updated tailwind.config.ts: darkMode enabled"
+node <skill_dir>/scripts/safe-edit.cjs . --lite --session 20260708T1430-zcode-a3f9 --changed "Updated tailwind.config.ts: darkMode enabled"
 ```
 
 ## Closeout Flow
