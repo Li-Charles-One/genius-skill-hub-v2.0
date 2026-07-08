@@ -231,12 +231,81 @@ function testBackupCleanup() {
   assert(currentBackups.length <= 10, "CURRENT.md backups were not capped");
 }
 
+function testStaleWriteReleasesLock() {
+  // Business error before the lock callback used to leak .weplaning.lock.
+  const root = tempRoot("stalelock");
+  init(root);
+  const first = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "First", "--goal", "First session",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:05:00Z", "--short-id", "one",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  run([
+    script("safe-edit.cjs"), root, "--close", "--session", first,
+    "--changed", "First close", "--file", ".agent-memory/CHANGES.md",
+    "--verification", "smoke",
+  ]);
+  const second = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "Second", "--goal", "Second session",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:06:00Z", "--short-id", "two",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  // Make second stale: rewind its parent to the pre-close mainline.
+  const sessionPath = path.join(root, ".agent-memory", "sessions", `${second}.md`);
+  const stale = fs.readFileSync(sessionPath, "utf8").replace(/^Parent session:.*$/m, "Parent session: bogus-parent");
+  fs.writeFileSync(sessionPath, stale, "utf8");
+  const result = run([
+    script("safe-edit.cjs"), root, "--close", "--session", second,
+    "--changed", "Stale close", "--file", ".agent-memory/CHANGES.md",
+    "--verification", "smoke",
+  ], { expectFail: true });
+  assert(result.stderr.includes("Stale write blocked"), "expected stale write error");
+  assert(result.stderr.includes("Fix:"), "stale write error should include fix guidance");
+  assert(
+    !fs.existsSync(path.join(root, ".agent-memory", ".weplaning.lock")),
+    "stale write leaked .weplaning.lock",
+  );
+}
+
+function testCloseSyncsCurrentMd() {
+  const root = tempRoot("currentsync");
+  init(root);
+  const session = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "Sync work", "--goal", "Sync CURRENT.md",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:07:00Z", "--short-id", "sync",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  run([
+    script("safe-edit.cjs"), root, "--close", "--session", session,
+    "--changed", "Synced close", "--file", ".agent-memory/CHANGES.md",
+    "--verification", "smoke",
+    "--state", "Feature A done;;Feature B in review",
+    "--next-step", "Ship feature B;;Start feature C",
+    "--blockers", "none",
+  ]);
+  const current = read(root, "CURRENT.md");
+  assert(current.includes("- Feature A done"), "CURRENT.md missing synced state bullet");
+  assert(current.includes("1. Ship feature B"), "CURRENT.md missing synced next step");
+  assert(current.includes("2. Start feature C"), "CURRENT.md missing second next step");
+  run([script("check-memory.cjs"), root]);
+  // Sync flags without --close must be rejected.
+  run([
+    script("safe-edit.cjs"), root, "--lite", "--session", session,
+    "--changed", "note", "--state", "should fail",
+  ], { expectFail: true });
+}
+
 for (const test of [
   testLifecycle,
   testMismatchFails,
   testLegacyWePlaningIgnored,
   testSafeEditRollbackKeepsNewFiles,
   testBackupCleanup,
+  testStaleWriteReleasesLock,
+  testCloseSyncsCurrentMd,
 ]) {
   test();
   console.log(`[ok] ${test.name}`);

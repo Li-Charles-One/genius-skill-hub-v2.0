@@ -1,10 +1,11 @@
 ---
 name: we-planing
-version: 1.3.0
-description: "Maintain lightweight WePlaning v2.3 project memory. Triggers: initialize project memory, persist session, resume project, hand off, close out, repair memory, verify .agent-memory state, 读取项目记忆, 持久化到项目记忆, 记一笔, 查看项目进度. Do not use for ordinary summaries or code-only edits unless project memory must be updated."
+version: 1.5.0
+description: "Maintain WePlaning v2.3 project memory. Use for: init, resume, persist, hand off, close out, repair .agent-memory. 读取项目记忆 / 持久化到项目记忆 / 记一笔 / 查看项目进度."
 ---
 
 # WePlaning
+_(Skill package v1.5.0; implements WePlaning protocol v2.3)_
 
 ## Use When
 
@@ -26,11 +27,12 @@ When the user says any of these, **read the project memory** — don't ask "what
 | "这件事记下来" / "记一笔" | Lite flow |
 | "完成了 / close out / 提交主线" | Closeout flow (safe-edit --close) |
 | "修一下记忆" / "memory 坏了" | `check-memory.cjs` first, then `repair-memory.cjs` if cause is known |
-| "项目叫什么" / "现在目标是什么" | Read CURRENT.md "Active Goal" only |
-
-For multi-step "继续干 #N" prompts, read memory, report Next Step N, then start work — don't ask the user to re-explain the goal.
+| "项目叫什么" / "现在目标是什么" / "查看项目进度" | Read CURRENT.md "Active Goal" only |
+| "继续干 #N" | Read memory → report Next Step N → start work |
 
 ## Files
+
+> `<skill_dir>` in all commands below refers to the skill's base directory — shown at the bottom of the loaded skill content as "Base directory for this skill".
 
 ```text
 .agent-memory/
@@ -44,14 +46,14 @@ Optional files such as `TOOLS.md`, `PROJECT.md`, `DECISIONS.md`, and `notes/` ma
 
 ## Proactive Triggers
 
-The Agent should **proactively offer** to record memory (without waiting for the user to ask) in these situations:
+The Agent should **automatically run Quick Note** (without waiting for the user to ask) in these situations:
 
 | Situation | Action |
 |---|---|
-| A task phase completes (feature done, bug fixed, config updated) | Run Quick Note, report session ID |
-| User says "完成了" / "done" / "搞定" | Run Quick Note automatically |
-| Multiple files were changed in one session | Suggest Quick Note before ending |
-| A non-obvious decision was made (library choice, architecture trade-off) | Run Quick Note to preserve the reasoning |
+| A task phase completes (feature done, bug fixed, config updated) | Run `weplaning-note.cjs` automatically, report session ID |
+| User says "完成了" / "done" / "搞定" | Run `weplaning-note.cjs` automatically |
+| Multiple files were changed in one session | Run `weplaning-note.cjs` automatically before ending |
+| A non-obvious decision was made (library choice, architecture trade-off) | Run `weplaning-note.cjs` automatically to preserve the reasoning |
 
 Do **not** wait for "持久化到项目记忆" — by then the user has already had to remember to ask.
 
@@ -72,8 +74,6 @@ node <skill_dir>/scripts/weplaning-note.cjs . "genius-vision SKILL.md v1.3.0 opt
 
 Use `--role` and `--goal` to override defaults (`ops` and the note text respectively).
 
-
-
 ## Read-Only Flow
 
 **Preferred: one command**
@@ -82,7 +82,7 @@ Use `--role` and `--goal` to override defaults (`ops` and the note text respecti
 node <skill_dir>/scripts/weplaning-read.cjs <project-root>
 ```
 
-Outputs goal + current state + next steps + recent unmerged notes + recent changes in one structured briefing.
+Outputs goal + current state + next steps + recent unmerged notes + recent changes in one structured briefing. After running, report the summary to the user.
 
 **Manual (fallback):**
 
@@ -90,6 +90,7 @@ Outputs goal + current state + next steps + recent unmerged notes + recent chang
 2. Read `.agent-memory/THREADS.md`.
 3. Read the tail of `.agent-memory/CHANGES.md`.
 4. Read relevant `sessions/<id>.md` files only when needed.
+5. Summarize to the user: Active Goal → current state → next steps → blockers.
 
 Do not create a session for read-only inspection.
 
@@ -100,6 +101,12 @@ Use this when the user wants a durable note but not a mainline merge:
 ```bash
 node <skill_dir>/scripts/new-session.cjs <project-root> --agent <agent-name> --role <role> --summary "<summary>" --goal "<goal>"
 node <skill_dir>/scripts/safe-edit.cjs <project-root> --lite --session <id> --changed "<durable note>"
+```
+
+```bash
+# Example
+node <skill_dir>/scripts/new-session.cjs . --agent ZCode --role ops --summary "update config" --goal "enable dark mode"
+node <skill_dir>/scripts/safe-edit.cjs . --lite --session sess_20260708_001 --changed "Updated tailwind.config.ts: darkMode enabled"
 ```
 
 ## Closeout Flow
@@ -113,6 +120,18 @@ node <skill_dir>/scripts/safe-edit.cjs <project-root> --close --session <id> \
 
 This runs pre-check, appends `CHANGES.md`, merges the session, runs post-check, and restores the snapshot on failure.
 
+**Sync `CURRENT.md` prose in the same call** — if the closeout changes facts the user reads in `CURRENT.md` (state bullets, next steps, blockers, goal), pass the sync flags instead of hand-editing afterwards:
+
+```bash
+node <skill_dir>/scripts/safe-edit.cjs <project-root> --close --session <id> \
+  --changed "<what changed>" --file "<path>" --verification "<check run>" \
+  --state "Feature A done;;Feature B in review" \
+  --next-step "Ship feature B;;Start feature C" \
+  --blockers "none"
+```
+
+`--state`/`--next-step`/`--blockers` replace their whole section (repeat the flag or use `;;` for multiple items); `--goal` and `--understanding` replace their sections as plain text.
+
 ## Maintenance
 
 ```bash
@@ -124,26 +143,17 @@ node <skill_dir>/scripts/repair-memory.cjs <project-root>
 
 ## Verification
 
+> _Run this checklist when setting up WePlaning on a new machine, after recovery, or before shipping a new skill version._
+
 - [ ] Smoke test passes: `node <skill_dir>/tools/smoke-weplaning.cjs` prints all `[ok]` and exits 0
 - [ ] `init-memory.cjs` completes without error (run with `--agent <name>`)
 - [ ] `check-memory.cjs` passes on a freshly initialized project
 - [ ] Lite flow: `new-session.cjs` + `safe-edit --lite` completes and `check-memory.cjs` still passes
 - [ ] Closeout flow: `safe-edit --close` completes, session appears as `merged` in `THREADS.md`
 
-## Installing WePlaning into Hermes (when shipping from a hub repo)
+## Agent Name
 
-If WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you want to make it available to Hermes:
-
-1. **Smoke-test first** — run `node <hub>/we-planing/tools/smoke-weplaning.cjs` from the hub path. If it doesn't print all `[ok]` lines and exit 0, don't install.
-2. **Pick the right category** in `hermes/skills/`. There's no `project-management` category by default in some Hermes installs — `mkdir -p` it if missing. `software-development` is a wrong fit (WePlaning is about project memory, not code).
-3. **Link, don't copy** — use a Windows directory junction (`mklink /J`, no admin needed) so changes in the hub flow to Hermes automatically:
-   ```bash
-   cmd //c "mklink /J C:\Users\<user>\AppData\Local\hermes\skills\project-management\we-planing <hub>\we-planing"
-   ```
-   `mklink /D` (symbolic link) requires admin or Developer Mode — junction is the right tool for standard users.
-4. **Default agent name** — `init-memory.cjs` defaults to agent name `Codex`. Pass `--agent <name>` (e.g. `Linus`) on first init to match the active persona. Subsequent calls in the same project can rely on the existing THREADS.md entries.
-   - **Same trap on `new-session.cjs`** — it also defaults to `Codex`. The Installing section above only mentions `init-memory.cjs`; the trap repeats for every session you open with `new-session.cjs`. Habit: always pass `--agent Linus` (or whatever your persona is) on every `new-session.cjs` call, not just the first `init-memory.cjs` call.
-5. **`safe-edit.cjs --close` does not sync `CURRENT.md`** — closeout appends `CHANGES.md`, merges the session into `THREADS.md`, and runs `check-memory.cjs`, but it does **not** rewrite the prose in `CURRENT.md` to reflect the new accepted state. After any closeout that changes facts the user reads in `CURRENT.md` (matrix size, "Agent 矩阵 (N 个)" counts, status of Next Steps, items that should move from "active" to "done"), manually `read_file` `CURRENT.md`, patch the affected lines, then re-run `check-memory.cjs`. Skipping this leaves a stale mainline (e.g. CURRENT.md still saying "4 个" agents after you uninstalled the 4th) and the next session's Read-Only flow will hand the user a wrong summary.
+Scripts default the agent name to `$WEPLANING_AGENT` (or `Agent` if unset). Set `WEPLANING_AGENT=<persona>` once in the environment, or pass `--agent <persona>` explicitly on `init-memory.cjs`, `new-session.cjs`, `weplaning-note.cjs`, and `safe-edit.cjs`.
 
 ## Rules
 
@@ -152,36 +162,38 @@ If WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you wa
 - Keep memory concise: facts, decisions, files, verification, blockers, and exact next step.
 - If check fails: stop, inspect the error, repair or correct the files, then rerun check.
 - For exact schema details, read `references/weplaning-v2.3-protocol.md`.
-- **项目类型与同步策略**：
-  - 初始化时判断项目类型：扫描目录是否有代码文件（.js/.py/.ts/.go 等），询问用户项目用途，综合判断
-  - **有代码** → 必须 git 管理代码版本，WePlaning 管项目状态，git 管代码
-  - **无代码（ops/doc）** → WePlaning 独立工作，同步交给外部工具（Syncthing 等）
-  - 过程中出现代码文件 → 引入 git
-  - 多端多地同步工具（Syncthing、坚果云、网盘等）的选择和配置不是 WePlaning 的职责，WePlaning 只管 `.agent-memory/` 状态
-  - 将项目类型和同步配置记录到 `CURRENT.md` 的 `Project Config` 部分，方便后续 Agent 接力时读取
+
+**Project type and sync strategy** (项目类型与同步策略):
+- On init, scan for code files (`.js/.py/.ts/.go` etc.) and ask the user about project purpose to determine project type.
+- **Has code** → use git for code versioning; WePlaning manages project state only.
+- **No code (ops/doc)** → WePlaning works standalone; sync is handled by external tools (Syncthing etc.).
+- If code files appear mid-project → introduce git at that point.
+- WePlaning's scope is `.agent-memory/` state only; sync tool choice and config are outside its responsibility.
+- Record project type and sync config in `CURRENT.md` under `Project Config` for handoff continuity.
 
 ## Pitfalls
 
 **1. Don't init memory before the smoke test passes.**
 A broken init cascade is harder to recover from than a smoke-test failure caught up front.
 
-**2. Don't run `closeout` for "just a quick note"** — use the Lite flow.
-The Closeout flow rewrites `CHANGES.md` and merges the session; running it for transient state pollutes the mainline ledger.
+**2. Don't run `closeout` for "just a quick note"** — use Quick Note (`weplaning-note.cjs`) or the Lite flow.
+The Closeout flow appends `CHANGES.md` and merges the session; running it for transient state pollutes the mainline ledger.
 
-**3. Junction target disappears → broken link.**
-If the hub repo is moved or deleted, the junction in `hermes/skills/` becomes a dangling empty directory. Hermes won't auto-clean it. If you delete the hub, `rmdir` the junction on the Hermes side too.
+**3. Junction pitfalls (dangling links, live-mirror git propagation).**
+See `references/hermes-install.md`.
 
-**4. Junction is a live mirror — git operations on the hub affect Hermes instantly.**
-A Windows directory junction (`mklink /J`) is a filesystem-level mirror, not a snapshot. Any operation that rewrites files inside the hub repo's working tree — `git checkout -- <file>`, `git stash`, `git reset --hard`, `git restore`, even `git pull` with conflicts — propagates to `hermes/skills/<category>/<skill>` **immediately**, with no reload and no warning. To archive hub working-tree edits without losing them from the live install, **commit** them (local or remote) — not stash.
-
-**5. Cross-platform paths in scripts.**
+**4. Cross-platform paths in scripts.**
 The skill scripts use forward slashes; on Windows they work via Node's path normalization. Don't edit them to use `\\` — they'll break on Linux/macOS usage.
 
-**6. When `clarify` offers options, every option's stated consequence must be true.**
+**5. When `clarify` offers options, every option's stated consequence must be true.**
 Before offering choices on a destructive command, verify the consequence against the actual environment — junction semantics, process locks, schema invariants. If you cannot verify, say so in the option text ("I'm not sure if X is safe — verify before choosing") instead of writing a confident wrong description.
 
-**7. `safe-edit.cjs` business errors can leak the `.weplaning.lock` directory.**
-`withMemoryLock` takes the lock via `fs.mkdirSync` but errors thrown *before* the callback (e.g. "Stale write blocked") abort without releasing it. Recovery: `rm -rf <project>/.agent-memory/.weplaning.lock`. Prevention: set `WEPLANING_LOCK_STALE_MS=1000` if you anticipate a stale-write check failing.
+**6. `safe-edit.cjs --close` requires the session's `Parent session:` to equal `THREADS.md` mainline.**
+Otherwise it fails with "Stale write blocked" — the error message includes the fix (close the active predecessor first, or repoint `Parent session:` at the true mainline). Lock cleanup on failure is automatic; if a lock ever lingers after a crash, remove `<project>/.agent-memory/.weplaning.lock`.
 
-**8. `safe-edit.cjs --close` requires the session's `Parent session:` to equal `THREADS.md` mainline.**
-`ensureFreshMainline` throws "Stale write blocked" if `parent !== threads.mainline`. Fix: close the active predecessor first, or manually edit `sessions/<id>.md` to point `Parent session:` at the true mainline before running `--close`.
+**7. Always sync `CURRENT.md` on closeout.**
+If the closeout changes any facts in `CURRENT.md` (state, next steps, blockers, goal) and you skip the `--state`/`--next-step`/`--blockers`/`--goal` sync flags, the mainline becomes stale. The next session's Read-Only flow will report that stale state as truth.
+
+## Hub / Hermes Installation
+
+For shipping WePlaning from a hub repo, read `references/hermes-install.md` (covers smoke-test-first, category choice, junction linking, and junction pitfalls).

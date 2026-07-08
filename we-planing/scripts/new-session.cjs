@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const {
   allowNoCheck,
+  defaultAgent,
   generateSessionId,
   parseArgs,
   readThreads,
@@ -24,7 +25,7 @@ Usage:
   node new-session.cjs <project-root> --role <role> --summary <text> --goal <text> [options]
 
 Options:
-  --agent <name>       Agent name. Default: Codex
+  --agent <name>       Agent name. Default: $WEPLANING_AGENT or "Agent"
   --adapter <name>     Adapter name. Default: unknown
   --os <name>          OS name. Default: process platform
   --parent <id>        Parent session. Default: current THREADS.md mainline
@@ -43,7 +44,7 @@ const root = path.resolve(args._[0] || process.cwd());
 const role = required(args, "role", help);
 const summary = required(args, "summary", help);
 const goal = required(args, "goal", help);
-const agent = args.agent || "Codex";
+const agent = args.agent || defaultAgent();
 const adapter = args.adapter || "unknown";
 const os = args.os || process.platform;
 const started = args.started || utcNow();

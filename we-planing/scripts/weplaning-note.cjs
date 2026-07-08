@@ -10,7 +10,7 @@
  * don't accumulate as "active" forever.
  *
  * Options:
- *   --agent <name>   Agent name. Default: ZCode
+ *   --agent <name>   Agent name. Default: $WEPLANING_AGENT or "Agent"
  *   --role <role>    Session role. Default: ops
  *   --goal <text>    Session goal. Default: same as <note>
  */
@@ -20,6 +20,7 @@
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
+  defaultAgent,
   parseArgs,
   parseSessionMd,
   renderSessionMd,
@@ -37,7 +38,7 @@ Usage:
   node weplaning-note.cjs <project-root> "<note>" [options]
 
 Options:
-  --agent <name>   Agent name (default: ZCode)
+  --agent <name>   Agent name (default: $WEPLANING_AGENT or "Agent")
   --role <role>    Session role (default: ops)
   --goal <text>    Session goal (default: same as <note>)
 
@@ -52,7 +53,7 @@ const root = path.resolve(args._[0] || process.cwd());
 const note = args._[1];
 usage(!!note, "Missing required positional argument: <note>", help);
 
-const agent = args.agent || "ZCode";
+const agent = args.agent || defaultAgent();
 const role = args.role || "ops";
 const goal = args.goal || note;
 const scriptDir = __dirname;

@@ -6,13 +6,17 @@ const { spawnSync } = require("child_process");
 const {
   extractField,
   parseArgs,
+  parseCurrentMd,
   readMemory,
   readSession,
   readThreads,
+  renderCurrentMd,
   required,
+  toList,
   usage,
   withMemoryLock,
   writeFile,
+  writeMemory,
   writeSession,
 } = require("./weplaning-utils.cjs");
 
@@ -32,6 +36,13 @@ Options:
   --verification <text> Required with --close. Repeatable or ";;" separated.
   --note <text>         Repeatable or ";;" separated. Notes for append-change.
   --dry-run             Print steps without executing.
+
+CURRENT.md sync (with --close only) — keeps mainline prose in step with the merge:
+  --goal <text>         Replace "Active Goal".
+  --state <text>        Replace "Current State" bullets. Repeatable or ";;" separated.
+  --next-step <text>    Replace "Accepted Next Steps". Repeatable or ";;" separated.
+  --blockers <text>     Replace "Open Blockers". Repeatable or ";;" separated.
+  --understanding <text> Replace "Current Understanding".
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -49,6 +60,11 @@ if (mode === "close") {
   if (!args.verification) usage(false, "Missing required argument: --verification", help);
 } else {
   required(args, "changed", help);
+  usage(
+    !(args.goal || args.state || args["next-step"] || args.blockers || args.understanding),
+    "CURRENT.md sync flags (--goal/--state/--next-step/--blockers/--understanding) require --close",
+    help,
+  );
 }
 
 function listFiles(dir) {
@@ -119,8 +135,36 @@ function ensureFreshMainline() {
   const sessionText = readSession(root, sessionId);
   const parent = extractField(sessionText, "Parent session");
   if (parent && parent !== threads.mainline && sessionId !== threads.mainline) {
-    throw new Error(`Stale write blocked: parent=${parent}, current mainline=${threads.mainline}`);
+    throw new Error(
+      `Stale write blocked: parent=${parent}, current mainline=${threads.mainline}\n` +
+      `  Fix: close the active predecessor first, or edit "Parent session:" in\n` +
+      `  .agent-memory/sessions/${sessionId}.md to ${threads.mainline}, then rerun.`,
+    );
   }
+}
+
+function bulletList(value, fallback) {
+  const items = toList(value);
+  return items.length ? items.map((item) => `- ${item}`).join("\n") : fallback;
+}
+
+function numberedList(value, fallback) {
+  const items = toList(value);
+  return items.length ? items.map((item, index) => `${index + 1}. ${item}`).join("\n") : fallback;
+}
+
+const wantsCurrentSync = Boolean(
+  args.goal || args.state || args["next-step"] || args.blockers || args.understanding,
+);
+
+function syncCurrentMd() {
+  const state = parseCurrentMd(readMemory(root, "CURRENT.md"));
+  if (args.goal) state.activeGoal = String(args.goal);
+  if (args.understanding) state.currentUnderstanding = String(args.understanding);
+  if (args.state) state.currentState = bulletList(args.state, state.currentState);
+  if (args["next-step"]) state.acceptedNextSteps = numberedList(args["next-step"], state.acceptedNextSteps);
+  if (args.blockers) state.openBlockers = bulletList(args.blockers, state.openBlockers);
+  writeMemory(root, "CURRENT.md", renderCurrentMd(state));
 }
 
 function appendToSection(text, heading, line) {
@@ -189,6 +233,16 @@ withMemoryLock(root, () => {
       "--no-check",
     ]);
     if (!mergeResult.ok) abort("Pipeline aborted: merge-session failed.");
+
+    if (wantsCurrentSync) {
+      try {
+        if (!args["dry-run"]) syncCurrentMd();
+        else console.log("[DRY-RUN] sync CURRENT.md prose sections");
+        console.log("OK sync CURRENT.md");
+      } catch (error) {
+        abort(`Pipeline aborted: CURRENT.md sync failed: ${error.message}`);
+      }
+    }
   }
 
   const postCheckResult = runStep("check-memory (post)", path.join(scriptDir, "check-memory.cjs"), [root]);

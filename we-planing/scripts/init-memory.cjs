@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const {
   allowNoCheck,
+  defaultAgent,
   generateSessionId,
   parseArgs,
   renderCurrentMd,
@@ -20,7 +21,7 @@ Usage:
   node init-memory.cjs <project-root> --project <name> --goal <text> [options]
 
 Options:
-  --agent <name>       Agent name. Default: Codex
+  --agent <name>       Agent name. Default: $WEPLANING_AGENT or "Agent"
   --adapter <name>     Adapter name. Default: unknown
   --os <name>          OS name. Default: process platform
   --short-id <id>      Short suffix for root session. Default: root
@@ -44,7 +45,7 @@ if (fs.existsSync(memoryDir) && !args.force) {
   process.exit(1);
 }
 
-const agent = args.agent || "Codex";
+const agent = args.agent || defaultAgent();
 const adapter = args.adapter || "unknown";
 const os = args.os || process.platform;
 const now = args.started || utcNow();

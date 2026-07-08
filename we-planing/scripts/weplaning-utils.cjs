@@ -134,6 +134,10 @@ function uniqueStamp() {
   return `${compactTimestamp(utcNow())}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function defaultAgent() {
+  return process.env.WEPLANING_AGENT || "Agent";
+}
+
 function osToken(value) {
   const raw = String(value || process.platform).toLowerCase();
   if (raw.startsWith("win")) return "win";
@@ -347,6 +351,16 @@ function withMemoryLock(root, callback, options = {}) {
     }
   }
 
+  const releaseLock = () => {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Lock cleanup failure should not mask the original write result.
+    }
+  };
+  // process.exit() skips finally blocks; the exit handler guarantees release.
+  process.once("exit", releaseLock);
+
   const previousLock = process.env.WEPLANING_LOCK_HELD;
   process.env.WEPLANING_LOCK_HELD = lockKey;
   try {
@@ -354,11 +368,8 @@ function withMemoryLock(root, callback, options = {}) {
   } finally {
     if (previousLock === undefined) delete process.env.WEPLANING_LOCK_HELD;
     else process.env.WEPLANING_LOCK_HELD = previousLock;
-    try {
-      fs.rmSync(dir, { recursive: true, force: true });
-    } catch {
-      // Lock cleanup failure should not mask the original write result.
-    }
+    process.removeListener("exit", releaseLock);
+    releaseLock();
   }
 }
 
@@ -503,6 +514,7 @@ module.exports = {
   appendTableRow,
   allowNoCheck,
   compactTimestamp,
+  defaultAgent,
   extractField,
   generateSessionId,
   memoryPath,
