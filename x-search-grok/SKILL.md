@@ -111,6 +111,9 @@ Heat mode should return:
 4. Prefer script output over freeform model memory.
 5. Return a concise sourced answer.
 6. If the script fails, report the error plainly. Do not invent posts.
+7. **并发控制**：一次最多并行跑 2-3 个搜索任务。复杂搜索（需多方对比、多角度信息）跑 3 个；
+   简单搜索（查一个账号、一个关键词）跑 1-2 个。并发过多会导致 SSL 报错或超时。
+   若脚本报错，不得换用无关查询蒙混过关，必须如实报错。
 
 ### Query tips
 
@@ -158,6 +161,8 @@ If no useful posts are found, say so explicitly.
 - The reliable path is `POST {BASE}/responses` with `x_search`.
 - Do not rely on `chat/completions` for X search.
 - This skill does not implement posting, watchlists, or full-archive search.
+- **并发限制**：该 API 端并发能力有限。2 个并发可能导致部分请求 SSL 报错，
+  4 个并发几乎必超时。单次调用稳定。任何时候并行搜索不得超过 3 个。
 
 ## Resources
 
