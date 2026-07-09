@@ -35,7 +35,16 @@ Supported variables:
 - `GROK_API_BASE` or `BASE_URL` — e.g. `https://ai.0xs.one/v1`
 - `GROK_API_KEY` or `API_KEY` or `XAI_API_KEY`
 - `GROK_MODEL` or `MODEL` — default `grok-4.5`
+- `GROK_FALLBACK_MODELS` — comma-separated backups, default `grok-4.3`
 - `GROK_TIMEOUT_SECONDS` — default `180`
+
+Model selection:
+
+- Primary model is `GROK_MODEL` (default `grok-4.5`)
+- If the primary model/channel is unavailable, automatically try
+  `GROK_FALLBACK_MODELS` in order (default includes `grok-4.3`)
+- CLI `--model` still forces a single model and skips the default primary,
+  but fallbacks still apply unless you only want one model listed
 
 Never print the API key.
 

@@ -26,6 +26,7 @@ from typing import Any
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = "https://ai.0xs.one/v1"
 DEFAULT_MODEL = "grok-4.5"
+DEFAULT_FALLBACK_MODELS = ["grok-4.3"]
 DEFAULT_TIMEOUT = 180
 
 
@@ -58,6 +59,26 @@ def first_nonempty(*values: str | None) -> str:
         if value and value.strip():
             return value.strip()
     return ""
+
+
+def parse_model_list(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    items: list[str] = []
+    for part in raw.replace(";", ",").split(","):
+        name = part.strip()
+        if name and name not in items:
+            items.append(name)
+    return items
+
+
+def build_model_chain(primary: str, fallbacks: list[str]) -> list[str]:
+    chain: list[str] = []
+    for name in [primary, *fallbacks]:
+        name = (name or "").strip()
+        if name and name not in chain:
+            chain.append(name)
+    return chain or [DEFAULT_MODEL]
 
 
 def candidate_workspace_dirs() -> list[Path]:
@@ -113,6 +134,14 @@ def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -
         skill_env.get("XAI_MODEL"),
         DEFAULT_MODEL,
     )
+    fallback_raw = first_nonempty(
+        env.get("GROK_FALLBACK_MODELS"),
+        env.get("GROK_MODEL_FALLBACKS"),
+        skill_env.get("GROK_FALLBACK_MODELS"),
+        skill_env.get("GROK_MODEL_FALLBACKS"),
+        ",".join(DEFAULT_FALLBACK_MODELS),
+    )
+    fallbacks = parse_model_list(fallback_raw)
     timeout_raw = first_nonempty(
         str(cli_timeout) if cli_timeout else "",
         env.get("GROK_TIMEOUT_SECONDS"),
@@ -172,12 +201,54 @@ def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -
             "Missing API key. Set GROK_API_KEY / API_KEY, or put it in skill .env / probe_key.txt"
         )
 
+    primary = model or DEFAULT_MODEL
     return {
         "base": base,
         "key": key,
-        "model": model or DEFAULT_MODEL,
+        "model": primary,
+        "models": build_model_chain(primary, fallbacks),
         "timeout": timeout,
     }
+
+
+def is_model_or_channel_error(result: dict[str, Any]) -> bool:
+    """Return True when retrying another model is likely useful."""
+    status = result.get("status")
+    body = result.get("body")
+    text = ""
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict):
+            text = " ".join(
+                str(err.get(k) or "")
+                for k in ("message", "type", "code", "param")
+            )
+        else:
+            text = json.dumps(body, ensure_ascii=False)
+    else:
+        text = str(body or "")
+    lowered = text.lower()
+    markers = [
+        "get_channel_failed",
+        "no available channel",
+        "available channel",
+        "可用渠道不存在",
+        "model_not_found",
+        "model not found",
+        "do not exist",
+        "does not exist",
+        "not support",
+        "unsupported model",
+        "无效的模型",
+        "模型不存在",
+        "无可用渠道",
+    ]
+    if any(m.lower() in lowered for m in markers):
+        return True
+    # Some relays return bare 404/503 for missing model routes.
+    if status in (404, 503) and ("model" in lowered or "channel" in lowered or "渠道" in text):
+        return True
+    return False
 
 
 def since_to_instruction(since: str | None) -> str:
@@ -378,8 +449,46 @@ def main() -> int:
     cfg = load_config(args.base_url, args.api_key, args.model, args.timeout)
     prompt = build_prompt(args.mode, args.query, args.limit, args.since, args.lang)
     started = datetime.now(timezone.utc)
-    result = request_responses(cfg, prompt, mode_tool_budget(args.mode))
+    models = list(cfg.get("models") or [cfg["model"]])
+    attempts: list[dict[str, Any]] = []
+    result: dict[str, Any] | None = None
+    used_model = cfg["model"]
+
+    for index, model_name in enumerate(models):
+        cfg["model"] = model_name
+        used_model = model_name
+        one = request_responses(cfg, prompt, mode_tool_budget(args.mode))
+        attempts.append(
+            {
+                "model": model_name,
+                "ok": one.get("ok"),
+                "status": one.get("status"),
+            }
+        )
+        if one.get("ok"):
+            result = one
+            if index > 0:
+                eprint(f"Primary model unavailable; fell back to {model_name}")
+            break
+        # Retry only for model/channel style failures.
+        if index < len(models) - 1 and is_model_or_channel_error(one):
+            eprint(
+                f"Model {model_name} failed (status={one.get('status')}); "
+                f"trying fallback {models[index + 1]}"
+            )
+            continue
+        result = one
+        break
+
+    if result is None:
+        result = {
+            "ok": False,
+            "status": None,
+            "body": "No model attempts were made.",
+        }
+
     elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+    cfg["model"] = used_model
 
     if not result["ok"]:
         payload = {
@@ -389,20 +498,30 @@ def main() -> int:
             "status": result["status"],
             "elapsed_seconds": round(elapsed, 2),
             "base": cfg["base"],
-            "model": cfg["model"],
+            "model": used_model,
+            "models_tried": [a.get("model") for a in attempts],
+            "attempts": attempts,
             "error": result["body"],
         }
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             eprint("X search failed.")
-            eprint(f"status={result['status']} base={cfg['base']} model={cfg['model']}")
-            print(json.dumps(result["body"], ensure_ascii=False, indent=2) if isinstance(result["body"], (dict, list)) else result["body"])
+            eprint(
+                f"status={result['status']} base={cfg['base']} "
+                f"model={used_model} tried={','.join(a.get('model','') for a in attempts)}"
+            )
+            print(
+                json.dumps(result["body"], ensure_ascii=False, indent=2)
+                if isinstance(result["body"], (dict, list))
+                else result["body"]
+            )
         return 2
 
     body = result["body"]
     text = extract_text(body if isinstance(body, dict) else {})
     stats = extract_tool_stats(body if isinstance(body, dict) else {})
+    fell_back = len(attempts) > 1 and attempts[0].get("model") != used_model
 
     if args.json:
         payload = {
@@ -412,7 +531,10 @@ def main() -> int:
             "status": result["status"],
             "elapsed_seconds": round(elapsed, 2),
             "base": cfg["base"],
-            "model": cfg["model"],
+            "model": used_model,
+            "fell_back": fell_back,
+            "models_tried": [a.get("model") for a in attempts],
+            "attempts": attempts,
             "text": text,
             "stats": stats,
         }
@@ -422,9 +544,11 @@ def main() -> int:
     else:
         header = [
             f"mode={args.mode}",
-            f"model={cfg['model']}",
+            f"model={used_model}",
             f"elapsed={elapsed:.1f}s",
         ]
+        if fell_back:
+            header.append("fell_back=1")
         if stats.get("x_search_calls") is not None:
             header.append(f"x_search_calls={stats['x_search_calls']}")
         print(" | ".join(header))
