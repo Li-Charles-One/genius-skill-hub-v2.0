@@ -24,27 +24,24 @@ This skill is intentionally V1-only:
 
 Read config in this order:
 
-1. Environment variables
-2. Skill-local `.env`
-3. Workspace fallbacks:
-   - `probe_key.txt` / `probe_env.txt`
-   - `.probe_runtime_key` / `.probe_runtime_env`
+1. CLI args (`--api-key`, `--base-url`, `--model`)
+2. Environment variables (`GROK_API_BASE`, `GROK_MODEL`, etc. — key is NOT read from env)
+3. Skill-local `.env`
 
 Supported variables:
 
-- `GROK_API_BASE` or `BASE_URL` — e.g. `https://ai.0xs.one/v1`
-- `GROK_API_KEY` or `API_KEY` or `XAI_API_KEY`
-- `GROK_MODEL` or `MODEL` — default `grok-4.5`
-- `GROK_FALLBACK_MODELS` — comma-separated backups, default `grok-4.3`
-- `GROK_TIMEOUT_SECONDS` — default `180`
+| 变量 | 作用 | 读取来源 |
+|---|---|---|
+| `GROK_API_KEY` / `API_KEY` / `XAI_API_KEY` | API Key | CLI `--api-key` → `.env` |
+| `GROK_API_BASE` / `BASE_URL` | API 地址 | CLI `--base-url` → 环境变量 → `.env` |
+| `GROK_MODEL` / `MODEL` | 主模型 | CLI `--model` → 环境变量 → `.env` |
+| `GROK_FALLBACK_MODELS` | 回退模型列表（逗号分隔） | 环境变量 → `.env` |
+| `GROK_TIMEOUT_SECONDS` | 超时秒数 | 环境变量 → `.env` |
 
 Model selection:
 
-- Primary model is `GROK_MODEL` (default `grok-4.5`)
-- If the primary model/channel is unavailable, automatically try
-  `GROK_FALLBACK_MODELS` in order (default includes `grok-4.3`)
-- CLI `--model` still forces a single model and skips the default primary,
-  but fallbacks still apply unless you only want one model listed
+- Primary model defaults to `grok-4.3`, falls back to `grok-4.5`
+- CLI `--model` forces a single model (fallbacks still apply unless only one listed)
 
 Never print the API key.
 

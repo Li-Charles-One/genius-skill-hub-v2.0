@@ -25,8 +25,8 @@ from typing import Any
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = "https://ai.0xs.one/v1"
-DEFAULT_MODEL = "grok-4.5"
-DEFAULT_FALLBACK_MODELS = ["grok-4.3"]
+DEFAULT_MODEL = "grok-4.3"
+DEFAULT_FALLBACK_MODELS = ["grok-4.5"]
 DEFAULT_TIMEOUT = 180
 
 
@@ -81,27 +81,6 @@ def build_model_chain(primary: str, fallbacks: list[str]) -> list[str]:
     return chain or [DEFAULT_MODEL]
 
 
-def candidate_workspace_dirs() -> list[Path]:
-    dirs: list[Path] = []
-    cwd = Path.cwd()
-    dirs.append(cwd)
-    # Common local probe files from this project.
-    dirs.append(Path(r"C:\Users\jinhu\Documents\Genius_Sync_Projects\Zcode_work"))
-    # Walk upward a little from cwd.
-    for parent in list(cwd.parents)[:4]:
-        dirs.append(parent)
-    # Deduplicate while preserving order.
-    seen: set[str] = set()
-    out: list[Path] = []
-    for item in dirs:
-        key = str(item.resolve()) if item.exists() else str(item)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(item)
-    return out
-
-
 def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -> dict[str, Any]:
     env = dict(os.environ)
     skill_env = load_dotenv(SKILL_DIR / ".env")
@@ -117,9 +96,6 @@ def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -
     )
     key = first_nonempty(
         cli_key,
-        env.get("GROK_API_KEY"),
-        env.get("API_KEY"),
-        env.get("XAI_API_KEY"),
         skill_env.get("GROK_API_KEY"),
         skill_env.get("API_KEY"),
         skill_env.get("XAI_API_KEY"),
@@ -149,41 +125,6 @@ def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -
         str(DEFAULT_TIMEOUT),
     )
 
-    # Workspace fallbacks for local probe files.
-    if not key or not base:
-        for folder in candidate_workspace_dirs():
-            probe_env = load_dotenv(folder / "probe_env.txt")
-            runtime_env = load_dotenv(folder / ".probe_runtime_env")
-            if not base:
-                base = first_nonempty(
-                    probe_env.get("BASE_URL"),
-                    runtime_env.get("BASE_URL"),
-                    probe_env.get("GROK_API_BASE"),
-                )
-            if not key:
-                key_file = folder / "probe_key.txt"
-                runtime_key = folder / ".probe_runtime_key"
-                if key_file.exists():
-                    text = key_file.read_text(encoding="utf-8-sig").strip()
-                    if text:
-                        key = text.splitlines()[0].strip()
-                if not key and runtime_key.exists():
-                    key = runtime_key.read_text(encoding="utf-8-sig").strip()
-                if not key:
-                    key = first_nonempty(
-                        probe_env.get("API_KEY"),
-                        probe_env.get("GROK_API_KEY"),
-                        runtime_env.get("API_KEY"),
-                    )
-            if not model:
-                model = first_nonempty(
-                    probe_env.get("MODEL"),
-                    runtime_env.get("MODEL"),
-                    DEFAULT_MODEL,
-                )
-            if key and base:
-                break
-
     base = (base or DEFAULT_BASE).rstrip("/")
     if base.endswith("/responses"):
         base = base[: -len("/responses")]
@@ -198,7 +139,7 @@ def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -
 
     if not key:
         raise SystemExit(
-            "Missing API key. Set GROK_API_KEY / API_KEY, or put it in skill .env / probe_key.txt"
+            "Missing API key. Pass --api-key or set GROK_API_KEY in skill .env"
         )
 
     primary = model or DEFAULT_MODEL

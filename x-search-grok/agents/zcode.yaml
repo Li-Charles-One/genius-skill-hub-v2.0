@@ -7,6 +7,6 @@ tools:
   - Write
 notes:
   - Run scripts/x_search.py for deterministic X search.
-  - Config via env, skill .env, or workspace probe_key.txt / probe_env.txt.
-  - Primary model grok-4.5 with automatic fallback to grok-4.3.
+  - Config via CLI args, env, or skill .env.
+  - Primary model grok-4.3 with automatic fallback to grok-4.5.
   - V1 modes only: keyword, account, heat.
