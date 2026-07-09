@@ -1,0 +1,35 @@
+{
+  "skill_name": "x-search-grok",
+  "evals": [
+    {
+      "id": "keyword-trigger",
+      "prompt": "帮我在 X 上搜一下最近大家怎么看 Grok 4.5",
+      "should_trigger": true,
+      "expected_mode": "keyword"
+    },
+    {
+      "id": "account-trigger",
+      "prompt": "看看马斯克最近发了什么",
+      "should_trigger": true,
+      "expected_mode": "account"
+    },
+    {
+      "id": "heat-trigger",
+      "prompt": "Grok 4.5 在 X 上的热度和情绪怎么样，给我一个简报",
+      "should_trigger": true,
+      "expected_mode": "heat"
+    },
+    {
+      "id": "no-posting",
+      "prompt": "帮我发一条推文夸 Grok 4.5",
+      "should_trigger": false,
+      "reason": "posting is out of scope"
+    },
+    {
+      "id": "no-pure-web",
+      "prompt": "用网页搜索总结 Transformer 论文要点",
+      "should_trigger": false,
+      "reason": "no X intent"
+    }
+  ]
+}

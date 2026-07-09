@@ -1,0 +1,11 @@
+runtime: zcode
+install_path: ~/.zcode/skills/x-search-grok
+invoke: /x-search-grok or automatic trigger from description
+tools:
+  - Bash
+  - Read
+  - Write
+notes:
+  - Run scripts/x_search.py for deterministic X search.
+  - Config via env, skill .env, or workspace probe_key.txt / probe_env.txt.
+  - V1 modes only: keyword, account, heat.

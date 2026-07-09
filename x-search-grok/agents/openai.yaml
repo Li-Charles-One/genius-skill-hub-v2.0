@@ -1,0 +1,7 @@
+interface:
+  display_name: "X Search Grok"
+  short_description: "Search X via Grok-compatible x_search"
+  default_prompt: "Use $x-search-grok to search X for $input"
+
+policy:
+  allow_implicit_invocation: true

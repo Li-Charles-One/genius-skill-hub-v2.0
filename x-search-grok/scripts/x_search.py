@@ -1,0 +1,438 @@
+#!/usr/bin/env python3
+"""V1 X search helper for Grok-compatible relays.
+
+Modes:
+  keyword  - search posts by query
+  account  - recent posts from one handle
+  heat     - heat/sentiment briefing
+
+Uses POST {base}/responses with tools=[{type: x_search}].
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+SKILL_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_BASE = "https://ai.0xs.one/v1"
+DEFAULT_MODEL = "grok-4.5"
+DEFAULT_TIMEOUT = 180
+
+
+def eprint(*args: Any) -> None:
+    print(*args, file=sys.stderr)
+
+
+def strip_handle(value: str) -> str:
+    value = value.strip()
+    if value.startswith("@"):
+        value = value[1:]
+    return value.strip()
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    data: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        data[key.strip()] = value.strip().strip('"').strip("'")
+    return data
+
+
+def first_nonempty(*values: str | None) -> str:
+    for value in values:
+        if value and value.strip():
+            return value.strip()
+    return ""
+
+
+def candidate_workspace_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    cwd = Path.cwd()
+    dirs.append(cwd)
+    # Common local probe files from this project.
+    dirs.append(Path(r"C:\Users\jinhu\Documents\Genius_Sync_Projects\Zcode_work"))
+    # Walk upward a little from cwd.
+    for parent in list(cwd.parents)[:4]:
+        dirs.append(parent)
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    out: list[Path] = []
+    for item in dirs:
+        key = str(item.resolve()) if item.exists() else str(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def load_config(cli_base: str, cli_key: str, cli_model: str, cli_timeout: int) -> dict[str, Any]:
+    env = dict(os.environ)
+    skill_env = load_dotenv(SKILL_DIR / ".env")
+
+    base = first_nonempty(
+        cli_base,
+        env.get("GROK_API_BASE"),
+        env.get("BASE_URL"),
+        env.get("XAI_BASE_URL"),
+        skill_env.get("GROK_API_BASE"),
+        skill_env.get("BASE_URL"),
+        skill_env.get("XAI_BASE_URL"),
+    )
+    key = first_nonempty(
+        cli_key,
+        env.get("GROK_API_KEY"),
+        env.get("API_KEY"),
+        env.get("XAI_API_KEY"),
+        skill_env.get("GROK_API_KEY"),
+        skill_env.get("API_KEY"),
+        skill_env.get("XAI_API_KEY"),
+    )
+    model = first_nonempty(
+        cli_model,
+        env.get("GROK_MODEL"),
+        env.get("MODEL"),
+        env.get("XAI_MODEL"),
+        skill_env.get("GROK_MODEL"),
+        skill_env.get("MODEL"),
+        skill_env.get("XAI_MODEL"),
+        DEFAULT_MODEL,
+    )
+    timeout_raw = first_nonempty(
+        str(cli_timeout) if cli_timeout else "",
+        env.get("GROK_TIMEOUT_SECONDS"),
+        skill_env.get("GROK_TIMEOUT_SECONDS"),
+        str(DEFAULT_TIMEOUT),
+    )
+
+    # Workspace fallbacks for local probe files.
+    if not key or not base:
+        for folder in candidate_workspace_dirs():
+            probe_env = load_dotenv(folder / "probe_env.txt")
+            runtime_env = load_dotenv(folder / ".probe_runtime_env")
+            if not base:
+                base = first_nonempty(
+                    probe_env.get("BASE_URL"),
+                    runtime_env.get("BASE_URL"),
+                    probe_env.get("GROK_API_BASE"),
+                )
+            if not key:
+                key_file = folder / "probe_key.txt"
+                runtime_key = folder / ".probe_runtime_key"
+                if key_file.exists():
+                    text = key_file.read_text(encoding="utf-8-sig").strip()
+                    if text:
+                        key = text.splitlines()[0].strip()
+                if not key and runtime_key.exists():
+                    key = runtime_key.read_text(encoding="utf-8-sig").strip()
+                if not key:
+                    key = first_nonempty(
+                        probe_env.get("API_KEY"),
+                        probe_env.get("GROK_API_KEY"),
+                        runtime_env.get("API_KEY"),
+                    )
+            if not model:
+                model = first_nonempty(
+                    probe_env.get("MODEL"),
+                    runtime_env.get("MODEL"),
+                    DEFAULT_MODEL,
+                )
+            if key and base:
+                break
+
+    base = (base or DEFAULT_BASE).rstrip("/")
+    if base.endswith("/responses"):
+        base = base[: -len("/responses")]
+    if not base.endswith("/v1"):
+        # Accept either https://host or https://host/v1
+        base = base + "/v1"
+
+    try:
+        timeout = int(timeout_raw)
+    except ValueError:
+        timeout = DEFAULT_TIMEOUT
+
+    if not key:
+        raise SystemExit(
+            "Missing API key. Set GROK_API_KEY / API_KEY, or put it in skill .env / probe_key.txt"
+        )
+
+    return {
+        "base": base,
+        "key": key,
+        "model": model or DEFAULT_MODEL,
+        "timeout": timeout,
+    }
+
+
+def since_to_instruction(since: str | None) -> str:
+    if not since:
+        return "Prefer the most recent posts available."
+    since = since.strip().lower()
+    mapping = {
+        "1h": "last 1 hour",
+        "3h": "last 3 hours",
+        "12h": "last 12 hours",
+        "1d": "last 1 day",
+        "3d": "last 3 days",
+        "7d": "last 7 days",
+        "30d": "last 30 days",
+    }
+    label = mapping.get(since, since)
+    return f"Focus on posts from the {label}."
+
+
+def build_prompt(mode: str, query: str, limit: int, since: str | None, lang: str) -> str:
+    language = "Simplified Chinese" if lang.startswith("zh") else "English"
+    recency = since_to_instruction(since)
+
+    if mode == "keyword":
+        return f"""Use X search (x_search). Search X for recent posts about:
+
+QUERY: {query}
+
+Requirements:
+- Actually search X. Do not invent posts.
+- {recency}
+- Return up to {limit} useful posts.
+- Language of the final answer: {language}
+- Output format:
+  1) one-line overview
+  2) bullet list of posts
+  Each bullet: author handle, approximate time if available, one-line summary, and x.com URL
+- Prefer original posts over pure spam/airdrop noise.
+- If nothing useful is found, say so clearly.
+"""
+
+    if mode == "account":
+        handle = strip_handle(query)
+        return f"""Use X search (x_search). Fetch recent posts from this X account:
+
+HANDLE: @{handle}
+Search hint: from:{handle}
+
+Requirements:
+- Actually search X. Do not invent posts.
+- {recency}
+- Return up to {limit} recent posts from this account only.
+- Language of the final answer: {language}
+- Output format:
+  1) one-line summary of what this account has been posting
+  2) bullet list of recent posts with time, one-line summary, and x.com URL
+- If the account has few/no recent posts, say so clearly.
+"""
+
+    # heat
+    return f"""Use X search (x_search). Build a heat/sentiment briefing for:
+
+TOPIC: {query}
+
+Requirements:
+- Actually search X. Do not invent posts.
+- {recency}
+- Cover overall heat, sentiment, and representative discussion.
+- Language of the final answer: {language}
+- Output format in markdown:
+  ## 热度简报
+  - 热度判断
+  - 情绪判断
+  ## 代表性讨论
+  - 4 to {limit} posts with author, one-line point, and x.com URL
+  ## 主要好评
+  - bullets
+  ## 主要争议或差评
+  - bullets
+- Prefer high-signal posts and official/source posts when available.
+- If evidence is thin, say the confidence is low.
+"""
+
+
+def request_responses(cfg: dict[str, Any], prompt: str, max_tool_calls: int) -> dict[str, Any]:
+    url = cfg["base"].rstrip("/") + "/responses"
+    payload = {
+        "model": cfg["model"],
+        "input": [{"role": "user", "content": prompt}],
+        "tools": [{"type": "x_search"}],
+        "max_tool_calls": max_tool_calls,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {cfg['key']}",
+            "Content-Type": "application/json",
+            "User-Agent": "x-search-grok-skill/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=cfg["timeout"]) as resp:
+            body = resp.read().decode("utf-8", "replace")
+            return {
+                "ok": True,
+                "status": resp.status,
+                "body": json.loads(body),
+            }
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", "replace")
+        try:
+            parsed: Any = json.loads(raw)
+        except Exception:
+            parsed = raw
+        return {
+            "ok": False,
+            "status": exc.code,
+            "body": parsed,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "status": None,
+            "body": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def extract_text(response_body: dict[str, Any]) -> str:
+    chunks: list[str] = []
+    for item in response_body.get("output") or []:
+        if item.get("type") != "message":
+            continue
+        for content in item.get("content") or []:
+            if content.get("type") in ("output_text", "text"):
+                text = content.get("text")
+                if text:
+                    chunks.append(text)
+    if chunks:
+        return "\n".join(chunks).strip()
+
+    # Some relays may flatten text.
+    for key in ("output_text", "content", "result"):
+        value = response_body.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def extract_tool_stats(response_body: dict[str, Any]) -> dict[str, Any]:
+    usage = response_body.get("usage") or {}
+    details = usage.get("server_side_tool_usage_details") or {}
+    tool_names: list[str] = []
+    for item in response_body.get("output") or []:
+        if item.get("type") in ("custom_tool_call", "x_search_call", "web_search_call", "function_call"):
+            name = item.get("name") or item.get("type")
+            if name:
+                tool_names.append(str(name))
+    return {
+        "x_search_calls": details.get("x_search_calls"),
+        "web_search_calls": details.get("web_search_calls"),
+        "num_server_side_tools_used": usage.get("num_server_side_tools_used"),
+        "tool_names": tool_names,
+        "usage": usage,
+    }
+
+
+def mode_tool_budget(mode: str) -> int:
+    if mode == "heat":
+        return 4
+    if mode == "account":
+        return 2
+    return 2
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="V1 X search via Grok-compatible x_search")
+    parser.add_argument("mode", choices=["keyword", "account", "heat"], help="V1 mode")
+    parser.add_argument("query", help="Search query or account handle")
+    parser.add_argument("--limit", type=int, default=8, help="Max items to request")
+    parser.add_argument("--since", default="7d", help="Recency window, e.g. 1d/3d/7d")
+    parser.add_argument("--lang", default="zh", help="zh or en")
+    parser.add_argument("--base-url", default="", help="Override API base URL")
+    parser.add_argument("--api-key", default="", help="Override API key")
+    parser.add_argument("--model", default="", help="Override model")
+    parser.add_argument("--timeout", type=int, default=0, help="Timeout seconds")
+    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    parser.add_argument("--raw", action="store_true", help="Include raw response body in JSON mode")
+    args = parser.parse_args()
+
+    if args.limit < 1:
+        args.limit = 1
+    if args.limit > 20:
+        args.limit = 20
+
+    cfg = load_config(args.base_url, args.api_key, args.model, args.timeout)
+    prompt = build_prompt(args.mode, args.query, args.limit, args.since, args.lang)
+    started = datetime.now(timezone.utc)
+    result = request_responses(cfg, prompt, mode_tool_budget(args.mode))
+    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+
+    if not result["ok"]:
+        payload = {
+            "ok": False,
+            "mode": args.mode,
+            "query": args.query,
+            "status": result["status"],
+            "elapsed_seconds": round(elapsed, 2),
+            "base": cfg["base"],
+            "model": cfg["model"],
+            "error": result["body"],
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            eprint("X search failed.")
+            eprint(f"status={result['status']} base={cfg['base']} model={cfg['model']}")
+            print(json.dumps(result["body"], ensure_ascii=False, indent=2) if isinstance(result["body"], (dict, list)) else result["body"])
+        return 2
+
+    body = result["body"]
+    text = extract_text(body if isinstance(body, dict) else {})
+    stats = extract_tool_stats(body if isinstance(body, dict) else {})
+
+    if args.json:
+        payload = {
+            "ok": True,
+            "mode": args.mode,
+            "query": args.query,
+            "status": result["status"],
+            "elapsed_seconds": round(elapsed, 2),
+            "base": cfg["base"],
+            "model": cfg["model"],
+            "text": text,
+            "stats": stats,
+        }
+        if args.raw:
+            payload["raw"] = body
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        header = [
+            f"mode={args.mode}",
+            f"model={cfg['model']}",
+            f"elapsed={elapsed:.1f}s",
+        ]
+        if stats.get("x_search_calls") is not None:
+            header.append(f"x_search_calls={stats['x_search_calls']}")
+        print(" | ".join(header))
+        print()
+        print(text or "No text returned by the relay.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
