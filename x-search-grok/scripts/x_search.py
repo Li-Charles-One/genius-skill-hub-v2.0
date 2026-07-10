@@ -25,6 +25,7 @@ from typing import Any
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = "https://ai.0xs.one/v1"
+# Prefer 4.3 for speed; 4.5 is automatic fallback only.
 DEFAULT_MODEL = "grok-4.3"
 DEFAULT_FALLBACK_MODELS = ["grok-4.5"]
 DEFAULT_TIMEOUT = 180

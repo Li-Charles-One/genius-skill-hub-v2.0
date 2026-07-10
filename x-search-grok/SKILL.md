@@ -40,8 +40,10 @@ Supported variables:
 
 Model selection:
 
-- Primary model defaults to `grok-4.3`, falls back to `grok-4.5`
+- Primary model defaults to `grok-4.3` (faster), falls back to `grok-4.5`
+- Prefer `grok-4.3` for everyday X search speed; keep `grok-4.5` only as fallback
 - CLI `--model` forces a single model (fallbacks still apply unless only one listed)
+- Skill-local `.env` example: see `.env.example`
 
 Never print the API key.
 
