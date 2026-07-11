@@ -1,47 +1,91 @@
 # Genius Skill Hub
 
-Personal monorepo for Codex-compatible skills.
+Personal monorepo of **self-built** Agent Skills (OpenCode / Codex / Claude Code compatible).
 
-This repository is the source hub for reusable skills, local skill mirrors, and lightweight validation before syncing skills into agent runtimes.
+Third-party skills (Tavily / Firecrawl / Context7 / PPT …) live in [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection).
 
-## Skills
+## Skills (13)
 
-| Skill | Path | Purpose |
-|:--|:--|:--|
-| brainstorming | `brainstorming/` | Explore intent and design before complex multi-file work; optional browser-based Visual Companion. |
-| brand-copywriter | `brand-copywriter/` | Advertising, landing page, email, social, and brand copywriting frameworks. |
-| cli-creator | `cli-creator/` | Build durable command-line tools from APIs, specs, SDKs, or local scripts. |
-| dreamina-cli | `dreamina-cli/` | Dreamina (即梦) login, sessions, task history, and image/video generation through the dreamina CLI. |
-| genius-design | `genius-design/` | Brand design systems for AI: pick from prebuilt DESIGN.md templates, or reverse-engineer a site into one. |
-| genius-image | `genius-image/` | AI image generation via Crun.ai: 4 models, single + batch + multi-model compare. Triggers on 'genius image', 'crun image', 'batch image generation', or any Crun image request. |
-| genius-skill-creator | `genius-skill-creator/` | Create, repair, validate, evaluate, and optimize skills. |
-| genius-vision | `genius-vision/` | Universal image and video analysis (OCR, UI review, chart data, video summary) via the doubao vision API. |
-| github-cli | `github-cli/` | Use GitHub CLI for repo, auth, PR, issue, Actions, and API work. |
-| lark | `lark/` | Unified Lark/Feishu CLI: docs, wiki, drive, base, sheets, slides, IM, calendar, task, mail. |
-| mcp-builder | `mcp-builder/` | Build MCP servers for external APIs or services. |
-| we-planing | `we-planing/` | Lightweight WePlaning v2.3 project memory with lifecycle scripts. |
-| writing-plans | `writing-plans/` | Write implementation plans before multi-step coding work. |
+### Workflow
 
-## Skill Pipeline
+| Skill | Purpose |
+|:--|:--|
+| [brainstorming](./brainstorming/) | Explore intent & design before complex multi-file work |
+| [writing-plans](./writing-plans/) | Turn a spec into an implementation plan |
+| [we-planing](./we-planing/) | Project memory lifecycle (`.agent-memory/`) |
 
-For complex multi-step work, three skills compose into a pipeline:
+### Creative / media
+
+| Skill | Purpose |
+|:--|:--|
+| [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
+| [genius-image](./genius-image/) | Image generation via Crun.ai (single / batch / multi-model) |
+| [genius-vision](./genius-vision/) | Image & video analysis via doubao vision API |
+| [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
+| [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
+| [officecli](./officecli/) | Create & edit Office docs (`.docx` / `.xlsx` / `.pptx`) |
+
+### Tools
+
+| Skill | Purpose |
+|:--|:--|
+| [github-cli](./github-cli/) | GitHub CLI: auth, repos, PRs, issues, Actions, API |
+| [lark](./lark/) | Lark/Feishu CLI: docs, wiki, IM, calendar, mail… |
+| [x-search-grok](./x-search-grok/) | Real-time X/Twitter search via Grok-compatible relay |
+| [genius-skill-creator](./genius-skill-creator/) | Create, repair, validate, evaluate, port skills |
+
+## Skill pipeline
+
+For complex multi-step work:
 
 ```
 brainstorming  →  writing-plans  →  implementation  →  we-planing
-   (WHAT/WHY)      (HOW)              (do the work)     (record state)
+   (WHAT/WHY)       (HOW)            (do the work)      (record state)
 ```
 
-- `brainstorming` triggers only when the complexity gate fires (3+ files AND ambiguous approach), or when the user explicitly asks to plan. It outputs a design spec.
-- `writing-plans` always follows brainstorming for architectural work and turns the spec into an implementation plan.
-- `we-planing` records session state in `.agent-memory/` whenever durable changes happen during implementation.
-- The other skills (`brand-copywriter`, `cli-creator`, `dreamina-cli`, `genius-design`, `genius-image`, `genius-skill-creator`, `genius-vision`, `github-cli`, `lark`, `mcp-builder`) are leaf skills — they do their own job and don't sit in this pipeline.
+- `brainstorming` — only when approach is ambiguous (or user asks to plan)
+- `writing-plans` — turns the design spec into a step plan
+- `we-planing` — persists durable session state
+- All other skills are leaf tools and do not sit in this pipeline
+
+## Layout
+
+```
+genius-skill-hub-v2.0/
+├── brainstorming/
+├── brand-copywriter/
+├── dreamina-cli/
+├── genius-design/
+├── genius-image/
+├── genius-skill-creator/
+├── genius-vision/
+├── github-cli/
+├── lark/
+├── officecli/
+├── we-planing/
+├── writing-plans/
+└── x-search-grok/
+```
+
+Each skill is a folder with `SKILL.md` at its root.
+
+## Local use (OpenCode)
+
+Symlink / junction skills into `~/.config/opencode/skills/`, e.g.:
+
+```powershell
+New-Item -ItemType Junction `
+  -Path "$env:USERPROFILE\.config\opencode\skills\github-cli" `
+  -Target "C:\path\to\genius-skill-hub-v2.0\github-cli"
+```
+
+Restart OpenCode after adding or removing skills.
 
 ## Validation
 
-The `validate` GitHub Actions workflow checks skill metadata and runs WePlaning script smoke tests.
-It also parses agent YAML metadata and smoke-tests the Genius Code Audit report validator.
+GitHub Actions `validate` checks skill metadata and WePlaning smoke tests.
 
-Run the same lightweight checks locally before pushing meaningful skill changes:
+Locally:
 
 ```powershell
 git status --short
