@@ -2,9 +2,9 @@
 
 Personal monorepo of **self-built** Agent Skills (OpenCode / Codex / Claude Code compatible).
 
-Third-party skills (Tavily / Firecrawl / Context7 / PPT …) live in [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection).
+Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection).
 
-## Skills (13)
+## Skills (12)
 
 ### Workflow
 
@@ -23,7 +23,6 @@ Third-party skills (Tavily / Firecrawl / Context7 / PPT …) live in [NIUBI-skil
 | [genius-vision](./genius-vision/) | Image & video analysis via doubao vision API |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
 | [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
-| [officecli](./officecli/) | Create & edit Office docs (`.docx` / `.xlsx` / `.pptx`) |
 
 ### Tools
 
@@ -61,7 +60,6 @@ genius-skill-hub-v2.0/
 ├── genius-vision/
 ├── github-cli/
 ├── lark/
-├── officecli/
 ├── we-planing/
 ├── writing-plans/
 └── x-search-grok/
