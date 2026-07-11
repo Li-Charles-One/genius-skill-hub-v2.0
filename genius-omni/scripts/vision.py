@@ -28,6 +28,8 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -36,6 +38,16 @@ except ImportError:
     print("Installing httpx...", file=sys.stderr)
     os.system(f"{sys.executable} -m pip install httpx -q")
     import httpx
+
+# Local base64: leave headroom under MiMo ~50MB encoded limit (×1.33).
+MAX_RAW_BYTES = int(os.environ.get("VISION_MAX_RAW_MB", "35")) * 1024 * 1024
+# Re-encode local media when larger than this (analysis proxy, not master).
+PROXY_TRIGGER_BYTES = int(os.environ.get("VISION_PROXY_TRIGGER_MB", "20")) * 1024 * 1024
+PROXY_SCALE = int(os.environ.get("VISION_PROXY_SCALE", "1280"))
+PROXY_AUDIO_K = os.environ.get("VISION_PROXY_AUDIO_K", "64k")
+# Large still images: max long-edge px for analysis proxy.
+PROXY_IMAGE_MAX_EDGE = int(os.environ.get("VISION_PROXY_IMAGE_MAX_EDGE", "2048"))
+PROXY_DIR = Path(tempfile.gettempdir()) / "genius-omni-proxy"
 
 
 # ── Prompts ──────────────────────────────────────────────────────────────
@@ -279,6 +291,265 @@ def format_duration(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+# ── Analysis proxies (HEVC GPU → H.264 → CPU; audio AAC; image scale) ──
+
+def _ffmpeg_bin() -> str:
+    return os.environ.get("FFMPEG_BIN", "ffmpeg")
+
+
+def _proxy_dir() -> Path:
+    PROXY_DIR.mkdir(parents=True, exist_ok=True)
+    return PROXY_DIR
+
+
+def _encoder_attempts(scale: int | None = None) -> list[tuple[str, list[str]]]:
+    """Ordered encoder recipes: HEVC GPU → H.264 GPU → libx264."""
+    del scale  # scale applied via -vf in make_video_proxy
+    return [
+        (
+            "hevc_qsv",
+            ["-c:v", "hevc_qsv", "-global_quality", "28", "-look_ahead", "0"],
+        ),
+        (
+            "hevc_nvenc",
+            ["-c:v", "hevc_nvenc", "-preset", "p1", "-cq", "28", "-b:v", "0"],
+        ),
+        (
+            "hevc_amf",
+            ["-c:v", "hevc_amf", "-quality", "speed", "-qp_i", "28", "-qp_p", "28"],
+        ),
+        (
+            "h264_qsv",
+            ["-c:v", "h264_qsv", "-global_quality", "28", "-look_ahead", "0"],
+        ),
+        (
+            "h264_nvenc",
+            ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28", "-b:v", "0"],
+        ),
+        (
+            "h264_amf",
+            ["-c:v", "h264_amf", "-quality", "speed", "-qp_i", "28", "-qp_p", "28"],
+        ),
+        (
+            "libx264",
+            ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "32"],
+        ),
+    ]
+
+
+def make_video_proxy(
+    src: str,
+    scale: int | None = None,
+) -> tuple[str, str]:
+    """Build a smaller video analysis proxy. Returns (path, encoder_name).
+
+    Preference: HEVC GPU → H.264 GPU → libx264. Requires ffmpeg on PATH.
+    """
+    scale = scale or PROXY_SCALE
+    src_path = Path(src)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"File not found: {src}")
+
+    out_dir = _proxy_dir()
+    stamp = int(time.time() * 1000)
+    last_err = ""
+
+    for name, vcodec in _encoder_attempts(scale):
+        out = out_dir / f"{src_path.stem}.{stamp}.{name}.mp4"
+        cmd = [
+            _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(src_path),
+            "-vf", f"scale={scale}:-2",
+            *vcodec,
+            "-c:a", "aac", "-b:a", PROXY_AUDIO_K,
+            "-movflags", "+faststart",
+            str(out),
+        ]
+        try:
+            t0 = time.perf_counter()
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            elapsed = time.perf_counter() - t0
+            if proc.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+                last_err = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
+                if out.exists():
+                    out.unlink(missing_ok=True)
+                continue
+            size = out.stat().st_size
+            print(
+                f"[genius-omni] video proxy via {name}: "
+                f"{size / 1024 / 1024:.1f}MB in {elapsed:.1f}s → {out}",
+                file=sys.stderr,
+            )
+            if size > MAX_RAW_BYTES:
+                print(
+                    f"[genius-omni] proxy still {size / 1024 / 1024:.1f}MB "
+                    f"(>{MAX_RAW_BYTES / 1024 / 1024:.0f}MB), trying next encoder…",
+                    file=sys.stderr,
+                )
+                continue
+            return str(out), name
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            last_err = str(e)
+            if out.exists():
+                out.unlink(missing_ok=True)
+            continue
+
+    if scale > 720:
+        return make_video_proxy(src, scale=720)
+
+    raise RuntimeError(
+        f"Failed to build video proxy (HEVC/H.264 GPU → libx264). Last error: {last_err[:400]}"
+    )
+
+
+def _make_video_proxy_h264_only(src: str, scale: int | None = None) -> tuple[str, str]:
+    """H.264-only video proxy for API codec fallback."""
+    scale = scale or PROXY_SCALE
+    src_path = Path(src)
+    out_dir = _proxy_dir()
+    stamp = int(time.time() * 1000)
+    h264_chain = [c for c in _encoder_attempts() if c[0].startswith("h264") or c[0] == "libx264"]
+    last_err = ""
+    for name, vcodec in h264_chain:
+        out = out_dir / f"{src_path.stem}.{stamp}.{name}.mp4"
+        cmd = [
+            _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(src_path),
+            "-vf", f"scale={scale}:-2",
+            *vcodec,
+            "-c:a", "aac", "-b:a", PROXY_AUDIO_K,
+            "-movflags", "+faststart",
+            str(out),
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if proc.returncode == 0 and out.is_file() and out.stat().st_size > 0:
+                print(
+                    f"[genius-omni] video proxy via {name}: "
+                    f"{out.stat().st_size / 1024 / 1024:.1f}MB → {out}",
+                    file=sys.stderr,
+                )
+                return str(out), name
+            last_err = (proc.stderr or f"exit {proc.returncode}").strip()
+            if out.exists():
+                out.unlink(missing_ok=True)
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            last_err = str(e)
+    if scale > 720:
+        return _make_video_proxy_h264_only(src, scale=720)
+    raise RuntimeError(f"H.264 proxy failed: {last_err[:400]}")
+
+
+def make_audio_proxy(src: str) -> tuple[str, str]:
+    """Re-encode large audio to AAC m4a for base64 upload. Returns (path, codec)."""
+    src_path = Path(src)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"File not found: {src}")
+    out = _proxy_dir() / f"{src_path.stem}.{int(time.time() * 1000)}.proxy.m4a"
+    cmd = [
+        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(src_path),
+        "-vn", "-c:a", "aac", "-b:a", PROXY_AUDIO_K,
+        str(out),
+    ]
+    t0 = time.perf_counter()
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if proc.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+        if out.exists():
+            out.unlink(missing_ok=True)
+        err = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
+        raise RuntimeError(f"Audio proxy failed: {err[:400]}")
+    print(
+        f"[genius-omni] audio proxy aac/{PROXY_AUDIO_K}: "
+        f"{out.stat().st_size / 1024 / 1024:.1f}MB in {time.perf_counter() - t0:.1f}s → {out}",
+        file=sys.stderr,
+    )
+    if out.stat().st_size > MAX_RAW_BYTES:
+        # second pass lower rate
+        out2 = _proxy_dir() / f"{src_path.stem}.{int(time.time() * 1000)}.proxy32.m4a"
+        cmd2 = [
+            _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(src_path),
+            "-vn", "-c:a", "aac", "-b:a", "32k", "-ac", "1",
+            str(out2),
+        ]
+        proc2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=600)
+        if proc2.returncode == 0 and out2.is_file() and out2.stat().st_size > 0:
+            out.unlink(missing_ok=True)
+            print(
+                f"[genius-omni] audio proxy aac/32k mono: "
+                f"{out2.stat().st_size / 1024 / 1024:.1f}MB → {out2}",
+                file=sys.stderr,
+            )
+            return str(out2), "aac-32k"
+    return str(out), "aac"
+
+
+def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
+    """Downscale large still image to JPEG for base64 upload. Returns (path, tag)."""
+    max_edge = max_edge or PROXY_IMAGE_MAX_EDGE
+    src_path = Path(src)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"File not found: {src}")
+    out = _proxy_dir() / f"{src_path.stem}.{int(time.time() * 1000)}.proxy.jpg"
+    # scale so long edge <= max_edge; always re-encode jpeg q=3 (~high quality)
+    vf = (
+        f"scale='if(gt(iw\\,ih)\\,min({max_edge}\\,iw)\\,-2)':"
+        f"'if(gt(ih\\,iw)\\,min({max_edge}\\,ih)\\,-2)'"
+    )
+    cmd = [
+        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(src_path),
+        "-vf", vf,
+        "-frames:v", "1",
+        "-q:v", "3",
+        str(out),
+    ]
+    t0 = time.perf_counter()
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    if proc.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+        if out.exists():
+            out.unlink(missing_ok=True)
+        err = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
+        raise RuntimeError(f"Image proxy failed: {err[:400]}")
+    print(
+        f"[genius-omni] image proxy max_edge={max_edge}: "
+        f"{out.stat().st_size / 1024 / 1024:.1f}MB in {time.perf_counter() - t0:.1f}s → {out}",
+        file=sys.stderr,
+    )
+    if out.stat().st_size > MAX_RAW_BYTES and max_edge > 1280:
+        return make_image_proxy(src, max_edge=1280)
+    return str(out), f"jpeg-{max_edge}"
+
+
+def ensure_media_under_limit(
+    path: str,
+    kind: str,
+    force_proxy: bool = False,
+) -> str:
+    """Return path suitable for base64 upload; may create analysis proxy."""
+    p = Path(path)
+    size = p.stat().st_size
+    needs = force_proxy or size > PROXY_TRIGGER_BYTES or size > MAX_RAW_BYTES
+    if not needs:
+        return path
+
+    reason = "forced" if force_proxy else f"{size / 1024 / 1024:.1f}MB > trigger"
+    if kind == "video":
+        print(f"[genius-omni] compressing video ({reason})…", file=sys.stderr)
+        proxy, _ = make_video_proxy(path)
+        return proxy
+    if kind == "audio":
+        print(f"[genius-omni] compressing audio ({reason})…", file=sys.stderr)
+        proxy, _ = make_audio_proxy(path)
+        return proxy
+    if kind == "image":
+        print(f"[genius-omni] compressing image ({reason})…", file=sys.stderr)
+        proxy, _ = make_image_proxy(path)
+        return proxy
+    return path
+
+
 # ── API Call ──────────────────────────────────────────────────────────────
 
 KEY_ENV_NAMES = ("MIMO_API_KEY", "VISION_API_KEY", "ARK_API_KEY")
@@ -338,12 +609,14 @@ def encode_file(file_path: str) -> tuple[str, str]:
     media_type = media_types.get(suffix, "image/png")
 
     file_size = path.stat().st_size
-    max_size = 50 * 1024 * 1024  # 50MB (MiMo base64 limit)
-    if file_size > max_size:
+    if file_size > MAX_RAW_BYTES:
         raise ValueError(
             f"File too large: {file_size / 1024 / 1024:.1f}MB "
-            f"(max {max_size / 1024 / 1024:.0f}MB base64). "
-            "Compress, trim, or use a public URL (audio URL up to 100MB)."
+            f"(max ~{MAX_RAW_BYTES / 1024 / 1024:.0f}MB raw for base64). "
+            "vision.py auto-proxies oversize local media "
+            f"(>{PROXY_TRIGGER_BYTES / 1024 / 1024:.0f}MB): "
+            "video HEVC→H.264, audio AAC, image JPEG downscale. "
+            "Or pass a public URL (video ≤300MB, audio ≤100MB)."
         )
 
     with open(path, "rb") as f:
@@ -358,6 +631,7 @@ def analyze_media(
     api_key: str = None,
     base_url: str = None,
     compare_with: str = None,
+    force_proxy: bool = False,
 ) -> str:
     """Analyze image / video / audio via MiMo multimodal API.
 
@@ -394,7 +668,24 @@ def analyze_media(
 
     actual_duration = None
     is_local = not media_input.startswith(("http://", "https://"))
+    upload_path = media_input
+
+    if is_local:
+        try:
+            # --force-proxy is video-oriented; audio/image still size-trigger
+            upload_path = ensure_media_under_limit(
+                media_input,
+                kind=kind,
+                force_proxy=bool(force_proxy and is_video_input),
+            )
+        except Exception as e:
+            if Path(media_input).stat().st_size > MAX_RAW_BYTES:
+                raise
+            print(f"[genius-omni] proxy skipped: {e}", file=sys.stderr)
+            upload_path = media_input
+
     if is_local and (is_video_input or is_audio_input):
+        # Duration from original when possible (proxy may re-mux)
         actual_duration = get_media_duration(media_input)
         if actual_duration is not None:
             label = "AUDIO" if is_audio_input else "VIDEO"
@@ -431,20 +722,25 @@ def analyze_media(
             "image_url": {"url": url},
         }
 
-    if media_input.startswith(("http://", "https://")):
-        content.append(media_part(media_input, kind))
-    else:
-        b64_data, mime = encode_file(media_input)
-        content.append(media_part(f"data:{mime};base64,{b64_data}", kind))
-
-    if mode == "compare" and compare_with:
-        if compare_with.startswith(("http://", "https://")):
-            content.append(media_part(compare_with, "image"))
+    def build_content(path_or_url: str) -> list:
+        parts = []
+        if path_or_url.startswith(("http://", "https://")):
+            parts.append(media_part(path_or_url, kind))
         else:
-            b64_data2, mime2 = encode_file(compare_with)
-            content.append(media_part(f"data:{mime2};base64,{b64_data2}", "image"))
+            b64_data, mime = encode_file(path_or_url)
+            parts.append(media_part(f"data:{mime};base64,{b64_data}", kind))
 
-    content.append({"type": "text", "text": prompt})
+        if mode == "compare" and compare_with:
+            if compare_with.startswith(("http://", "https://")):
+                parts.append(media_part(compare_with, "image"))
+            else:
+                b64_data2, mime2 = encode_file(compare_with)
+                parts.append(media_part(f"data:{mime2};base64,{b64_data2}", "image"))
+
+        parts.append({"type": "text", "text": prompt})
+        return parts
+
+    content = build_content(upload_path if is_local else media_input)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -465,20 +761,44 @@ def analyze_media(
     if is_video_input or is_audio_input:
         timeout = max(timeout, 300)
 
-    with httpx.Client(timeout=timeout) as client:
-        resp = client.post(
-            f"{base_url}/chat/completions",
-            headers=headers,
-            json=payload,
+    def post_once(body: dict):
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=body,
+            )
+            if resp.status_code != 200:
+                try:
+                    error_body = resp.json()
+                    error_msg = error_body.get("error", {}).get("message", resp.text[:300])
+                except Exception:
+                    error_msg = resp.text[:300]
+                raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
+            return resp.json()
+
+    try:
+        data = post_once(payload)
+    except RuntimeError as e:
+        # Codec rejection on first video proxy → rebuild H.264-only and retry once
+        err = str(e)
+        can_retry = (
+            is_local
+            and is_video_input
+            and ("400" in err or "Param" in err or "Invalid" in err or "corrupted" in err.lower())
         )
-        if resp.status_code != 200:
-            try:
-                error_body = resp.json()
-                error_msg = error_body.get("error", {}).get("message", resp.text[:300])
-            except Exception:
-                error_msg = resp.text[:300]
-            raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
-        data = resp.json()
+        if not can_retry:
+            raise
+        print(
+            f"[genius-omni] API failed ({err[:120]}); "
+            "retrying with H.264 video proxy…",
+            file=sys.stderr,
+        )
+        proxy, enc = _make_video_proxy_h264_only(media_input)
+        print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
+        content = build_content(proxy)
+        payload["messages"] = [{"role": "user", "content": content}]
+        data = post_once(payload)
 
     message = data["choices"][0]["message"]
     result_text = message.get("content") or ""
@@ -552,15 +872,49 @@ def main():
         default=None,
         help="Second image for 'compare' mode",
     )
+    parser.add_argument(
+        "--force-proxy",
+        action="store_true",
+        help="Force video analysis proxy (HEVC GPU first) even if under size trigger",
+    )
+    parser.add_argument(
+        "--proxy-only",
+        action="store_true",
+        help="Only build analysis proxy and print path (no API call)",
+    )
     args = parser.parse_args()
 
     try:
+        if args.proxy_only:
+            kind = media_kind(args.file)
+            if kind == "video":
+                proxy, enc = make_video_proxy(args.file)
+            elif kind == "audio":
+                proxy, enc = make_audio_proxy(args.file)
+            else:
+                proxy, enc = make_image_proxy(args.file)
+            if args.output == "json":
+                print(json.dumps({
+                    "file": args.file,
+                    "kind": kind,
+                    "proxy": proxy,
+                    "encoder": enc,
+                    "bytes": Path(proxy).stat().st_size,
+                }, ensure_ascii=False, indent=2))
+            else:
+                print(
+                    f"kind={kind}\nproxy={proxy}\nencoder={enc}\n"
+                    f"bytes={Path(proxy).stat().st_size}"
+                )
+            return
+
         result = analyze_media(
             args.file,
             mode=args.mode,
             model=args.model,
             api_key=args.api_key,
             compare_with=args.compare_with,
+            force_proxy=args.force_proxy,
         )
 
         if args.output == "json":
