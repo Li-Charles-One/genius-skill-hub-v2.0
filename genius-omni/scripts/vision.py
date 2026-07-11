@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
-Genius Vision — Universal image & video analysis via doubao (豆包) vision API.
+Genius AV (视听) — Image / video / audio analysis via OpenAI-compatible multimodal API.
+
+Default provider: Xiaomi MiMo (mimo-v2.5, Token Plan).
 
 Usage:
     python vision.py <file_path_or_url> <mode> [--output json|text] [--model MODEL]
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
-Auto-detect:      .mp4/.mov/.avi/.mkv/.webm → video; otherwise → image
+Audio modes (4):  audio-summary, audio-transcribe, audio-review, audio-scene
+Auto-detect:      video / audio / image by extension (URL path suffix also works)
 Compare:          python vision.py img1.png compare --compare-with img2.png
 
-For videos, ffprobe is used to get actual duration, which is injected into the
-prompt as ground truth and displayed in the output for verification.
+For video/audio, ffprobe duration is injected as ground truth when available.
 
 Environment:
-    ARK_API_KEY    — Volcengine Ark API key (required)
-    VISION_MODEL   — Model name (default: doubao-seed-2.0-lite-260428)
+    MIMO_API_KEY / VISION_API_KEY / ARK_API_KEY — API key (first found wins)
+    VISION_MODEL   — Model name (default: mimo-v2.5)
+    VISION_BASE_URL — API base (default: https://token-plan-cn.xiaomimimo.com/v1)
 """
 
 import argparse
@@ -127,22 +130,128 @@ PROMPTS = {
         "- **总时长**: X.Xs\n"
         "- **整体风格**: 1-2 sentence style description"
     ),
+    # ── Audio prompts (MiMo input_audio) ───────────────────────────
+    "audio-summary": (
+        "Provide a comprehensive understanding of this audio. Structure as:\n"
+        "(1) Overall content / topic — what is this audio about?\n"
+        "(2) Timeline — key segments with approximate timestamps if possible\n"
+        "(3) Speakers / voices — how many, gender/age impression, roles if clear\n"
+        "(4) Speech content summary (not full verbatim unless short)\n"
+        "(5) Non-speech sounds — music, SFX, ambient noise, silence\n"
+        "(6) Tone, emotion, and production quality\n"
+        "Be detailed and chronological."
+    ),
+    "audio-transcribe": (
+        "Transcribe ALL speech in this audio verbatim.\n"
+        "Rules:\n"
+        "- Preserve speaker turns if multiple speakers (Speaker A/B or names if known)\n"
+        "- Keep original language; do not translate unless asked\n"
+        "- Note [music], [noise], [inaudible], [silence] where relevant\n"
+        "- Add approximate timestamps for major segments when possible\n"
+        "If no speech is present, say so and briefly describe non-speech audio."
+    ),
+    "audio-review": (
+        "You are a senior audio production reviewer. Analyze this recording.\n"
+        "Return a structured review:\n"
+        "(1) Content clarity — message, structure, pacing\n"
+        "(2) Speech quality — intelligibility, diction, levels\n"
+        "(3) Technical quality — noise, clipping, reverb, balance, stereo\n"
+        "(4) Music/SFX mix — if present, how well it supports content\n"
+        "(5) Specific actionable suggestions for improvement\n"
+        "Be constructive and detailed."
+    ),
+    "audio-scene": (
+        "Analyze this audio as an acoustic scene. List:\n"
+        "(1) Environment / setting inferred from soundscape\n"
+        "(2) Distinct sound events in chronological order with timestamps if possible\n"
+        "(3) Music: genre, mood, instruments if identifiable\n"
+        "(4) Human activity: speech, footsteps, machinery, etc.\n"
+        "(5) Overall atmosphere and what story the soundscape tells\n"
+        "Be specific and sensory."
+    ),
 }
 
 # ── File type detection ───────────────────────────────────────────────
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma", ".opus"}
+
+IMAGE_MODES = {
+    "describe", "ocr", "ui-review", "chart-data", "object-detect", "compare",
+}
+VIDEO_MODES = {
+    "video-summary", "video-ocr", "video-review", "video-frame-analysis",
+}
+AUDIO_MODES = {
+    "audio-summary", "audio-transcribe", "audio-review", "audio-scene",
+}
+
+
+def _path_suffix(path_or_url: str) -> str:
+    clean = path_or_url.split("?", 1)[0].split("#", 1)[0]
+    return Path(clean).suffix.lower()
+
+
+def media_kind(path_or_url: str) -> str:
+    """Return 'video' | 'audio' | 'image' from extension (works for URLs too)."""
+    suffix = _path_suffix(path_or_url)
+    if suffix in AUDIO_EXTENSIONS:
+        return "audio"
+    if suffix in VIDEO_EXTENSIONS:
+        return "video"
+    return "image"
 
 
 def is_video(file_path: str) -> bool:
-    """Detect if a local file is a video by extension."""
-    return Path(file_path).suffix.lower() in VIDEO_EXTENSIONS
+    return media_kind(file_path) == "video"
+
+
+def is_audio(file_path: str) -> bool:
+    return media_kind(file_path) == "audio"
+
+
+def resolve_mode(mode: str, kind: str) -> str:
+    """Map generic modes to media-specific defaults when needed."""
+    if kind == "audio":
+        if mode in AUDIO_MODES:
+            return mode
+        if mode in ("describe", "video-summary"):
+            return "audio-summary"
+        if mode in ("ocr", "video-ocr"):
+            return "audio-transcribe"
+        if mode in ("ui-review", "video-review"):
+            return "audio-review"
+        if mode == "object-detect":
+            return "audio-scene"
+        raise ValueError(
+            f"Mode '{mode}' is not for audio. Use: {', '.join(sorted(AUDIO_MODES))}"
+        )
+    if kind == "video":
+        if mode in VIDEO_MODES:
+            return mode
+        if mode == "describe":
+            return "video-summary"
+        if mode == "ocr":
+            return "video-ocr"
+        if mode in IMAGE_MODES - {"describe", "ocr"}:
+            # allow image-style modes on video still (model may handle)
+            return mode
+        if mode in AUDIO_MODES:
+            raise ValueError(f"Mode '{mode}' is for audio files, got video")
+        return mode
+    # image
+    if mode in AUDIO_MODES or mode in VIDEO_MODES:
+        if mode.startswith("video-") and mode != "video-summary":
+            raise ValueError(f"Mode '{mode}' requires a video file")
+        if mode in AUDIO_MODES:
+            raise ValueError(f"Mode '{mode}' requires an audio file")
+    return mode
 
 
 # ── ffprobe duration ──────────────────────────────────────────────────
 
-def get_video_duration(file_path: str) -> float | None:
-    """Get video duration in seconds using ffprobe. Returns None on failure."""
+def get_media_duration(file_path: str) -> float | None:
+    """Get media duration in seconds using ffprobe. Returns None on failure."""
     try:
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -154,6 +263,10 @@ def get_video_duration(file_path: str) -> float | None:
     except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
         pass
     return None
+
+
+def get_video_duration(file_path: str) -> float | None:
+    return get_media_duration(file_path)
 
 
 def format_duration(seconds: float) -> str:
@@ -168,21 +281,38 @@ def format_duration(seconds: float) -> str:
 
 # ── API Call ──────────────────────────────────────────────────────────────
 
-def load_api_key() -> str:
-    """Load ARK_API_KEY from env or .env file."""
-    key = os.environ.get("ARK_API_KEY")
-    if key:
-        return key
+KEY_ENV_NAMES = ("MIMO_API_KEY", "VISION_API_KEY", "ARK_API_KEY")
+DEFAULT_MODEL = "mimo-v2.5"
+DEFAULT_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+
+
+def load_dotenv_map() -> dict:
+    """Parse first existing .env into a name→value map."""
     env_paths = [
         Path(__file__).parent / ".env",
         Path.home() / ".hermes" / ".env",
     ]
+    out = {}
     for env_path in env_paths:
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                line = line.strip()
-                if line.startswith("ARK_API_KEY="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+        if not env_path.exists():
+            continue
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, value = line.split("=", 1)
+            out[name.strip()] = value.strip().strip('"').strip("'")
+        break
+    return out
+
+
+def load_api_key() -> str:
+    """Load API key: per-name env then .env (MIMO > VISION > ARK)."""
+    file_keys = load_dotenv_map()
+    for name in KEY_ENV_NAMES:
+        key = os.environ.get(name) or file_keys.get(name)
+        if key:
+            return key
     return ""
 
 
@@ -201,16 +331,19 @@ def encode_file(file_path: str) -> tuple[str, str]:
         ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
         ".webm": "video/webm", ".flv": "video/x-flv",
         ".wmv": "video/x-ms-wmv", ".m4v": "video/mp4",
+        ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
+        ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".aac": "audio/aac",
+        ".wma": "audio/x-ms-wma", ".opus": "audio/opus",
     }
     media_type = media_types.get(suffix, "image/png")
 
     file_size = path.stat().st_size
-    max_size = 50 * 1024 * 1024  # 50MB
+    max_size = 50 * 1024 * 1024  # 50MB (MiMo base64 limit)
     if file_size > max_size:
         raise ValueError(
             f"File too large: {file_size / 1024 / 1024:.1f}MB "
-            f"(max {max_size / 1024 / 1024:.0f}MB). "
-            "Consider compressing or trimming the video."
+            f"(max {max_size / 1024 / 1024:.0f}MB base64). "
+            "Compress, trim, or use a public URL (audio URL up to 100MB)."
         )
 
     with open(path, "rb") as f:
@@ -226,89 +359,111 @@ def analyze_media(
     base_url: str = None,
     compare_with: str = None,
 ) -> str:
-    """Analyze an image or video using doubao vision API.
+    """Analyze image / video / audio via MiMo multimodal API.
 
-    Auto-detects video by file extension. Videos use video_url type;
-    images use image_url type. Both are base64-encoded.
-
-    For videos, ffprobe duration is injected into the prompt as ground truth.
-    For 'compare' mode, pass a second image via compare_with.
+    Auto-detects kind by extension. Local files → base64 data-URI;
+    public URLs pass through. Audio uses input_audio; video uses video_url;
+    images use image_url.
     """
     api_key = api_key or load_api_key()
     if not api_key:
-        raise ValueError("ARK_API_KEY not found. Set env var or create .env file.")
+        raise ValueError(
+            "API key not found. Set MIMO_API_KEY (or VISION_API_KEY / ARK_API_KEY) "
+            "or create scripts/.env."
+        )
 
-    model = model or os.environ.get("VISION_MODEL", "doubao-seed-2.0-lite-260428")
-    base_url = base_url or os.environ.get(
-        "VISION_BASE_URL", "https://ark.cn-beijing.volces.com/api/coding/v3"
-    )
+    model = model or os.environ.get("VISION_MODEL", DEFAULT_MODEL)
+    base_url = (
+        base_url or os.environ.get("VISION_BASE_URL", DEFAULT_BASE_URL)
+    ).rstrip("/")
 
+    kind = media_kind(media_input)
+    # URL without clear extension: infer from mode
+    if media_input.startswith(("http://", "https://")) and _path_suffix(media_input) == "":
+        if mode in AUDIO_MODES:
+            kind = "audio"
+        elif mode in VIDEO_MODES or mode.startswith("video-"):
+            kind = "video"
+
+    mode = resolve_mode(mode, kind)
     prompt = PROMPTS.get(mode, PROMPTS["describe"])
 
-    # Detect media type
-    is_video_input = (
-        not media_input.startswith(("http://", "https://")) and is_video(media_input)
-    )
-    media_type_name = "video_url" if is_video_input else "image_url"
-    timeout = 180 if is_video_input else 60
+    is_video_input = kind == "video"
+    is_audio_input = kind == "audio"
+    timeout = 180 if (is_video_input or is_audio_input) else 60
 
-    # For video: get ground-truth duration via ffprobe, inject into prompt
     actual_duration = None
-    if is_video_input:
-        actual_duration = get_video_duration(media_input)
+    is_local = not media_input.startswith(("http://", "https://"))
+    if is_local and (is_video_input or is_audio_input):
+        actual_duration = get_media_duration(media_input)
         if actual_duration is not None:
+            label = "AUDIO" if is_audio_input else "VIDEO"
             dur_str = format_duration(actual_duration)
             prompt = (
-                f"[VIDEO GROUND TRUTH — actual duration: {dur_str} "
+                f"[{label} GROUND TRUTH — actual duration: {dur_str} "
                 f"({actual_duration:.1f}s), verified by ffprobe. "
                 f"Use this as your timing reference for all timestamps.]\n\n"
                 + prompt
             )
 
-    # Build message content
     content = []
 
-    if media_input.startswith(("http://", "https://")):
-        try:
-            resp = httpx.get(media_input, timeout=30, follow_redirects=True)
-            resp.raise_for_status()
-            content_type = resp.headers.get("content-type", "image/png")
-            if "/" not in content_type:
-                content_type = "image/png"
-            b64_data = base64.b64encode(resp.content).decode("utf-8")
-            content.append({
-                "type": media_type_name,
-                media_type_name: {"url": f"data:{content_type};base64,{b64_data}"}
-            })
-        except Exception as e:
-            raise RuntimeError(f"Failed to download from URL: {e}")
-    else:
-        b64_data, media_type = encode_file(media_input)
-        content.append({
-            "type": media_type_name,
-            media_type_name: {"url": f"data:{media_type};base64,{b64_data}"}
-        })
-
-    # Second image for compare mode
-    if mode == "compare" and compare_with:
-        b64_data2, media_type2 = encode_file(compare_with)
-        content.append({
+    def media_part(url: str, part_kind: str) -> dict:
+        if part_kind == "audio":
+            # MiMo audio understanding: type input_audio, field data
+            return {
+                "type": "input_audio",
+                "input_audio": {"data": url},
+            }
+        if part_kind == "video":
+            part = {
+                "type": "video_url",
+                "video_url": {"url": url},
+            }
+            if model.startswith("mimo"):
+                part["fps"] = float(os.environ.get("VISION_VIDEO_FPS", "2"))
+                part["media_resolution"] = os.environ.get(
+                    "VISION_VIDEO_RESOLUTION", "default"
+                )
+            return part
+        return {
             "type": "image_url",
-            "image_url": {"url": f"data:{media_type2};base64,{b64_data2}"}
-        })
+            "image_url": {"url": url},
+        }
+
+    if media_input.startswith(("http://", "https://")):
+        content.append(media_part(media_input, kind))
+    else:
+        b64_data, mime = encode_file(media_input)
+        content.append(media_part(f"data:{mime};base64,{b64_data}", kind))
+
+    if mode == "compare" and compare_with:
+        if compare_with.startswith(("http://", "https://")):
+            content.append(media_part(compare_with, "image"))
+        else:
+            b64_data2, mime2 = encode_file(compare_with)
+            content.append(media_part(f"data:{mime2};base64,{b64_data2}", "image"))
 
     content.append({"type": "text", "text": prompt})
 
-    # API call
     headers = {
         "Authorization": f"Bearer {api_key}",
+        "api-key": api_key,
         "Content-Type": "application/json",
     }
+    max_out = int(os.environ.get("VISION_MAX_TOKENS", "32768"))
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 32768,
+        "max_completion_tokens": max_out,
+        "max_tokens": max_out,
     }
+    # MiMo: always force deep thinking
+    if model.startswith("mimo"):
+        payload["thinking"] = {"type": "enabled"}
+
+    if is_video_input or is_audio_input:
+        timeout = max(timeout, 300)
 
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(
@@ -325,15 +480,25 @@ def analyze_media(
             raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
         data = resp.json()
 
-    result_text = data["choices"][0]["message"]["content"]
+    message = data["choices"][0]["message"]
+    result_text = message.get("content") or ""
+    if not result_text and message.get("reasoning_content"):
+        result_text = message["reasoning_content"]
+    show_think = os.environ.get("VISION_SHOW_THINKING", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if show_think and message.get("reasoning_content") and message.get("content"):
+        result_text = (
+            f"<thinking>\n{message['reasoning_content']}\n</thinking>\n\n"
+            f"{message['content']}"
+        )
 
-    # Duration comparison footer for video modes
-    if is_video_input and actual_duration is not None:
+    if (is_video_input or is_audio_input) and actual_duration is not None:
         footer_parts = [f"ffprobe 实测: **{format_duration(actual_duration)}**"]
-        # Try to extract claimed duration from response
         dur_patterns = [
             r'(?:total\s+)?duration[:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
             r'总时长[：:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
+            r'(?:视频|音频)\s*时长[：:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
             r'(?:视频\s*)?时长[：:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
         ]
         claimed = None
@@ -345,8 +510,8 @@ def analyze_media(
                     claimed += f":{m.group(3)}"
                 break
         if claimed:
-            footer_parts.append(f"豆包声称: `{claimed}`")
-        footer_parts.append("（以此为基准校验豆包时间戳准确性）")
+            footer_parts.append(f"模型声称: `{claimed}`")
+        footer_parts.append("（以此为基准校验模型时间戳准确性）")
         result_text += "\n\n---\n⏱ **时长校验** — " + " | ".join(footer_parts)
 
     return result_text
@@ -356,9 +521,9 @@ def analyze_media(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Genius Vision — Image & video analysis via doubao"
+        description="Genius AV (视听) — image/video/audio via MiMo mimo-v2.5"
     )
-    parser.add_argument("file", help="Image/video path or URL")
+    parser.add_argument("file", help="Image/video/audio path or URL")
     parser.add_argument(
         "mode",
         nargs="?",

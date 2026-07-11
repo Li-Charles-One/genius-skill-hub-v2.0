@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Omni"
+  short_description: "Image / video / audio analysis via MiMo mimo-v2.5 — OCR, UI review, transcript, scene"
+  default_prompt: "Use $genius-omni to analyze this image, video, or audio file. Auto-detects kind by extension. Modes: describe, ocr, ui-review, chart-data, object-detect, compare, video-summary, video-ocr, video-review, video-frame-analysis, audio-summary, audio-transcribe, audio-review, audio-scene."

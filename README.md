@@ -20,7 +20,7 @@ Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in
 |:--|:--|
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
 | [genius-image](./genius-image/) | Image generation via Crun.ai (single / batch / multi-model) |
-| [genius-vision](./genius-vision/) | Image & video analysis via doubao vision API |
+| [genius-omni](./genius-omni/) | Image / video / audio analysis via MiMo（视听） |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
 | [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
 
@@ -57,7 +57,7 @@ genius-skill-hub-v2.0/
 ├── genius-design/
 ├── genius-image/
 ├── genius-skill-creator/
-├── genius-vision/
+├── genius-omni/
 ├── github-cli/
 ├── lark/
 ├── we-planing/
