@@ -4,32 +4,73 @@
     {
       "id": "keyword-trigger",
       "prompt": "帮我在 X 上搜一下最近大家怎么看 Grok 4.5",
-      "should_trigger": true,
-      "expected_mode": "keyword"
+      "trigger_expected": true,
+      "expected_output": "Triggers x-search-grok, chooses keyword mode, runs scripts/x_search.py keyword, and returns a sourced post list without inventing URLs.",
+      "files": ["scripts/x_search.py"],
+      "assertions": [
+        {"type": "contains", "value": "keyword"},
+        {"type": "contains", "value": "x_search.py"},
+        {"type": "contains", "value": "x.com"}
+      ]
     },
     {
       "id": "account-trigger",
       "prompt": "看看马斯克最近发了什么",
-      "should_trigger": true,
-      "expected_mode": "account"
+      "trigger_expected": true,
+      "expected_output": "Triggers x-search-grok, chooses account mode for elonmusk, runs scripts/x_search.py account, and summarizes recent posts with links.",
+      "files": ["scripts/x_search.py"],
+      "assertions": [
+        {"type": "contains", "value": "account"},
+        {"type": "contains", "value": "elonmusk"},
+        {"type": "contains", "value": "x_search.py"}
+      ]
     },
     {
       "id": "heat-trigger",
       "prompt": "Grok 4.5 在 X 上的热度和情绪怎么样，给我一个简报",
-      "should_trigger": true,
-      "expected_mode": "heat"
+      "trigger_expected": true,
+      "expected_output": "Triggers x-search-grok, chooses heat mode, runs scripts/x_search.py heat, and returns heat/sentiment briefing with representative posts.",
+      "files": ["scripts/x_search.py"],
+      "assertions": [
+        {"type": "contains", "value": "heat"},
+        {"type": "contains", "value": "热度"},
+        {"type": "contains", "value": "x_search.py"}
+      ]
+    },
+    {
+      "id": "channel-list",
+      "prompt": "看看 x-search-grok 现在有哪些渠道和优先级",
+      "trigger_expected": true,
+      "expected_output": "Runs scripts/x_search.py --list-channels and reports aijws/original/suixiang readiness without printing API keys.",
+      "files": ["channels.json", "scripts/x_search.py"],
+      "assertions": [
+        {"type": "contains", "value": "--list-channels"},
+        {"type": "contains", "value": "aijws"},
+        {"type": "contains", "value": "original"},
+        {"type": "contains", "value": "suixiang"}
+      ]
     },
     {
       "id": "no-posting",
       "prompt": "帮我发一条推文夸 Grok 4.5",
-      "should_trigger": false,
-      "reason": "posting is out of scope"
+      "trigger_expected": false,
+      "expected_output": "Does not trigger x-search-grok for posting or account management tasks.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "x_search.py"},
+        {"type": "contains", "value": "out of scope"}
+      ]
     },
     {
       "id": "no-pure-web",
       "prompt": "用网页搜索总结 Transformer 论文要点",
-      "should_trigger": false,
-      "reason": "no X intent"
+      "trigger_expected": false,
+      "expected_output": "Does not trigger x-search-grok for pure web research with no X intent.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "x_search.py"},
+        {"type": "not_contains", "value": "x_search"}
+      ]
     }
   ]
 }

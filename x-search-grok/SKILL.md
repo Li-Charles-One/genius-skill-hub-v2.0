@@ -22,28 +22,67 @@ This skill is intentionally V1-only:
 
 ## Requirements
 
-Read config in this order:
+### Channel interface (swappable)
 
-1. CLI args (`--api-key`, `--base-url`, `--model`)
-2. Environment variables (`GROK_API_BASE`, `GROK_MODEL`, etc. — key is NOT read from env)
-3. Skill-local `.env`
+Control plane: `channels.json`  
+Secrets: skill-local `.env`
 
-Supported variables:
+Three built-in slots:
+
+| id | default priority | role | key env |
+|---|---|---|---|
+| `aijws` | 1 | channel 1 | `CHANNEL_AIJWS_KEY` |
+| `original` | 2 | channel 2 (legacy 0xs) | `CHANNEL_ORIGINAL_KEY` / `GROK_API_KEY` |
+| `suixiang` | 3 | channel 3 | `CHANNEL_SUIXIANG_KEY` |
+
+Default model for all channels: `grok-4.5`.
+
+**Swap anytime without code changes:**
+
+1. Reorder priority in `channels.json` (`priority` smaller = higher)
+2. Or set env override: `X_SEARCH_PRIORITY=suixiang,aijws,original`
+3. Toggle `enabled: true/false`
+4. Change `base` / `models` in `channels.json`
+5. Put keys only in `.env` (`CHANNEL_AIJWS_KEY`, `CHANNEL_ORIGINAL_KEY`, `CHANNEL_SUIXIANG_KEY`)
+
+```bash
+# inspect registry
+python scripts/x_search.py --list-channels
+
+# force one channel
+python scripts/x_search.py keyword "Grok 4.5" --channel original
+```
+
+Config precedence:
+
+1. CLI (`--api-key` / `--base-url` / `--model` / `--channel`)
+2. `channels.json` + `.env` keys
+3. Optional `X_SEARCH_PRIORITY` order override
+4. Legacy `GROK_API_*` (still works for `original`)
+
+Failover order:
+
+1. channel by priority
+2. model chain inside that channel
+3. one transient retry on timeout / SSL / 429 / 5xx
+
+Error policy:
+
+- `401/403` → skip current channel, try next provider
+- `400` → stop (bad request, not a channel issue)
+- model/channel unavailable, timeout, SSL, 429/5xx → next model, then next channel
+
+### Supported variables
 
 | 变量 | 作用 | 读取来源 |
 |---|---|---|
-| `GROK_API_KEY` / `API_KEY` / `XAI_API_KEY` | API Key | CLI `--api-key` → `.env` |
-| `GROK_API_BASE` / `BASE_URL` | API 地址 | CLI `--base-url` → 环境变量 → `.env` |
-| `GROK_MODEL` / `MODEL` | 主模型 | CLI `--model` → 环境变量 → `.env` |
-| `GROK_FALLBACK_MODELS` | 回退模型列表（逗号分隔） | 环境变量 → `.env` |
+| `channels.json` | 渠道注册表：id / priority / enabled / base / models | 文件 |
+| `X_SEARCH_PRIORITY` | 临时改优先级顺序 | 环境变量 → `.env` |
+| `CHANNEL_AIJWS_KEY` / `CHANNEL_ORIGINAL_KEY` / `CHANNEL_SUIXIANG_KEY` | 各渠道 API Key | `.env` |
+| `CHANNEL_<ID>_BASE` | 可选覆盖 base | 环境变量 → `.env` |
+| `X_SEARCH_TRANSIENT_RETRIES` | 瞬时错误重试次数（默认 1） | 环境变量 → `.env` |
+| `GROK_API_KEY` | `original` 兼容 key | CLI / `.env` |
 | `GROK_TIMEOUT_SECONDS` | 超时秒数 | 环境变量 → `.env` |
-
-Model selection:
-
-- Primary model defaults to `grok-4.3` (faster), falls back to `grok-4.5`
-- Prefer `grok-4.3` for everyday X search speed; keep `grok-4.5` only as fallback
-- CLI `--model` forces a single model (fallbacks still apply unless only one listed)
-- Skill-local `.env` example: see `.env.example`
 
 Never print the API key.
 
@@ -163,6 +202,8 @@ If no useful posts are found, say so explicitly.
 - The reliable path is `POST {BASE}/responses` with `x_search`.
 - Do not rely on `chat/completions` for X search.
 - This skill does not implement posting, watchlists, or full-archive search.
+- **多供应商 failover**：用 `channels.json` 管理 3 个可换渠道；
+  改 priority / enabled 即可切换。瞬时错误会同模型重试 1 次，再换 model / 下一供应商。
 - **并发限制**：该 API 端并发能力有限。2 个并发可能导致部分请求 SSL 报错，
   4 个并发几乎必超时。单次调用稳定。任何时候并行搜索不得超过 3 个。
 
@@ -171,4 +212,5 @@ If no useful posts are found, say so explicitly.
 - `references/v1-modes.md` — mode selection examples and non-goals
 - `evals/evals.json` — trigger / non-trigger checks
 - `scripts/x_search.py` — deterministic relay caller
-- `.env.example` — config template
+- `channels.json` — swappable 3-channel priority registry
+- `.env.example` — secrets template
