@@ -32,7 +32,8 @@ Out of credits. Top up at https://crun.ai
 ## `submit fail [422]: 参数错误`
 
 Model doesn't support this parameter. Check:
-- Available models: `gpt-image-2`, `gpt-image-2-premium`, `nano-banana-2`, `nano-banana-2-lite`
+- Defaults: fast → `nano-banana-2-lite`; complex/design → `gpt-image-2`
+- Also available: `gpt-image-2-premium`, `nano-banana-2`
 - Resolutions: `1K`/`2K`/`4K` where supported (`nano-banana-2-lite` has no resolution)
 - `--quality` only works with `gpt-image-2-premium`
 - `--google-search` / `--output-format` only work with `nano-banana-2`

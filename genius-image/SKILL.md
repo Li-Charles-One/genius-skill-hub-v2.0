@@ -1,6 +1,6 @@
 ---
 name: genius-image
-description: "Generate images using Crun.ai API with 4 model options (gpt-image-2, gpt-image-2-premium, nano-banana-2, nano-banana-2-lite). Supports single/batch generation, webhook or --poll-only (no tunnel), hybrid TaskInfo polling, progress heartbeats, --fetch-task recovery, --name filenames, GENIUS_RESULT machine lines, auto-retry on 501, and JSONL logging. Use when user wants to generate AI images via Crun API. Triggers on 'genius image', 'crun image', 'batch image generation'. Prefer dreamina-cli for Seedream/Seedance 即梦 native models."
+description: "Generate images using Crun.ai API. Default models: nano-banana-2-lite (fast) and gpt-image-2 (complex/high design). Also supports gpt-image-2-premium and nano-banana-2. Single/batch, webhook or --poll-only, TaskInfo recovery, --name, GENIUS_RESULT. Triggers: genius image, crun image, batch image. Prefer dreamina-cli for Seedream/Seedance 即梦."
 ---
 
 # Genius Image
@@ -11,10 +11,16 @@ Generate AI images via Crun.ai (https://crun.ai) using async webhook pattern. Th
 
 ## Start Here
 
+**先选模型（双默认）：**
+- **快速出图 / 草稿 / 省时间** → `nano-banana-2-lite`（CLI 未指定时的默认）
+- **画面内容复杂、构图/设计要求高** → `gpt-image-2`
+- 用户点名其他模型再换；不要默认上 premium
+
 Classify the request:
 
-- **Single image**: "generate one image with prompt X" → run directly
-- **Multi-model compare**: "compare 4 models on prompt X" → auto-generate batch.json
+- **Single image**: pick lite or gpt-image-2 by the rule above → run directly
+- **Dual default compare**: "对比两个默认模型" → batch with lite + gpt-image-2
+- **Multi-model compare**: "compare all models" → batch all 4
 - **Batch generation**: "generate 5 prompts" → auto-generate batch.json
 - **Preflight**: first generation request in a session → run `--preflight --no-gen` once
 - **Check balance**: "how many credits left" → run with `--balance`
@@ -25,7 +31,7 @@ Classify the request:
 **When NOT this skill:** Seedream / Seedance / 即梦 native → use `dreamina-cli`, not genius-image.
 
 Inspect the smallest useful evidence:
-- User's prompt(s)
+- User's prompt(s) and whether they need **speed** or **design quality**
 - Desired model(s), aspect ratio, resolution (or use defaults)
 - Whether comparison/batch mode is needed
 
@@ -68,13 +74,19 @@ Use `<skill_dir>` in all script paths below. Never hardcode a user-specific abso
 
 > 下方命令均使用 `<skill_dir>` 指向脚本，用 `<workspace>` 指向用户工作区。**推荐始终传 `--out "<workspace>/genius_output"` 明确指定输出路径，避免 cwd 问题。** `<skill_dir>` 见上方 Path Resolution 说明。
 
-### Single image
+### Single image — 快速（默认 lite）
 ```bash
-# Agent 推荐：-u + --poll-only + --out + 可选 --name
-python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K --poll-only --name "cute-cat" --out "<workspace>/genius_output"
+# 草稿 / 快出图：nano-banana-2-lite（可不写 --model，CLI 默认即是它）
+python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model nano-banana-2-lite --aspect 16:9 --poll-only --name "cute-cat" --out "<workspace>/genius_output"
+```
+
+### Single image — 复杂画面 / 设计感（gpt-image-2）
+```bash
+# 内容复杂、构图与设计要求高：gpt-image-2
+python -u "<skill_dir>/scripts/genius.py" "赛博朋克夜市，多层景深，霓虹招牌与雨后反光，电影级构图" --model gpt-image-2 --aspect 16:9 --resolution 1K --poll-only --name "cyberpunk-market" --out "<workspace>/genius_output"
 
 # 需要 webhook 回调时（默认 hybrid）：
-python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K --out "<workspace>/genius_output"
+python -u "<skill_dir>/scripts/genius.py" "品牌主视觉海报，极简留白与强层级" --model gpt-image-2 --aspect 3:4 --resolution 2K --out "<workspace>/genius_output"
 ```
 
 ### 参考图 / 图生图（--ref）
@@ -83,10 +95,12 @@ python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-im
 - **本地文件路径** —— 脚本自动读取并编码成 `data:image/...;base64,...`（API 只收 URL 或 base64，本地路径会被自动转换，无需手动处理）
 
 ```bash
-# 本地图（自动转 base64）
-python "...\genius.py" "同一个人的 3x3 九宫格多角度转面图" --model nano-banana-2 --aspect 16:9 --resolution 1K --ref "genius_output\some_photo.png"
+# 快速参考图迭代 → lite
+python -u "<skill_dir>/scripts/genius.py" "同一角色侧身站立" --model nano-banana-2-lite --aspect 1:1 --ref "genius_output\character.png" --poll-only --out "<workspace>/genius_output"
+# 复杂转面 / 高设计感图生图 → gpt-image-2
+python -u "<skill_dir>/scripts/genius.py" "同一个人的 3x3 九宫格多角度转面图" --model gpt-image-2 --aspect 16:9 --resolution 1K --ref "genius_output\some_photo.png" --poll-only --out "<workspace>/genius_output"
 # 远程 URL，或多张混用
-python "...\genius.py" "..." --ref "https://example.com/a.png" "genius_output\b.png"
+python -u "<skill_dir>/scripts/genius.py" "..." --model nano-banana-2-lite --ref "https://example.com/a.png" "genius_output\b.png" --poll-only --out "<workspace>/genius_output"
 ```
 > 注意：base64 会让请求体增大约 33%，传超大图或多张参考图时 body 可能偏大。需要稳定时优先用 http(s) URL。本地文件找不到会直接报错，不会把无效路径丢给服务端。batch.json 里对应字段是 `ref`（数组）或兼容写法 `img_urls`。
 
@@ -120,8 +134,8 @@ python -u "<skill_dir>/scripts/genius.py" --batch <workspace>/genius_output/Tmp/
 
 ```json
 [
-  { "prompt": "一只可爱的小猫", "model": "nano-banana-2", "aspect": "16:9", "resolution": "2K" },
-  { "prompt": "赛博朋克城市夜景", "model": "gpt-image-2", "aspect": "1:1", "resolution": "1K" }
+  { "prompt": "一只可爱的小猫", "model": "nano-banana-2-lite", "aspect": "16:9", "name": "cat-lite" },
+  { "prompt": "赛博朋克城市夜景，多层景深与电影级构图", "model": "gpt-image-2", "aspect": "16:9", "resolution": "1K", "name": "cyber-gpt" }
 ]
 ```
 
@@ -152,18 +166,18 @@ python -u "<skill_dir>/scripts/test.py"
 
 ## Models
 
-| Key | Crun ID | Resolutions | Special params |
-|---|---|---|---|
-| `gpt-image-2` | `openai/gpt-image-2` | 1K/2K/4K | — |
-| `gpt-image-2-premium` | `openai/gpt-image-2-premium` | 1K/2K/4K | `--quality`（low/medium/high，default medium） |
-| `nano-banana-2` | `google/nano-banana-2` | 1K/2K/4K | `--google-search` / `--output-format` |
-| `nano-banana-2-lite` | `google/nano-banana-2-lite` | — | 轻量版，极低成本，约4秒出图，max 10张参考图，无 resolution |
+| Key | Role | Crun ID | Resolutions | Special params |
+|---|---|---|---|---|
+| `nano-banana-2-lite` | **默认·快** | `google/nano-banana-2-lite` | — | 极速草稿，约4秒，max 10 张参考图，无 resolution |
+| `gpt-image-2` | **默认·设计** | `openai/gpt-image-2` | 1K/2K/4K | 复杂画面、高设计感首选 |
+| `gpt-image-2-premium` | 备选 | `openai/gpt-image-2-premium` | 1K/2K/4K | `--quality` low/medium/high（default medium） |
+| `nano-banana-2` | 备选 | `google/nano-banana-2` | 1K/2K/4K | `--google-search` / `--output-format` |
 
-**选型指引：**
-- 速度优先 / 省积分（**默认模型**）→ `gpt-image-2`
-- 高质量写实，可控质量档位 → `gpt-image-2-premium`
-- 超长 prompt / 谷歌搜索增强 / 图生图参考 → `nano-banana-2`
-- 极速草稿 / 超低成本 → `nano-banana-2-lite`
+**选型指引（必须遵守）：**
+- **快速出图 / 草稿 / 迭代** → `nano-banana-2-lite`（CLI / batch 未写 model 时的默认）
+- **画面内容复杂、构图与设计要好** → `gpt-image-2`
+- 用户明确要求更高档位写实可控 → `gpt-image-2-premium`
+- 需要谷歌搜索增强 / 超长 prompt → `nano-banana-2`
 
 ## Resource Map
 

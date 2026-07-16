@@ -2,9 +2,15 @@
   "skill_name": "genius-image",
   "evals": [
     {
-      "id": "single-image-basic",
-      "prompt": "帮我生成一张图：一只可爱的柴犬坐在樱花树下",
-      "expected_output": "If this is the first generation request in the session, runs `--preflight --no-gen` first. Then runs the genius.py script by absolute path with workdir set to the current session workspace, and reports the generated file path under `<workspace>/genius_output/`, task_id, media_urls, duration, and credits used.",
+      "id": "single-image-fast-lite",
+      "prompt": "帮我快速生成一张图：一只可爱的柴犬坐在樱花树下",
+      "expected_output": "Picks nano-banana-2-lite for speed. If first generation in session, runs `--preflight --no-gen` first. Runs genius.py with `--model nano-banana-2-lite` (or relies on default), `--poll-only` recommended, reports path under genius_output/, task_id, media_urls, duration, credits.",
+      "files": []
+    },
+    {
+      "id": "single-image-design-gpt",
+      "prompt": "生成一张设计感很强的品牌主视觉：极简留白、强层级、电影级构图的咖啡机海报",
+      "expected_output": "Picks gpt-image-2 for complex/high-design content. Runs with `--model gpt-image-2` and appropriate aspect/resolution, reports file path and GENIUS_RESULT fields.",
       "files": []
     },
     {
@@ -14,9 +20,15 @@
       "files": []
     },
     {
-      "id": "model-comparison",
+      "id": "dual-default-comparison",
+      "prompt": "用两个默认模型对比同一张图：赛博朋克夜景",
+      "expected_output": "Generates batch with nano-banana-2-lite and gpt-image-2 only, runs --batch --concurrent 2, reports both file paths plus task_ids/media_urls, deletes batch config after.",
+      "files": []
+    },
+    {
+      "id": "model-comparison-all",
       "prompt": "用4个模型跑一下同一张图对比效果，prompt是\"赛博朋克夜景\"",
-      "expected_output": "Generates `genius_output/Tmp/batch_<timestamp>.json` in the current workspace, runs genius.py by absolute path with `--batch` and `--concurrent 4`, reports all 4 file paths plus task_ids/media_urls, and deletes the batch config after completion.",
+      "expected_output": "Generates genius_output/Tmp/batch_<timestamp>.json with all 4 models, runs --batch --concurrent 4, reports all 4 paths, deletes batch config after.",
       "files": []
     },
     {
@@ -34,13 +46,13 @@
     {
       "id": "premium-quality",
       "prompt": "用 premium 模型生成一张 2K 高质量的咖啡机产品图",
-      "expected_output": "Runs genius.py by absolute path with `--model gpt-image-2-premium --resolution 2K --quality high` and workdir set to the current session workspace.",
+      "expected_output": "Only when user explicitly asks for premium: runs with `--model gpt-image-2-premium --resolution 2K --quality high`.",
       "files": []
     },
     {
       "id": "google-search",
-      "prompt": "画一张 iPhone 17 Pro 的产品图",
-      "expected_output": "Runs with --model nano-banana-2 --google-search to ensure the model references real product images.",
+      "prompt": "画一张 iPhone 17 Pro 的产品图，要参考真实外观",
+      "expected_output": "Runs with --model nano-banana-2 --google-search when real-world product grounding is needed (secondary model, not a default).",
       "files": []
     }
   ]

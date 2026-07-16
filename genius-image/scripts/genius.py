@@ -550,7 +550,7 @@ def load_batch(path):
     for i, t in enumerate(tasks):
         if not isinstance(t, dict):
             raise RuntimeError(f"第 {i+1} 个任务必须是对象 {{...}}，实际是 {type(t).__name__}")
-        if "model" not in t: t["model"] = "gpt-image-2-premium"
+        if "model" not in t: t["model"] = "nano-banana-2-lite"
         validate_task(t)
     return tasks
 
@@ -854,7 +854,8 @@ def main():
     ap.add_argument("prompt", nargs="?", help="单张模式：生图 prompt")
     ap.add_argument("--batch", help="批量模式：JSON 配置文件路径")
     ap.add_argument("--concurrent", type=int, default=DEFAULT_CONCURRENT, help=f"并发数（默认 {DEFAULT_CONCURRENT}）")
-    ap.add_argument("--model", default="gpt-image-2", choices=list(MODELS.keys()))
+    ap.add_argument("--model", default="nano-banana-2-lite", choices=list(MODELS.keys()),
+                    help="模型（默认 nano-banana-2-lite 快速出图；复杂/设计感用 gpt-image-2）")
     ap.add_argument("--aspect", default=None, choices=ASPECTS, help="宽高比（不传则使用模型默认值）")
     ap.add_argument("--resolution", default=None, choices=["1K","2K","4K"], help="分辨率（不传则使用模型默认值）")
     ap.add_argument("--quality", default=None, choices=["low","medium","high"], help="画质（仅 gpt-image-2-premium，不传则使用模型默认值）")
