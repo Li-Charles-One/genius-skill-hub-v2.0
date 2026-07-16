@@ -20,16 +20,13 @@ LOG_ARCHIVE_DAYS = 7
 
 GPT_IMAGE_2_ASPECTS = {"1:1","2:3","3:2","5:4","4:5","9:16","16:9","4:3","3:4","21:9","auto"}
 PREMIUM_ASPECTS    = {"1:1","2:3","3:2","5:4","4:5","9:16","16:9","4:3","3:4","21:9","9:21","auto"}
-STABLE_ASPECTS     = {"1:1","2:3","3:2","16:9","9:16","auto"}
 NANO_ASPECTS       = {"1:1","2:3","3:2","3:4","4:3","4:5","5:4","9:16","16:9","1:4","4:1","1:8","8:1","21:9","auto"}
 
 MODELS = {
-    "gpt-image-2":          {"id": "openai/gpt-image-2",          "max_ref": 16, "max_prompt": 5000,  "extra": set(),                                                    "resolutions": {"1K","2K","4K"}, "aspects": GPT_IMAGE_2_ASPECTS, "default_aspect": "auto", "default_resolution": "1K"},
-    "gpt-image-2-stable":   {"id": "openai/gpt-image-2-stable",   "max_ref": 10, "max_prompt": 10000, "extra": {"quality","background","moderation","output_format"},    "resolutions": None,             "aspects": STABLE_ASPECTS,      "default_aspect": "1:1",  "default_quality": "medium", "default_background": "auto", "default_moderation": "auto", "default_output_format": "webp"},
-    "gpt-image-2-premium":  {"id": "openai/gpt-image-2-premium",  "max_ref": 14, "max_prompt": 10000, "extra": {"quality"},                                               "resolutions": {"1K","2K","4K"}, "aspects": PREMIUM_ASPECTS,     "default_aspect": "1:1",  "default_resolution": "1K", "default_quality": "medium"},
-    "nano-banana-2":        {"id": "google/nano-banana-2",        "max_ref": 14, "max_prompt": 20000, "extra": {"google_search","output_format"},                         "resolutions": {"1K","2K","4K"}, "aspects": NANO_ASPECTS,        "default_aspect": "1:1",  "default_resolution": "1K"},
-    "nano-banana-2-lite":   {"id": "google/nano-banana-2-lite",   "max_ref": 10, "max_prompt": 20000, "extra": set(),                                                     "resolutions": None,             "aspects": NANO_ASPECTS,        "default_aspect": "1:1"},
-    "nano-banana-pro":      {"id": "google/nano-banana-pro",      "max_ref": 8,  "max_prompt": None,  "extra": {"output_format"},                                         "resolutions": {"1K","2K","4K"}, "aspects": NANO_ASPECTS,        "default_aspect": "1:1",  "default_resolution": "1K"},
+    "gpt-image-2":          {"id": "openai/gpt-image-2",          "max_ref": 16, "max_prompt": 5000,  "extra": set(),                            "resolutions": {"1K","2K","4K"}, "aspects": GPT_IMAGE_2_ASPECTS, "default_aspect": "auto", "default_resolution": "1K"},
+    "gpt-image-2-premium":  {"id": "openai/gpt-image-2-premium",  "max_ref": 14, "max_prompt": 10000, "extra": {"quality"},                     "resolutions": {"1K","2K","4K"}, "aspects": PREMIUM_ASPECTS,     "default_aspect": "1:1",  "default_resolution": "1K", "default_quality": "medium"},
+    "nano-banana-2":        {"id": "google/nano-banana-2",        "max_ref": 14, "max_prompt": 20000, "extra": {"google_search","output_format"}, "resolutions": {"1K","2K","4K"}, "aspects": NANO_ASPECTS,        "default_aspect": "1:1",  "default_resolution": "1K"},
+    "nano-banana-2-lite":   {"id": "google/nano-banana-2-lite",   "max_ref": 10, "max_prompt": 20000, "extra": set(),                            "resolutions": None,             "aspects": NANO_ASPECTS,        "default_aspect": "1:1"},
 }
 
 ASPECTS = sorted(set().union(*(cfg["aspects"] for cfg in MODELS.values())))
@@ -216,20 +213,10 @@ def validate_task(task):
     if "quality" in cfg["extra"]:
         if not task.get("quality"):
             task["quality"] = cfg.get("default_quality", "medium")
-    if "background" in cfg["extra"]:
-        if not task.get("background"):
-            task["background"] = cfg.get("default_background", "auto")
-    if "moderation" in cfg["extra"]:
-        if not task.get("moderation"):
-            task["moderation"] = cfg.get("default_moderation", "auto")
     if task["aspect"] not in cfg["aspects"]:
         raise RuntimeError(f"{task['model']} 不支持宽高比 {task['aspect']}")
     if task.get("quality") and "quality" not in cfg["extra"]:
         raise RuntimeError(f"{task['model']} 不支持 quality 参数")
-    if task.get("background") and "background" not in cfg["extra"]:
-        raise RuntimeError(f"{task['model']} 不支持 background 参数")
-    if task.get("moderation") and "moderation" not in cfg["extra"]:
-        raise RuntimeError(f"{task['model']} 不支持 moderation 参数")
     if task.get("google_search") and "google_search" not in cfg["extra"]:
         raise RuntimeError(f"{task['model']} 不支持 google_search 参数")
     if task.get("output_format") not in (None, "png") and "output_format" not in cfg["extra"]:
@@ -336,10 +323,6 @@ def build_payload(task, callback_url=None):
         inp["output_format"] = fmt
     if "quality" in cfg["extra"]:
         inp["quality"] = task.get("quality") or cfg.get("default_quality", "medium")
-    if "background" in cfg["extra"]:
-        inp["background"] = task.get("background") or cfg.get("default_background", "auto")
-    if "moderation" in cfg["extra"]:
-        inp["moderation"] = task.get("moderation") or cfg.get("default_moderation", "auto")
     payload = {"model": cfg["id"], "input": inp}
     if callback_url:
         payload["callback_url"] = callback_url
@@ -577,7 +560,7 @@ def run_single(args):
     task = {"prompt": args.prompt, "model": args.model, "aspect": args.aspect,
             "resolution": args.resolution, "ref": args.ref,
             "google_search": args.google_search, "output_format": args.output_format,
-            "quality": args.quality, "background": args.background, "moderation": args.moderation}
+            "quality": args.quality}
     task = validate_task(task)
 
     log_print(f">> model: {task['model']}  prompt: {task['prompt']}")
@@ -873,13 +856,11 @@ def main():
     ap.add_argument("--concurrent", type=int, default=DEFAULT_CONCURRENT, help=f"并发数（默认 {DEFAULT_CONCURRENT}）")
     ap.add_argument("--model", default="gpt-image-2", choices=list(MODELS.keys()))
     ap.add_argument("--aspect", default=None, choices=ASPECTS, help="宽高比（不传则使用模型默认值）")
-    ap.add_argument("--resolution", default=None, choices=["1K","2K","3K","4K"], help="分辨率（不传则使用模型默认值）")
-    ap.add_argument("--quality", default=None, choices=["low","medium","high"], help="画质（支持：gpt-image-2-stable / gpt-image-2-premium，不传则使用模型默认值）")
+    ap.add_argument("--resolution", default=None, choices=["1K","2K","4K"], help="分辨率（不传则使用模型默认值）")
+    ap.add_argument("--quality", default=None, choices=["low","medium","high"], help="画质（仅 gpt-image-2-premium，不传则使用模型默认值）")
     ap.add_argument("--ref", nargs="+", help="参考图 URL 或本地图片路径；本地文件会自动转 base64")
     ap.add_argument("--google-search", dest="google_search", action="store_true")
-    ap.add_argument("--output-format", default=None, choices=["png","jpg","webp"], help="输出格式（默认按模型决定：gpt-image-2-stable→webp，其余→png）")
-    ap.add_argument("--background", default=None, choices=["auto","transparent","opaque"], help="背景类型，仅 gpt-image-2-stable 支持（transparent=透明背景）")
-    ap.add_argument("--moderation", default=None, choices=["auto","low"], help="内容审核级别，仅 gpt-image-2-stable 支持")
+    ap.add_argument("--output-format", default=None, choices=["png","jpg","webp"], help="输出格式（仅 nano-banana-2 支持；其余默认 png）")
     ap.add_argument("--name", default=None, help="输出文件名主干（不含扩展名）；不传则 model_prompt 自动生成")
     ap.add_argument("--poll-only", dest="poll_only", action="store_true",
                     help="仅轮询 TaskInfo，不启动 webhook/cloudflared（Agent 环境推荐）")

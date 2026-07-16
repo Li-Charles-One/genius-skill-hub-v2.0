@@ -34,8 +34,10 @@ print(f'  WEBHOOK_PORT: {genius.WEBHOOK_PORT}')
 
 print('=== build_payload 测试 ===')
 ok = 0
-for model in ['gpt-image-2', 'gpt-image-2-premium', 'nano-banana-2', 'nano-banana-pro']:
-    task = {'prompt': 'test', 'model': model, 'aspect': '16:9', 'resolution': '1K'}
+for model in ['gpt-image-2', 'gpt-image-2-premium', 'nano-banana-2', 'nano-banana-2-lite']:
+    task = {'prompt': 'test', 'model': model, 'aspect': '16:9'}
+    if model in ('gpt-image-2', 'gpt-image-2-premium', 'nano-banana-2'):
+        task['resolution'] = '1K'
     if model == 'gpt-image-2-premium': task['quality'] = 'low'
     if model == 'nano-banana-2': task['google_search'] = True
     p = genius.build_payload(task, 'https://test.com/webhook')
@@ -66,7 +68,7 @@ print('=== load_batch 测试 ===')
 import json
 batch_data = [
     {'prompt': 'test1', 'model': 'gpt-image-2'},
-    {'prompt': 'test2', 'model': 'nano-banana-pro', 'resolution': '4K'},
+    {'prompt': 'test2', 'model': 'nano-banana-2', 'resolution': '4K'},
 ]
 batch_file = TMP_ROOT / 'test_batch.json'
 with open(batch_file, 'w', encoding='utf-8') as f:
@@ -81,7 +83,7 @@ else:
 print()
 print('=== 参考图数量校验测试 ===')
 ok = 0
-for model, limit in [('gpt-image-2', 16), ('gpt-image-2-premium', 14), ('nano-banana-2', 14), ('nano-banana-pro', 8)]:
+for model, limit in [('gpt-image-2', 16), ('gpt-image-2-premium', 14), ('nano-banana-2', 14), ('nano-banana-2-lite', 10)]:
     task = {'prompt': 'test', 'model': model, 'ref': ['url'] * (limit + 1)}
     try:
         genius.build_payload(task, 'https://test.com/webhook')

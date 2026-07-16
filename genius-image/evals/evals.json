@@ -33,8 +33,8 @@
     },
     {
       "id": "premium-quality",
-      "prompt": "用 premium 模型生成一张 3K 高质量的咖啡机产品图",
-      "expected_output": "Runs genius.py by absolute path with `--model gpt-image-2-premium --resolution 3K --quality high` and workdir set to the current session workspace.",
+      "prompt": "用 premium 模型生成一张 2K 高质量的咖啡机产品图",
+      "expected_output": "Runs genius.py by absolute path with `--model gpt-image-2-premium --resolution 2K --quality high` and workdir set to the current session workspace.",
       "files": []
     },
     {

@@ -1,6 +1,6 @@
 ---
 name: genius-image
-description: "Generate images using Crun.ai API with 6 model options (gpt-image-2, gpt-image-2-stable, gpt-image-2-premium, nano-banana-2, nano-banana-2-lite, nano-banana-pro). Supports single/batch generation, webhook or --poll-only (no tunnel), hybrid TaskInfo polling, progress heartbeats, --fetch-task recovery, --name filenames, GENIUS_RESULT machine lines, auto-retry on 501, and JSONL logging. Use when user wants to generate AI images via Crun API. Triggers on 'genius image', 'crun image', 'batch image generation'. Prefer dreamina-cli for Seedream/Seedance 即梦 native models."
+description: "Generate images using Crun.ai API with 4 model options (gpt-image-2, gpt-image-2-premium, nano-banana-2, nano-banana-2-lite). Supports single/batch generation, webhook or --poll-only (no tunnel), hybrid TaskInfo polling, progress heartbeats, --fetch-task recovery, --name filenames, GENIUS_RESULT machine lines, auto-retry on 501, and JSONL logging. Use when user wants to generate AI images via Crun API. Triggers on 'genius image', 'crun image', 'batch image generation'. Prefer dreamina-cli for Seedream/Seedance 即梦 native models."
 ---
 
 # Genius Image
@@ -84,7 +84,7 @@ python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-im
 
 ```bash
 # 本地图（自动转 base64）
-python "...\genius.py" "同一个人的 3x3 九宫格多角度转面图" --model nano-banana-pro --aspect 16:9 --resolution 1K --ref "genius_output\some_photo.png"
+python "...\genius.py" "同一个人的 3x3 九宫格多角度转面图" --model nano-banana-2 --aspect 16:9 --resolution 1K --ref "genius_output\some_photo.png"
 # 远程 URL，或多张混用
 python "...\genius.py" "..." --ref "https://example.com/a.png" "genius_output\b.png"
 ```
@@ -120,7 +120,7 @@ python -u "<skill_dir>/scripts/genius.py" --batch <workspace>/genius_output/Tmp/
 
 ```json
 [
-  { "prompt": "一只可爱的小猫", "model": "nano-banana-pro", "aspect": "16:9", "resolution": "2K" },
+  { "prompt": "一只可爱的小猫", "model": "nano-banana-2", "aspect": "16:9", "resolution": "2K" },
   { "prompt": "赛博朋克城市夜景", "model": "gpt-image-2", "aspect": "1:1", "resolution": "1K" }
 ]
 ```
@@ -155,20 +155,15 @@ python -u "<skill_dir>/scripts/test.py"
 | Key | Crun ID | Resolutions | Special params |
 |---|---|---|---|
 | `gpt-image-2` | `openai/gpt-image-2` | 1K/2K/4K | — |
-| `gpt-image-2-stable` | `openai/gpt-image-2-stable` | — | `--quality` / `--background` (transparent/**唯一支持透明背景**) / `--moderation` / `--output-format`（default webp） |
 | `gpt-image-2-premium` | `openai/gpt-image-2-premium` | 1K/2K/4K | `--quality`（low/medium/high，default medium） |
 | `nano-banana-2` | `google/nano-banana-2` | 1K/2K/4K | `--google-search` / `--output-format` |
-| `nano-banana-2` (v2) | `google/nano-banana-2-v2` | 1K/2K/4K | 比标准版便宜约40%，生成较慢；适合大批量省成本 |
-| `nano-banana-2-lite` | `google/nano-banana-2-lite` | — | 轻量版（2026-06-30新发），极低成本（官方$0.034/1000张），约4秒出图，max 10张参考图，无 resolution，高频草稿首选 |
-| `nano-banana-pro` | `google/nano-banana-pro` | 1K/2K/4K | `--output-format` |
+| `nano-banana-2-lite` | `google/nano-banana-2-lite` | — | 轻量版，极低成本，约4秒出图，max 10张参考图，无 resolution |
 
 **选型指引：**
 - 速度优先 / 省积分（**默认模型**）→ `gpt-image-2`
-- 需要**透明背景**或 webp 输出；如需 PNG 须显式传 `--output-format png` → `gpt-image-2-stable`
 - 高质量写实，可控质量档位 → `gpt-image-2-premium`
-- 超长 prompt（最多20000字符）/ 需要谷歌搜索增强 → `nano-banana-2`（省成本可用 v2 变体）
-- 极速草稿 / 超低成本（约4秒/张，官方$0.034/1000张，原版nano-banana的接班人）→ `nano-banana-2-lite`
-- 参考图贴合度最高（图生图）→ `nano-banana-pro`
+- 超长 prompt / 谷歌搜索增强 / 图生图参考 → `nano-banana-2`
+- 极速草稿 / 超低成本 → `nano-banana-2-lite`
 
 ## Resource Map
 

@@ -47,9 +47,9 @@ Create `genius_output/Tmp/batch_<timestamp>.json` in the current workspace:
 ```json
 [
   {"prompt": "a cute cat", "model": "gpt-image-2"},
-  {"prompt": "a cute cat", "model": "gpt-image-2-premium", "resolution": "3K", "quality": "high"},
+  {"prompt": "a cute cat", "model": "gpt-image-2-premium", "resolution": "2K", "quality": "high"},
   {"prompt": "a cute cat", "model": "nano-banana-2"},
-  {"prompt": "a cute cat", "model": "nano-banana-pro", "resolution": "4K"}
+  {"prompt": "a cute cat", "model": "nano-banana-2-lite"}
 ]
 ```
 Run:
@@ -73,7 +73,7 @@ genius_output/
 ├── gpt-image-2_a_cute_cat_1.png
 ├── gpt-image-2-premium_a_cute_cat_1.png
 ├── nano-banana-2_a_cute_cat_1.png
-└── nano-banana-pro_a_cute_cat_1.png
+└── nano-banana-2-lite_a_cute_cat_1.png
 ```
 
 Naming: `{model}_{prompt前30字}_{序号}.{ext}`
@@ -99,11 +99,11 @@ Archives older than 7 days are auto-deleted on next run.
 | `prompt` | (required) | Image description |
 | `--model` | `gpt-image-2` | Model key (see SKILL.md table) |
 | `--aspect` | `1:1` | Aspect ratio (15 options) |
-| `--resolution` | `1K` | 1K/2K/3K/4K (depends on model) |
-| `--quality` | `low` | Only `gpt-image-2-premium`: low/medium/high |
+| `--resolution` | `1K` | 1K/2K/4K (depends on model; lite has none) |
+| `--quality` | `medium` | Only `gpt-image-2-premium`: low/medium/high |
 | `--ref` | - | Reference image URLs (1-16, model-dependent) |
 | `--google-search` | false | Only `nano-banana-2`: enable Google Search |
-| `--output-format` | `png` | png/jpg (nano-banana only) |
+| `--output-format` | `png` | Only `nano-banana-2`: png/jpg/webp |
 | `--batch` | - | Batch JSON file path |
 | `--concurrent` | 5 | Max concurrent submissions |
 | `--balance` | - | Just check credit balance |
