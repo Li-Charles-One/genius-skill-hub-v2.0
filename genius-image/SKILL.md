@@ -51,6 +51,7 @@ Inspect the smallest useful evidence:
 4. **JSONL log rotation**: 10MB → archive, 7 days → delete
 5. **501 auto-retry**: retry only when completed task payload has `result.code == 501`, up to 3 times, 5s delay
 6. **User does not see batch.json**: AI generates and cleans up the file
+6b. **Batch 完成即下载**：批量模式每张 success 立刻落盘并打印 `GENIUS_RESULT`，不必等最慢那张；超时的仍可用 `--fetch-task`
 7. **Do not run self-test before ordinary generation**: run `scripts/test.py` only when the user asks, after editing this skill, or while debugging setup failures
 8. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `--out` or `workdir`, not by where the script file lives
 9. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits

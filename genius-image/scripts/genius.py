@@ -656,12 +656,51 @@ def run_single(args):
         if tunnel_proc: tunnel_proc.terminate()
         if server: server.shutdown()
 
+def finalize_batch_task(tid, res, task_info):
+    """Download + log one finished batch task immediately. Returns 'ok' | 'fail'."""
+    if res.get("status") != "success":
+        log_print(f"  {tid[:8]}... 生成失败: {res.get('result', {})}")
+        write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
+                   "task_id": tid, "model": task_info.get("model"),
+                   "prompt": task_info.get("prompt"), "status": "failed",
+                   "error": str(res)})
+        emit_result(status="failed", task_id=tid)
+        return "fail"
+    try:
+        media_urls = extract_media_urls(res)
+        img_url = media_urls[0] if media_urls else extract_image_url(res)
+        ext = task_info.get("output_format") or "png"
+        base = make_output_basename(task_info["model"], task_info.get("prompt", ""),
+                                   name=task_info.get("name"))
+        dest = find_next_filename(base, ext, OUT_DIR)
+        size = download(img_url, dest)
+        dur = time.time() - task_info.get("submit_time", time.time())
+        log_print(f"  {tid[:8]}... ✅ {dest.name} ({size/1024:.0f} KB, {dur:.1f}s)")
+        log_print(f"     media_url: {img_url}")
+        emit_result(status="success", task_id=tid, model=task_info["model"],
+                    path=dest, media_url=img_url, duration_s=round(dur, 1),
+                    size_kb=round(size/1024, 1))
+        write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
+                   "task_id": tid, "model": task_info["model"], "prompt": task_info["prompt"],
+                   "aspect": task_info.get("aspect"), "resolution": task_info.get("resolution"),
+                   "duration_s": round(dur, 1), "file_size_kb": round(size/1024, 1),
+                   "file_path": str(dest), "media_urls": media_urls, "status": "success"})
+        return "ok"
+    except Exception as e:
+        log_print(f"  {tid[:8]}... 下载失败: {e}；可稍后 --fetch-task {tid}")
+        write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
+                   "task_id": tid, "model": task_info.get("model"),
+                   "prompt": task_info.get("prompt"), "status": "download_failed",
+                   "error": str(e)})
+        emit_result(status="download_failed", task_id=tid, error=str(e))
+        return "fail"
+
 def run_batch(args):
     t0 = time.time()
     poll_only = bool(getattr(args, "poll_only", False))
     tasks = load_batch(args.batch)
     n = len(tasks)
-    log_print(f">> 批量模式: {n} 个任务，并发 {args.concurrent}，mode={'poll-only' if poll_only else 'webhook'}")
+    log_print(f">> 批量模式: {n} 个任务，并发 {args.concurrent}，mode={'poll-only' if poll_only else 'webhook'}（完成即下）")
 
     try:
         before = get_balance(); log_print(f">> 积分余额: {before}")
@@ -692,50 +731,77 @@ def run_batch(args):
             futures = [ex.submit(submit_one, i, t) for i, t in enumerate(tasks)]
             tids = [f.result() for f in as_completed(futures)]
 
-        log_print(f">> [3/4] 等待所有任务（超时 {TIMEOUT_CALLBACK}s；每 {batch_poll_interval}s 轮询 TaskInfo）...")
+        log_print(f">> [3/4] 等待并边完成边下载（超时 {TIMEOUT_CALLBACK}s；每 {batch_poll_interval}s 轮询）...")
         deadline = time.time() + TIMEOUT_CALLBACK
         last_poll = 0 if poll_only else time.time()
+        last_progress = 0
         active_tids = set(tids)
         inactive_tids = set()
-        while time.time() < deadline:
-            with results_lock:
-                done = sum(1 for tid in active_tids if tid in results)
-            if done >= len(active_tids): break
+        settled = set()
+        ok, fail = 0, 0
 
-            for tid in list(active_tids):
-                with results_lock:
-                    res_data = results.get(tid)
-                if not res_data: continue
-                res = res_data.get("data", res_data)
-                if res.get("status") == "failed" and is_generation_retryable(res):
-                    task_info = task_map.get(tid, {})
-                    retry_count = task_info.get("retry_count", 0)
-                    if retry_count < MAX_TASK_RETRIES:
-                        log_print(f"\n  {tid[:8]}... 失败（{res.get('result', {}).get('message', 'unknown')}），{RETRY_DELAY}s 后重试 ({retry_count+1}/{MAX_TASK_RETRIES})")
-                        time.sleep(RETRY_DELAY)
-                        try:
-                            task_for_retry = {k: v for k, v in task_info.items() if k not in ("idx", "submit_time", "retry_count")}
-                            payload = build_payload(task_for_retry, callback_url)
-                            new_tid = submit(payload)
-                            register_task(new_tid)
-                            unregister_task(tid)
-                            task_map[new_tid] = {**task_for_retry, "idx": task_info.get("idx"), "retry_count": retry_count + 1, "submit_time": time.time()}
-                            write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
-                                       "task_id": new_tid, "model": task_for_retry.get("model"),
-                                       "prompt": task_for_retry.get("prompt"), "status": "submitted",
-                                       "retry_of": tid})
-                            tids.append(new_tid)
-                            active_tids.remove(tid)
-                            inactive_tids.add(tid)
-                            active_tids.add(new_tid)
-                            log_print(f"  重试已提交: {new_tid}")
-                        except Exception as e:
-                            log_print(f"  重试提交失败: {e}")
+        def try_settle(tid):
+            """If tid has a final result, download now (or fail). Returns True if settled."""
+            nonlocal ok, fail
+            if tid in settled or tid in inactive_tids:
+                return False
+            with results_lock:
+                res_data = results.get(tid)
+            if not res_data:
+                return False
+            res = res_data.get("data", res_data)
+            task_info = task_map.get(tid, {})
+            if res.get("status") == "failed" and is_generation_retryable(res):
+                retry_count = task_info.get("retry_count", 0)
+                if retry_count < MAX_TASK_RETRIES:
+                    log_print(f"\n  {tid[:8]}... 失败（{res.get('result', {}).get('message', 'unknown')}），{RETRY_DELAY}s 后重试 ({retry_count+1}/{MAX_TASK_RETRIES})")
+                    time.sleep(RETRY_DELAY)
+                    try:
+                        task_for_retry = {k: v for k, v in task_info.items() if k not in ("idx", "submit_time", "retry_count")}
+                        payload = build_payload(task_for_retry, callback_url)
+                        new_tid = submit(payload)
+                        register_task(new_tid)
+                        unregister_task(tid)
+                        task_map[new_tid] = {**task_for_retry, "idx": task_info.get("idx"), "retry_count": retry_count + 1, "submit_time": time.time()}
+                        write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
+                                   "task_id": new_tid, "model": task_for_retry.get("model"),
+                                   "prompt": task_for_retry.get("prompt"), "status": "submitted",
+                                   "retry_of": tid})
+                        tids.append(new_tid)
+                        active_tids.discard(tid)
+                        inactive_tids.add(tid)
+                        active_tids.add(new_tid)
+                        log_print(f"  重试已提交: {new_tid}")
+                    except Exception as e:
+                        log_print(f"  重试提交失败: {e}")
+                        settled.add(tid)
+                        fail += 1
+                        emit_result(status="failed", task_id=tid, error=str(e))
+                    return True
+            outcome = finalize_batch_task(tid, res, task_info)
+            settled.add(tid)
+            if outcome == "ok":
+                ok += 1
+            else:
+                fail += 1
+            return True
+
+        while time.time() < deadline:
+            pending = [tid for tid in active_tids if tid not in settled]
+            if not pending:
+                break
+
+            for tid in list(pending):
+                try_settle(tid)
+
+            pending = [tid for tid in active_tids if tid not in settled]
+            if not pending:
+                break
 
             now = time.time()
             if now - last_poll >= batch_poll_interval:
                 last_poll = now
-                for tid in list(active_tids):
+                for tid in list(pending):
                     with results_lock:
                         if tid in results:
                             continue
@@ -745,81 +811,46 @@ def run_batch(args):
                             with results_lock:
                                 results[tid] = {"data": info}
                             log_print(f"  [poll] {tid[:8]}... TaskInfo → {info.get('status')}")
+                            try_settle(tid)
                         elif info:
                             log_print(f"  [poll] {tid[:8]}... TaskInfo status={info.get('status')}")
                     except Exception as e:
                         log_print(f"  [poll] TaskInfo 查询失败 {tid[:8]}...: {e}")
 
             time.sleep(1 if poll_only else 2)
-            with results_lock:
-                done = sum(1 for tid in active_tids if tid in results)
-            log_print(f"  进度: {done}/{len(active_tids)} 完成")
+            if time.time() - last_progress >= WAIT_PROGRESS_INTERVAL:
+                last_progress = time.time()
+                pending_n = sum(1 for tid in active_tids if tid not in settled)
+                log_print(f"  进度: 已落盘 {ok} 成功 / {fail} 失败，待完成 {pending_n}")
 
+        # final recover pass for stragglers still without results
         for tid in list(active_tids):
+            if tid in settled or tid in inactive_tids:
+                continue
             with results_lock:
                 has_result = tid in results
-            if has_result:
-                continue
-            try:
-                info = get_task_info(tid)
-                if info and info.get("status") in {"success", "failed"}:
-                    with results_lock:
-                        results[tid] = {"data": info}
-                    log_print(f"  [recover] {tid[:8]}... TaskInfo: {info.get('status')}")
-            except Exception as e:
-                log_print(f"  [warn] TaskInfo 恢复失败 {tid[:8]}...: {e}")
+            if not has_result:
+                try:
+                    info = get_task_info(tid)
+                    if info and info.get("status") in {"success", "failed"}:
+                        with results_lock:
+                            results[tid] = {"data": info}
+                        log_print(f"  [recover] {tid[:8]}... TaskInfo: {info.get('status')}")
+                except Exception as e:
+                    log_print(f"  [warn] TaskInfo 恢复失败 {tid[:8]}...: {e}")
+            try_settle(tid)
 
-        log_print(">> [4/4] 下载图片 + 写日志...")
-        ok, fail = 0, 0
-        for tid in tids:
-            if tid in inactive_tids:
+        for tid in list(active_tids):
+            if tid in settled or tid in inactive_tids:
                 continue
-            with results_lock:
-                res_data = results.get(tid)
             task_info = task_map.get(tid, {})
-            if not res_data:
-                log_print(f"  {tid} 超时未完成；可稍后 --fetch-task {tid}"); fail += 1
-                write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
-                           "task_id": tid, "model": task_info.get("model"),
-                           "prompt": task_info.get("prompt"), "status": "timeout"})
-                emit_result(status="timeout", task_id=tid)
-                continue
-            res = res_data.get("data", res_data)
-            if res.get("status") != "success":
-                log_print(f"  {tid[:8]}... 生成失败: {res.get('result', {})}"); fail += 1
-                write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
-                           "task_id": tid, "model": task_info.get("model"),
-                           "prompt": task_info.get("prompt"), "status": "failed",
-                           "error": str(res)})
-                emit_result(status="failed", task_id=tid)
-                continue
-            try:
-                media_urls = extract_media_urls(res)
-                img_url = media_urls[0] if media_urls else extract_image_url(res)
-                ext = task_info.get("output_format") or "png"
-                base = make_output_basename(task_info["model"], task_info.get("prompt", ""),
-                                           name=task_info.get("name"))
-                dest = find_next_filename(base, ext, OUT_DIR)
-                size = download(img_url, dest)
-                dur = time.time() - task_info["submit_time"]
-                log_print(f"  {tid[:8]}... ✅ {dest.name} ({size/1024:.0f} KB, {dur:.1f}s)")
-                log_print(f"     media_url: {img_url}")
-                emit_result(status="success", task_id=tid, model=task_info["model"],
-                            path=dest, media_url=img_url, duration_s=round(dur, 1),
-                            size_kb=round(size/1024, 1))
-                write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
-                           "task_id": tid, "model": task_info["model"], "prompt": task_info["prompt"],
-                           "aspect": task_info.get("aspect"), "resolution": task_info.get("resolution"),
-                           "duration_s": round(dur, 1), "file_size_kb": round(size/1024, 1),
-                           "file_path": str(dest), "media_urls": media_urls, "status": "success"})
-                ok += 1
-            except Exception as e:
-                log_print(f"  {tid[:8]}... 下载失败: {e}；可稍后 --fetch-task {tid}"); fail += 1
-                write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
-                           "task_id": tid, "model": task_info.get("model"),
-                           "prompt": task_info.get("prompt"), "status": "download_failed",
-                           "error": str(e)})
-                emit_result(status="download_failed", task_id=tid, error=str(e))
+            log_print(f"  {tid} 超时未完成；可稍后 --fetch-task {tid}")
+            fail += 1
+            settled.add(tid)
+            write_log({"timestamp": datetime.now().isoformat(timespec="seconds"),
+                       "task_id": tid, "model": task_info.get("model"),
+                       "prompt": task_info.get("prompt"), "status": "timeout"})
+            emit_result(status="timeout", task_id=tid)
 
         try: after = get_balance()
         except: after = None

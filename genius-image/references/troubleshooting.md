@@ -89,6 +89,10 @@ Or set `--port 8770` (auto-tries next free ports if busy).
 
 Prompt is non-English. The script keeps alphanumeric (which includes Chinese) and replaces punctuation with `_`. If you see garbled text, check the prompt encoding.
 
+## Batch used to wait for the slowest task before any download
+
+Fixed: batch now downloads each image as soon as its TaskInfo is `success` (stream settle). You still see one process until the deadline for stragglers, but finished files appear in `genius_output/` immediately and emit `GENIUS_RESULT` one-by-one. Timed-out tasks: `--fetch-task <id>`.
+
 ## Concurrent batch fails partially
 
 The 501 auto-retry handles generation failures. If a task fails after 3 retries, check the log:
