@@ -1,6 +1,6 @@
 ---
 name: genius-image
-description: "Generate images using Crun.ai API with 6 model options (gpt-image-2, gpt-image-2-stable, gpt-image-2-premium, nano-banana-2, nano-banana-2-lite, nano-banana-pro). Supports single image, batch concurrent generation, async webhook mode, auto-retry on 501 upstream timeouts, and JSONL logging with 10MB rotation / 7-day cleanup. Use when user wants to generate AI images, run multi-model comparisons, or batch-generate from a list of prompts. Triggers on 'genius image', 'crun image', 'batch image generation', or any request to generate images via Crun API."
+description: "Generate images using Crun.ai API with 6 model options (gpt-image-2, gpt-image-2-stable, gpt-image-2-premium, nano-banana-2, nano-banana-2-lite, nano-banana-pro). Supports single/batch generation, webhook or --poll-only (no tunnel), hybrid TaskInfo polling, progress heartbeats, --fetch-task recovery, --name filenames, GENIUS_RESULT machine lines, auto-retry on 501, and JSONL logging. Use when user wants to generate AI images via Crun API. Triggers on 'genius image', 'crun image', 'batch image generation'. Prefer dreamina-cli for Seedream/Seedance 即梦 native models."
 ---
 
 # Genius Image
@@ -18,7 +18,11 @@ Classify the request:
 - **Batch generation**: "generate 5 prompts" → auto-generate batch.json
 - **Preflight**: first generation request in a session → run `--preflight --no-gen` once
 - **Check balance**: "how many credits left" → run with `--balance`
+- **Recover / re-download**: have `task_id` but missing local file → run `--fetch-task <task_id>`
+- **Agent / unstable tunnel**: prefer `--poll-only` (no cloudflared)
 - **Self-test**: "test the skill" → run `<skill_dir>/scripts/test.py`
+
+**When NOT this skill:** Seedream / Seedance / 即梦 native → use `dreamina-cli`, not genius-image.
 
 Inspect the smallest useful evidence:
 - User's prompt(s)
@@ -36,8 +40,8 @@ Inspect the smallest useful evidence:
 > **不知道工作区路径时，直接问用户**——宁可多问一句。
 
 1. **API key from environment**: `CRUN_API_KEY` must be set; never hardcode, never commit
-2. **Always use cloudflared tunnel**: webhook mode is required (avoids polling delays and rate limits)
-3. **Always clean up tunnel + webhook server**: use `finally` block
+2. **Delivery mode**: default is webhook + cloudflared；Agent 环境或隧道不稳时用 **`--poll-only`**（只轮询 TaskInfo，不启 tunnel）。不要默认强依赖 tunnel。
+3. **Always clean up tunnel + webhook server** when used: `finally` block
 4. **JSONL log rotation**: 10MB → archive, 7 days → delete
 5. **501 auto-retry**: retry only when completed task payload has `result.code == 501`, up to 3 times, 5s delay
 6. **User does not see batch.json**: AI generates and cleans up the file
@@ -45,8 +49,11 @@ Inspect the smallest useful evidence:
 8. **Use absolute script paths**: the script is in the skill folder; the output location is controlled by `--out` or `workdir`, not by where the script file lives
 9. **Run preflight once per session before the first generation**: `--preflight --no-gen` checks API key, workspace writability, and cloudflared tunnel without creating a task or consuming generation credits
 10. **cloudflared must be available before generating**: check `bin/cloudflared.exe` (relative to `<skill_dir>`) or `cloudflared` on PATH. If neither exists, report the missing binary and exit — do not attempt generation without it. Download from https://github.com/cloudflare/cloudflared/releases/latest and place at `<skill_dir>/bin/cloudflared.exe`.
-11. **Webhook port 8765 is hardcoded**: if the port is already in use, the script will fail with `Address already in use`. Fix: kill the process occupying 8765 (`netstat -ano | findstr :8765` on Windows), then retry.
-12. **回调超时最长 300 秒（5分钟）**：高分辨率或复杂 prompt 的生成任务可能接近5分钟。在长任务开始前告知用户预计等待时间；若 agent runtime 自身有工具调用超时限制，建议优先使用较轻量的模型（如 `gpt-image-2` 或 `nano-banana-2-lite`）或降低分辨率。
+11. **Webhook 端口默认 8765，可用 `--port`；占用时自动顺延**。仍冲突则改用 `--poll-only`。
+12. **回调/轮询超时最长 300 秒（5分钟）**：hybrid 每 15s 心跳、30s 轮询；`--poll-only` 每 5s 轮询。超时后保留 `task_id`，用 `--fetch-task` 补下。
+13. **Agent 必须用 `python -u`**，推荐默认加 **`--poll-only`**。已提交后不要 abort；中断则 `--fetch-task`。
+14. **提交即落盘** + 结束打印 **`GENIUS_RESULT ...`** 一行（`status`/`path`/`task_id`/`media_url`），Agent 优先解析该行。
+15. **文件名**：优先 `--name "短名"`；否则 `model_安全截断prompt`。batch 任务对象可写 `"name": "..."`。
 
 ## Path Resolution
 
@@ -63,8 +70,11 @@ Use `<skill_dir>` in all script paths below. Never hardcode a user-specific abso
 
 ### Single image
 ```bash
-# 推荐：用 --out 明确指定输出目录，彻底消除 workdir 歧义
-python "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K --out "<workspace>/genius_output"
+# Agent 推荐：-u + --poll-only + --out + 可选 --name
+python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K --poll-only --name "cute-cat" --out "<workspace>/genius_output"
+
+# 需要 webhook 回调时（默认 hybrid）：
+python -u "<skill_dir>/scripts/genius.py" "一只可爱的小猫" --model gpt-image-2 --aspect 16:9 --resolution 1K --out "<workspace>/genius_output"
 ```
 
 ### 参考图 / 图生图（--ref）
@@ -82,15 +92,24 @@ python "...\genius.py" "..." --ref "https://example.com/a.png" "genius_output\b.
 
 ### Preflight (once per session)
 ```bash
-python "<skill_dir>/scripts/genius.py" --preflight --no-gen --out "<workspace>/genius_output"
+# Agent 推荐 poll-only preflight（不测 tunnel）
+python -u "<skill_dir>/scripts/genius.py" --preflight --no-gen --poll-only --out "<workspace>/genius_output"
+# 完整 tunnel 检查：
+python -u "<skill_dir>/scripts/genius.py" --preflight --no-gen --out "<workspace>/genius_output"
 ```
+
+### Recover by task_id（agent 中断 / 超时后补下）
+```bash
+python -u "<skill_dir>/scripts/genius.py" --fetch-task "<task_id>" --out "<workspace>/genius_output"
+```
+不需要 tunnel/webhook。仅当云端任务 `status=success` 时可下载。
 
 ### Batch (auto-generate config)
 AI creates `batch_<timestamp>.json` in the **`genius_output/Tmp/` subdirectory** (clearly separated from artifacts), runs, then deletes the file:
 ```bash
 # AI writes: <workspace>/genius_output/Tmp/batch_<timestamp>.json
 # AI runs:
-python "<skill_dir>/scripts/genius.py" --batch <workspace>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3 --out "<workspace>/genius_output"
+python -u "<skill_dir>/scripts/genius.py" --batch <workspace>/genius_output/Tmp/batch_<timestamp>.json --concurrent 3 --poll-only --out "<workspace>/genius_output"
 # AI deletes the batch file immediately after
 ```
 **Always** put batch.json in `genius_output/Tmp/` — never in the working directory root, and never alongside the generated images.
@@ -123,12 +142,12 @@ python "<skill_dir>/scripts/genius.py" --batch <workspace>/genius_output/Tmp/bat
 
 ### Check balance
 ```bash
-python "<skill_dir>/scripts/genius.py" --balance
+python -u "<skill_dir>/scripts/genius.py" --balance
 ```
 
 ### Self-test
 ```bash
-python "<skill_dir>/scripts/test.py"
+python -u "<skill_dir>/scripts/test.py"
 ```
 
 ## Models
@@ -153,7 +172,7 @@ python "<skill_dir>/scripts/test.py"
 
 ## Resource Map
 
-- `scripts/genius.py`: main script (single + batch + balance)
+- `scripts/genius.py`: main script (single + batch + balance + `--fetch-task`)
 - `scripts/test.py`: lightweight health checks (run on request, after edits, or when debugging)
 - `bin/cloudflared.exe`: tunnel binary (Windows, ~54MB) — **not in repo**, download from https://github.com/cloudflare/cloudflared/releases/latest and place at `bin/cloudflared.exe` (or have `cloudflared` on PATH)
 - `references/usage.md`: detailed usage with examples
@@ -179,12 +198,13 @@ python "<skill_dir>/scripts/test.py"
 
 Always report:
 - **Output location confirmation**: 文件必须落在 `<user_workspace>/genius_output/`，不是 skill 目录
+- **Parse `GENIUS_RESULT` line first** (status / path / task_id / media_url)
 - **Models used** and their order
 - **Total duration** per model
 - **File paths** in `genius_output/`
 - **Task IDs and media URLs** from log `genius_output/Logs/genius_log.jsonl`
 - **Credits consumed** (from log `genius_output/Logs/genius_log.jsonl`)
-- **Cleanup status** (tunnel closed, batch.json deleted)
+- **Cleanup status** (tunnel closed if used, batch.json deleted)
 
 ## Final Response
 

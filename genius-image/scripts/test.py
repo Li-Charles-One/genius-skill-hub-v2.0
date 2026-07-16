@@ -21,7 +21,9 @@ OUT_DIR.mkdir(exist_ok=True)
 print('=== Skill 加载健康检查 ===')
 required = ['build_payload', 'submit', 'get_balance', 'find_next_filename', 'write_log',
             'clean_old_logs', 'load_batch', 'validate_task', 'extract_media_urls',
-            'resolve_refs', 'run_preflight', 'run_single', 'run_batch', 'main']
+            'resolve_refs', 'run_preflight', 'run_single', 'run_batch', 'run_fetch_task',
+            'wait_for_completion', 'log_print', 'safe_filename_stem', 'make_output_basename',
+            'emit_result', 'setup_delivery', 'pick_webhook_port', 'main']
 missing = [f for f in required if not hasattr(genius, f)]
 if missing:
     print(f'  FAIL: missing {missing}')
@@ -101,21 +103,43 @@ else:
 
 print()
 print('=== 模型参数约束测试 ===')
+# should_raise: True = expect RuntimeError
 checks = [
-    ({'prompt': 'test', 'model': 'gpt-image-2', 'aspect': '1:1', 'resolution': '4K'}, 'gpt-image-2 rejects 4K 1:1'),
-    ({'prompt': 'test', 'model': 'gpt-image-2', 'aspect': 'auto', 'resolution': '2K'}, 'gpt-image-2 rejects auto non-1K'),
-    ({'prompt': 'test', 'model': 'gpt-image-2-premium', 'aspect': '21:9', 'resolution': '1K'}, 'premium rejects 21:9'),
-    ({'prompt': 'test', 'model': 'gpt-image-2-premium', 'aspect': '1:1', 'resolution': '4K'}, 'premium rejects 4K'),
+    ({'prompt': 'test', 'model': 'gpt-image-2', 'aspect': '1:1', 'resolution': '4K'}, True, 'gpt-image-2 rejects 4K 1:1'),
+    ({'prompt': 'test', 'model': 'gpt-image-2', 'aspect': 'auto', 'resolution': '2K'}, True, 'gpt-image-2 rejects auto non-1K'),
+    # premium currently allows 21:9 and 4K per MODELS config
+    ({'prompt': 'test', 'model': 'gpt-image-2-premium', 'aspect': '21:9', 'resolution': '1K'}, False, 'premium allows 21:9'),
+    ({'prompt': 'test', 'model': 'gpt-image-2-premium', 'aspect': '1:1', 'resolution': '4K'}, False, 'premium allows 4K'),
 ]
 ok = 0
-for task, label in checks:
+for task, should_raise, label in checks:
     try:
         genius.validate_task(task)
-        print(f'  {label}: FAIL (should have raised)')
+        if should_raise:
+            print(f'  {label}: FAIL (should have raised)')
+        else:
+            print(f'  {label}: PASS')
+            ok += 1
     except RuntimeError:
-        print(f'  {label}: PASS')
-        ok += 1
+        if should_raise:
+            print(f'  {label}: PASS')
+            ok += 1
+        else:
+            print(f'  {label}: FAIL (should have accepted)')
 print(f'  Summary: {ok}/{len(checks)} constraints enforced')
+
+print()
+print('=== 文件名 / poll-only payload 测试 ===')
+stem = genius.safe_filename_stem('Genius Design 技能说明书!')
+base = genius.make_output_basename('gpt-image-2', '一只猫', name='cute-cat')
+payload_poll = genius.build_payload({'prompt': 'x', 'model': 'gpt-image-2'}, None)
+payload_hook = genius.build_payload({'prompt': 'x', 'model': 'gpt-image-2'}, 'https://cb.example/webhook')
+fn_ok = ('技能' in stem) and base == 'cute-cat'
+pl_ok = ('callback_url' not in payload_poll) and payload_hook.get('callback_url') == 'https://cb.example/webhook'
+if fn_ok and pl_ok:
+    print(f'  PASS: stem={stem!r} base={base!r} poll_only_omits_callback=True')
+else:
+    print(f'  FAIL: stem={stem!r} base={base!r} poll_keys={list(payload_poll.keys())}')
 
 print()
 print('=== media_urls 提取测试 ===')

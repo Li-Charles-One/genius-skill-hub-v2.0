@@ -51,6 +51,39 @@ Check:
 - callback_url is correctly passed to Crun
 - Try `bin\cloudflared.exe tunnel --url http://localhost:8765` in another terminal to see real-time logs
 
+Script also polls TaskInfo every 30s while waiting. If webhook is flaky, look for `[poll]` lines. After timeout, use:
+```bash
+python -u scripts/genius.py --fetch-task "<task_id>" --out "<workspace>/genius_output"
+```
+
+## Agent looks hung / no output for minutes
+
+Causes:
+- stdout fully buffered (agent shell) — always run with `python -u`
+- long cloud generation (up to 300s callback window)
+- tunnel/proxy issues — prefer `--poll-only`
+
+Expected healthy wait logs every ~15s:
+```
+[wait/poll-only] abcd1234... still waiting  elapsed=15s  remaining≈285s
+[poll] abcd1234... TaskInfo status=running
+```
+
+If the agent aborts mid-wait: cloud task may still succeed. Find `task_id` from:
+- stdout line `task_id: ...`
+- `GENIUS_RESULT` line
+- `genius_output/Logs/genius_log.jsonl` entry with `"status":"submitted"`
+
+Then recover with `--fetch-task`.
+
+## Port already in use / tunnel fails
+
+Use:
+```bash
+python -u scripts/genius.py "..." --poll-only --out "<workspace>/genius_output"
+```
+Or set `--port 8770` (auto-tries next free ports if busy).
+
 ## File naming shows weird characters
 
 Prompt is non-English. The script keeps alphanumeric (which includes Chinese) and replaces punctuation with `_`. If you see garbled text, check the prompt encoding.
