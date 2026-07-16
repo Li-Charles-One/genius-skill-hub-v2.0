@@ -21,6 +21,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const {
   defaultAgent,
+  emitResult,
   parseArgs,
   parseSessionMd,
   renderSessionMd,
@@ -38,9 +39,12 @@ Usage:
   node weplaning-note.cjs <project-root> "<note>" [options]
 
 Options:
-  --agent <name>   Agent name (default: $WEPLANING_AGENT or "Agent")
-  --role <role>    Session role (default: ops)
-  --goal <text>    Session goal (default: same as <note>)
+  --agent <name>       Agent name (default: $WEPLANING_AGENT or "Agent")
+  --role <role>        Session role (default: ops)
+  --goal <text>        Session goal (default: same as <note>)
+  --decision <text>    Also append to DECISIONS.md
+  --rationale <text>   Rationale for --decision
+  --json               Print machine-readable JSON result on stdout
 
 Example:
   node weplaning-note.cjs . "genius-vision SKILL.md optimized: 9 fixes, commit abc1234" --agent ZCode
@@ -68,13 +72,14 @@ function run(label, script, argv, internalNoCheck = false) {
     encoding: "utf8",
     timeout: 30_000,
   });
-  if (result.stdout) process.stdout.write(result.stdout);
+  // Child chatter stays on stderr so this command can emit one clean result line.
+  if (result.stdout) process.stderr.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   if (result.status !== 0) {
     console.error(`\n[weplaning-note] FAILED at step: ${label}`);
     process.exit(result.status || 1);
   }
-  return result.stdout.trim();
+  return result.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) || "";
 }
 
 // Step 1: create session — skip check via internal env flag; safe-edit runs pre+post check
@@ -98,6 +103,11 @@ withMemoryLock(root, () => {
   const session = parseSessionMd(sessionText);
   session.status = "closed";
   session.closed = utcNow();
+  if (args.decision) {
+    const base = String(session.decisions || "").replace(/\s*$/, "");
+    const line = `- ${args.decision}`;
+    session.decisions = base && base !== "- none yet" ? `${base}\n${line}` : line;
+  }
   writeSession(root, sessionId, renderSessionMd(session));
 
   const threads = readThreads(root);
@@ -106,4 +116,28 @@ withMemoryLock(root, () => {
   writeThreads(root, threads, utcNow());
 });
 
-console.log(`\n[weplaning-note] Done. Session: ${sessionId}`);
+// Step 4: optional decision ledger
+if (args.decision) {
+  run(
+    "append-decision",
+    path.join(scriptDir, "append-decision.cjs"),
+    [
+      root,
+      "--decision",
+      String(args.decision),
+      "--rationale",
+      String(args.rationale || note),
+      "--session",
+      sessionId,
+      "--agent",
+      agent,
+    ],
+  );
+}
+
+emitResult(args, sessionId, {
+  sessionId,
+  note,
+  decision: args.decision || null,
+  message: `weplaning-note done: ${sessionId}`,
+});

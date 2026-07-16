@@ -178,11 +178,15 @@ function parseCurrentMd(text) {
     currentState: section(text, "Current State") || "- unknown",
     acceptedNextSteps: section(text, "Accepted Next Steps") || "1. unknown",
     openBlockers: section(text, "Open Blockers") || "unknown",
+    projectConfig: section(text, "Project Config") || "",
     basedOn: section(text, "Based On") || "- Session: unknown",
   };
 }
 
 function renderCurrentMd(state) {
+  const projectConfigBlock = state.projectConfig
+    ? `\n## Project Config\n${state.projectConfig}\n`
+    : "";
   return `# Current Mainline
 Schema version: 2.3
 Last updated: ${state.lastUpdated}
@@ -202,10 +206,53 @@ ${state.acceptedNextSteps}
 
 ## Open Blockers
 ${state.openBlockers}
-
+${projectConfigBlock}
 ## Based On
 ${state.basedOn}
 `;
+}
+
+function detectProjectConfig(root, overrides = {}) {
+  const codeExt = new Set([".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rs", ".java", ".kt", ".cs", ".cpp", ".c", ".rb", ".php"]);
+  const skip = new Set(["node_modules", ".git", ".agent-memory", "dist", "build", ".next", "vendor", "__pycache__"]);
+  let hasCode = false;
+  function walk(dir, depth) {
+    if (hasCode || depth > 3) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") && entry.name !== ".") continue;
+      if (skip.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full, depth + 1);
+      else if (codeExt.has(path.extname(entry.name).toLowerCase())) {
+        hasCode = true;
+        return;
+      }
+    }
+  }
+  walk(root, 0);
+  const hasGit = fs.existsSync(path.join(root, ".git"));
+  const type = overrides.type || (hasCode ? "code" : "ops-doc");
+  const codeVcs =
+    overrides["code-vcs"] ||
+    overrides.codeVcs ||
+    (type === "code" ? (hasGit ? "git" : "none (recommend git)") : "n/a");
+  const sync =
+    overrides.sync ||
+    (type === "code"
+      ? "git for code; WePlaning owns .agent-memory state only"
+      : "external sync optional (e.g. Syncthing); WePlaning standalone");
+  return {
+    type,
+    codeVcs,
+    sync,
+    text: `- Type: ${type}\n- Code VCS: ${codeVcs}\n- Sync: ${sync}`,
+  };
 }
 
 function parseSessionMd(text) {
@@ -502,11 +549,21 @@ function runCheck(root, scriptDir) {
     cwd: root,
     encoding: "utf8",
   });
+  // Keep machine-readable primary output on stdout; checks go to stderr.
   if (result.stdout) process.stderr.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   if (result.status !== 0) {
     process.exit(result.status || 1);
   }
+}
+
+/** Print a stable result: JSON when --json, otherwise a single primary line on stdout. */
+function emitResult(args, primaryLine, payload = {}) {
+  if (args && args.json) {
+    console.log(JSON.stringify({ ok: true, ...payload }));
+    return;
+  }
+  console.log(primaryLine);
 }
 
 module.exports = {
@@ -515,6 +572,8 @@ module.exports = {
   allowNoCheck,
   compactTimestamp,
   defaultAgent,
+  detectProjectConfig,
+  emitResult,
   extractField,
   generateSessionId,
   memoryPath,

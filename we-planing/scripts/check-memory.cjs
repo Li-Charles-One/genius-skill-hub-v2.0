@@ -14,10 +14,11 @@ const {
 
 const help = `
 Usage:
-  node check-memory.cjs <project-root> [--audit]
+  node check-memory.cjs <project-root> [--audit] [--strict]
 
-Checks WePlaning v2.3 structural consistency. The optional --audit flag adds
-semantic warnings for stale Based On pointers and placeholder mainline content.
+Checks WePlaning v2.3 structural consistency.
+  --audit    Add semantic warnings (placeholders, orphans, soft issues).
+  --strict   With --audit: exit 1 when warnings exist (default: warnings exit 0).
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -42,6 +43,12 @@ function readText(relativePath) {
 
 function hasSchema(text, name) {
   if (!/^Schema version:\s*2\.(2|3)$/m.test(text)) fail(`${name} missing supported schema version 2.2 or 2.3`);
+}
+
+function hasConflictMarkers(text, name) {
+  if (/^<<<<<<< /m.test(text) || /^>>>>>>> /m.test(text) || /^=======\s*$/m.test(text)) {
+    fail(`${name} contains merge conflict markers`);
+  }
 }
 
 function hasNoBlockerBullet(text) {
@@ -79,12 +86,16 @@ if (errors.length === 0) {
   hasSchema(current, "CURRENT.md");
   hasSchema(threads, "THREADS.md");
   hasSchema(changes, "CHANGES.md");
+  hasConflictMarkers(current, "CURRENT.md");
+  hasConflictMarkers(threads, "THREADS.md");
+  hasConflictMarkers(changes, "CHANGES.md");
 
   const currentMainline = extractField(current, "Mainline session");
   const parsedThreads = parseThreads(threads);
   const threadsMainline = parsedThreads.mainline;
   const lastMerged = parsedThreads.lastMerged;
   const mainlineRow = parsedThreads.rows.find((row) => row.id === threadsMainline);
+  const rowIds = new Set(parsedThreads.rows.map((row) => row.id));
 
   if (!currentMainline) fail("CURRENT.md missing Mainline session");
   if (!threadsMainline) fail("THREADS.md missing Mainline session");
@@ -101,6 +112,20 @@ if (errors.length === 0) {
     fail(`Mainline session must be merged, got ${mainlineRow.status}: ${threadsMainline}`);
   }
 
+  for (const row of parsedThreads.rows) {
+    const sessionFile = path.join(sessionsDir, `${row.id}.md`);
+    if (!fs.existsSync(sessionFile)) {
+      fail(`THREADS.md lists missing session file: .agent-memory/sessions/${row.id}.md`);
+      continue;
+    }
+    const sessionText = fs.readFileSync(sessionFile, "utf8");
+    hasConflictMarkers(sessionText, `sessions/${row.id}.md`);
+    const parent = extractField(sessionText, "Parent session") || row.parent || "unknown";
+    if (parent && !["root", "unknown"].includes(parent) && !rowIds.has(parent)) {
+      fail(`Session ${row.id} has unknown parent: ${parent}`);
+    }
+  }
+
   if (threadsMainline) {
     const sessionPath = path.join(sessionsDir, `${threadsMainline}.md`);
     if (!fs.existsSync(sessionPath)) {
@@ -115,7 +140,19 @@ if (errors.length === 0) {
     }
   }
 
+  // Orphans and soft issues: always collect when --audit, else skip.
   if (args.audit && errors.length === 0) {
+    const sessionFiles = fs
+      .readdirSync(sessionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => entry.name.replace(/\.md$/, ""));
+
+    for (const id of sessionFiles) {
+      if (!rowIds.has(id)) {
+        warn(`Orphan session file not listed in THREADS.md: sessions/${id}.md`);
+      }
+    }
+
     const openBlockers = section(current, "Open Blockers") || "";
     if (hasRealBlocker(openBlockers) && hasNoBlockerBullet(openBlockers)) {
       warn("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
@@ -148,7 +185,8 @@ for (const warning of warnings) console.error(`[audit] ${warning}`);
 
 if (warnings.length > 0 && args.audit) {
   console.error(`WePlaning memory check passed with ${warnings.length} audit warning(s).`);
-  process.exit(1);
+  if (args.strict) process.exit(1);
+  process.exit(0);
 }
 
 console.log("WePlaning memory check passed.");

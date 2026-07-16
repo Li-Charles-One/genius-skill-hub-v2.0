@@ -298,6 +298,228 @@ function testCloseSyncsCurrentMd() {
   ], { expectFail: true });
 }
 
+function testCloseWritesSessionResult() {
+  const root = tempRoot("closeresult");
+  init(root);
+  const session = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "Result work", "--goal", "Write session result",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:08:00Z", "--short-id", "res",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  run([
+    script("safe-edit.cjs"), root, "--close", "--session", session,
+    "--changed", "Implemented close session result write",
+    "--file", "scripts/safe-edit.cjs",
+    "--verification", "smoke",
+    "--next-step", "Run audit",
+  ]);
+  const sessionText = read(root, path.join("sessions", `${session}.md`));
+  assert(sessionText.includes("## Result\nImplemented close session result write"), "session Result not written");
+  assert(sessionText.includes("- scripts/safe-edit.cjs"), "session Files Touched not written");
+  assert(sessionText.includes("## Exact Next Step\nRun audit"), "session Exact Next Step not written");
+  const current = read(root, "CURRENT.md");
+  assert(current.includes("Last change:") && current.includes("Implemented close session result write"), "Based On Last change still placeholder");
+  assert(current.includes("- Implemented close session result write"), "auto Current State sync missing");
+  run([script("check-memory.cjs"), root, "--audit"]);
+}
+
+function testRepairRefusesMismatchWithoutPrefer() {
+  const root = tempRoot("repairprefer");
+  const rootSession = init(root);
+  const current = read(root, "CURRENT.md").replace(/^Mainline session:\s*.+$/m, "Mainline session: bogus");
+  write(root, "CURRENT.md", current);
+  const refused = run([script("repair-memory.cjs"), root], { expectFail: true });
+  assert(
+    (refused.stderr + refused.stdout).includes("Refuse automatic repair"),
+    "repair should refuse mainline mismatch without --prefer",
+  );
+  run([script("repair-memory.cjs"), root, "--prefer", "threads"]);
+  const fixedCurrent = read(root, "CURRENT.md");
+  assert(fixedCurrent.includes(`Mainline session: ${rootSession}`), "prefer threads did not restore CURRENT mainline");
+  run([script("check-memory.cjs"), root]);
+}
+
+function testJsonOutput() {
+  const root = tempRoot("jsonout");
+  const initOut = run([
+    script("init-memory.cjs"), root,
+    "--project", "JSON", "--goal", "json output",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:09:00Z", "--json",
+  ]).stdout.trim();
+  const initPayload = JSON.parse(initOut);
+  assert(initPayload.ok === true && initPayload.sessionId, "init --json missing sessionId");
+  const sessionOut = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "JSON session", "--goal", "json",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:10:00Z", "--short-id", "jsn", "--json",
+  ]).stdout.trim();
+  const sessionPayload = JSON.parse(sessionOut);
+  assert(sessionPayload.ok === true && sessionPayload.sessionId, "new-session --json missing sessionId");
+  const closeOut = run([
+    script("safe-edit.cjs"), root, "--close", "--session", sessionPayload.sessionId,
+    "--changed", "json close", "--file", "x", "--verification", "smoke", "--json",
+  ]).stdout.trim();
+  const closePayload = JSON.parse(closeOut);
+  assert(closePayload.ok === true && closePayload.mode === "close", "safe-edit --json missing mode");
+}
+
+function testUpdateSessionFields() {
+  const root = tempRoot("update");
+  init(root);
+  const session = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "Update work", "--goal", "Mid-session update",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:11:00Z", "--short-id", "upd",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  run([
+    script("safe-edit.cjs"), root, "--update", "--session", session,
+    "--result", "Halfway done",
+    "--next-step", "Finish and close",
+    "--file", "src/a.ts",
+    "--decision", "Use approach B",
+    "--note", "Wrote helper",
+  ]);
+  const text = read(root, path.join("sessions", `${session}.md`));
+  assert(text.includes("## Result\nHalfway done"), "update Result missing");
+  assert(text.includes("## Exact Next Step\nFinish and close"), "update next step missing");
+  assert(text.includes("- src/a.ts"), "update file missing");
+  assert(text.includes("- Use approach B"), "update decision missing");
+  assert(text.includes("- Wrote helper"), "update note missing");
+  run([
+    script("safe-edit.cjs"), root, "--close", "--session", session,
+    "--changed", "Update path closed", "--file", "src/a.ts", "--verification", "smoke",
+  ]);
+  run([
+    script("safe-edit.cjs"), root, "--update", "--session", session, "--result", "nope",
+  ], { expectFail: true });
+}
+
+function testReadHandoffAndJson() {
+  const root = tempRoot("read");
+  init(root);
+  const session = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "Read work", "--goal", "Handoff",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:12:00Z", "--short-id", "rd",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  run([
+    script("safe-edit.cjs"), root, "--close", "--session", session,
+    "--changed", "Handoff ready", "--file", "x", "--verification", "smoke",
+    "--next-step", "Ship it;;Document it",
+  ]);
+  const human = run([script("weplaning-read.cjs"), root, "--handoff", "--next", "2"]).stdout;
+  assert(human.includes("HANDOFF"), "handoff banner missing");
+  assert(human.includes("Focus Next Step #2"), "focus next step missing");
+  assert(human.includes("Document it"), "next step #2 text missing");
+  assert(human.includes("mainline CURRENT"), "truth hierarchy missing");
+  const jsonOut = run([script("weplaning-read.cjs"), root, "--json", "--handoff"]).stdout.trim();
+  const payload = JSON.parse(jsonOut);
+  assert(payload.ok === true && payload.mainlineSession, "read --json missing mainline");
+  assert(payload.focusNextStep && payload.focusNextStep.index === 1, "handoff focus should default to #1");
+  assert(Array.isArray(payload.recentChanges), "read --json missing recentChanges");
+}
+
+function testCheckConflictAndOrphanAudit() {
+  const root = tempRoot("checkx");
+  init(root);
+  const current = read(root, "CURRENT.md");
+  write(root, "CURRENT.md", `${current}\n<<<<<<< HEAD\nconflict\n=======\nother\n>>>>>>> branch\n`);
+  run([script("check-memory.cjs"), root], { expectFail: true });
+
+  const root2 = tempRoot("orphan");
+  init(root2);
+  fs.writeFileSync(path.join(root2, ".agent-memory", "sessions", "orphan-session.md"), "# orphan\n", "utf8");
+  const soft = run([script("check-memory.cjs"), root2, "--audit"]);
+  assert(soft.status === 0, "audit warnings should exit 0 by default");
+  assert((soft.stderr + soft.stdout).includes("Orphan session file"), "orphan warning missing");
+  run([script("check-memory.cjs"), root2, "--audit", "--strict"], { expectFail: true });
+}
+
+function testProjectConfigAndDecisions() {
+  const root = tempRoot("projcfg");
+  fs.writeFileSync(path.join(root, "main.py"), "print('x')\n", "utf8");
+  init(root);
+  const current = read(root, "CURRENT.md");
+  assert(current.includes("## Project Config"), "Project Config section missing");
+  assert(current.includes("Type: code"), "auto type code missing");
+  assert(fs.existsSync(path.join(root, ".agent-memory", "DECISIONS.md")), "DECISIONS.md missing");
+  run([
+    script("append-decision.cjs"), root,
+    "--decision", "Prefer SQLite",
+    "--rationale", "simple local store",
+    "--session", "n/a",
+    "--agent", "CI",
+  ]);
+  const decisions = fs.readFileSync(path.join(root, ".agent-memory", "DECISIONS.md"), "utf8");
+  assert(decisions.includes("Prefer SQLite"), "decision not appended");
+}
+
+function testSessionStatusLifecycle() {
+  const root = tempRoot("status");
+  init(root);
+  const session = run([
+    script("new-session.cjs"), root,
+    "--role", "editor", "--summary", "status work", "--goal", "lifecycle",
+    "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+    "--started", "2026-06-06T00:13:00Z", "--short-id", "st",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  run([script("session-status.cjs"), root, "--session", session, "--pause", "--reason", "wait review"]);
+  let text = read(root, path.join("sessions", `${session}.md`));
+  assert(/Status: paused/.test(text), "pause failed");
+  run([script("session-status.cjs"), root, "--session", session, "--resume"]);
+  text = read(root, path.join("sessions", `${session}.md`));
+  assert(/Status: active/.test(text), "resume failed");
+  run([script("session-status.cjs"), root, "--session", session, "--abandon", "--reason", "obsolete"]);
+  text = read(root, path.join("sessions", `${session}.md`));
+  assert(/Status: abandoned/.test(text), "abandon failed");
+  const threads = read(root, "THREADS.md");
+  assert(threads.includes("| abandoned |"), "THREADS status not abandoned");
+  run([script("session-status.cjs"), root, "--session", session, "--pause"], { expectFail: true });
+}
+
+function testArchiveChanges() {
+  const root = tempRoot("archive");
+  init(root);
+  for (let index = 0; index < 5; index += 1) {
+    const session = run([
+      script("new-session.cjs"), root,
+      "--role", "editor", "--summary", `A${index}`, "--goal", "archive",
+      "--agent", "CI", "--adapter", "Smoke", "--os", "linux",
+      "--started", `2026-06-06T01:${String(index).padStart(2, "0")}:00Z`,
+      "--short-id", `a${index}`,
+    ]).stdout.trim().split(/\r?\n/).at(-1);
+    run([
+      script("safe-edit.cjs"), root, "--close", "--session", session,
+      "--changed", `change ${index}`, "--file", `f${index}`, "--verification", "smoke",
+    ]);
+  }
+  const before = read(root, "CHANGES.md");
+  const beforeBlocks = before.split(/\n## /).length - 1;
+  assert(beforeBlocks >= 5, "expected multiple change blocks");
+  run([script("archive-changes.cjs"), root, "--keep", "2"]);
+  const after = read(root, "CHANGES.md");
+  const afterBlocks = after.split(/\n## /).length - 1;
+  assert(afterBlocks === 2, `expected 2 kept blocks, got ${afterBlocks}`);
+  const archiveDir = path.join(root, ".agent-memory", "archive");
+  assert(fs.existsSync(archiveDir), "archive dir missing");
+  const archives = fs.readdirSync(archiveDir).filter((name) => name.startsWith("CHANGES-"));
+  assert(archives.length === 1, "expected one archive file");
+}
+
+function testCheckDirtyNoGit() {
+  const root = tempRoot("dirty");
+  init(root);
+  const result = run([script("check-dirty.cjs"), root, "--json"]);
+  const payload = JSON.parse(result.stdout.trim());
+  assert(payload.ok === true, "check-dirty json not ok");
+  assert(payload.mode === "none" || payload.mode === "git", "unexpected dirty mode");
+}
+
 for (const test of [
   testLifecycle,
   testMismatchFails,
@@ -306,6 +528,16 @@ for (const test of [
   testBackupCleanup,
   testStaleWriteReleasesLock,
   testCloseSyncsCurrentMd,
+  testCloseWritesSessionResult,
+  testRepairRefusesMismatchWithoutPrefer,
+  testJsonOutput,
+  testUpdateSessionFields,
+  testReadHandoffAndJson,
+  testCheckConflictAndOrphanAudit,
+  testProjectConfigAndDecisions,
+  testSessionStatusLifecycle,
+  testArchiveChanges,
+  testCheckDirtyNoGit,
 ]) {
   test();
   console.log(`[ok] ${test.name}`);

@@ -5,6 +5,8 @@ const path = require("path");
 const {
   allowNoCheck,
   defaultAgent,
+  detectProjectConfig,
+  emitResult,
   generateSessionId,
   parseArgs,
   renderCurrentMd,
@@ -25,7 +27,11 @@ Options:
   --adapter <name>     Adapter name. Default: unknown
   --os <name>          OS name. Default: process platform
   --short-id <id>      Short suffix for root session. Default: root
+  --type <code|ops-doc> Project type (default: auto-detect)
+  --code-vcs <text>    Code versioning tool (default: auto-detect)
+  --sync <text>        Sync strategy note (default: auto-detect)
   --force              Allow initializing when .agent-memory already exists
+  --json               Print machine-readable JSON result on stdout
   --no-check           Internal use only; external callers must run consistency checks
 `;
 
@@ -58,6 +64,12 @@ const sessionId = generateSessionId({
 });
 
 fs.mkdirSync(path.join(memoryDir, "sessions"), { recursive: true });
+
+const projectConfig = detectProjectConfig(root, {
+  type: args.type,
+  "code-vcs": args["code-vcs"],
+  sync: args.sync,
+});
 
 writeSession(
   root,
@@ -96,8 +108,22 @@ writeMemory(
     currentState: "- WePlaning v2.3 memory is active.\n- Required memory files exist.",
     acceptedNextSteps: "1. Continue from the active goal.\n2. Open a new session for durable work.",
     openBlockers: "none",
+    projectConfig: projectConfig.text,
     basedOn: `- Session: ${sessionId}\n- Last change: ${now} init`,
   }),
+);
+
+writeMemory(
+  root,
+  "DECISIONS.md",
+  `# Decisions
+Schema version: 2.3
+
+## ${now} bootstrap
+- Session: ${sessionId}
+- Decision: Use WePlaning v2.3 project memory
+- Rationale: Durable multi-session / multi-Agent state for ${project}
+`,
 );
 
 writeMemory(
@@ -145,4 +171,9 @@ Schema version: 2.3
 );
 
 if (!args["no-check"]) runCheck(root, __dirname);
-console.log(sessionId);
+emitResult(args, sessionId, {
+  sessionId,
+  project,
+  goal,
+  projectConfig: { type: projectConfig.type, codeVcs: projectConfig.codeVcs, sync: projectConfig.sync },
+});

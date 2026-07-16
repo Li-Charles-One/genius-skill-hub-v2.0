@@ -4,13 +4,16 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
+  emitResult,
   extractField,
   parseArgs,
   parseCurrentMd,
+  parseSessionMd,
   readMemory,
   readSession,
   readThreads,
   renderCurrentMd,
+  renderSessionMd,
   required,
   toList,
   usage,
@@ -22,27 +25,38 @@ const {
 
 const help = `
 Usage:
-  node safe-edit.cjs <project-root> --lite --session <id> [options]
+  node safe-edit.cjs <project-root> --lite --session <id> --changed <text>
+  node safe-edit.cjs <project-root> --update --session <id> [field options]
   node safe-edit.cjs <project-root> --close --session <id> --changed <text> --file <path> --verification <text> [options]
 
 Modes:
-  --lite              Guard a lightweight session update with pre/post checks.
+  --lite              Append a Work Notes line with pre/post checks.
+  --update            Update in-progress session fields (not mainline merge).
   --close             Append change, merge session, then run the consistency gate.
 
-Options:
+Common options:
   --session <id>        Required session id.
-  --changed <text>      Required with --close. Change description.
-  --file <path>         Required with --close. Repeatable or ";;" separated.
-  --verification <text> Required with --close. Repeatable or ";;" separated.
-  --note <text>         Repeatable or ";;" separated. Notes for append-change.
   --dry-run             Print steps without executing.
+  --json                Print machine-readable JSON result on stdout.
 
-CURRENT.md sync (with --close only) — keeps mainline prose in step with the merge:
-  --goal <text>         Replace "Active Goal".
-  --state <text>        Replace "Current State" bullets. Repeatable or ";;" separated.
-  --next-step <text>    Replace "Accepted Next Steps". Repeatable or ";;" separated.
-  --blockers <text>     Replace "Open Blockers". Repeatable or ";;" separated.
-  --understanding <text> Replace "Current Understanding".
+--lite options:
+  --changed <text>      Required. Appended to Work Notes.
+
+--update options (at least one required):
+  --result <text>       Replace session Result.
+  --next-step <text>    Replace Exact Next Step (;; separated ok).
+  --file <path>         Replace or append Files Touched (use --replace-files to replace).
+  --replace-files       With --file: replace Files Touched instead of append.
+  --decision <text>     Append Decisions bullets (;; separated).
+  --note / --changed    Append Work Notes bullets.
+
+--close options:
+  --changed <text>      Required. Change description (+ session Result).
+  --file <path>         Required. Repeatable or ";;" separated.
+  --verification <text> Required. Repeatable or ";;" separated.
+  --note <text>         Notes for append-change / session Work Notes.
+  --no-sync             Do not auto-update CURRENT.md prose.
+  --goal / --state / --next-step / --blockers / --understanding
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -50,21 +64,47 @@ usage(!args.help, "", help);
 
 const root = path.resolve(args._[0] || process.cwd());
 const sessionId = required(args, "session", help);
-const mode = args.close ? "close" : "lite";
-usage(args.lite || args.close, "Choose exactly one mode: --lite or --close", help);
-usage(!(args.lite && args.close), "Choose only one mode: --lite or --close", help);
+
+const modeCount = [args.lite, args.update, args.close].filter(Boolean).length;
+usage(modeCount === 1, "Choose exactly one mode: --lite, --update, or --close", help);
+const mode = args.close ? "close" : args.update ? "update" : "lite";
+
+const hasSyncFlags = Boolean(
+  args.goal || args.state || args["next-step"] || args.blockers || args.understanding,
+);
 
 if (mode === "close") {
   required(args, "changed", help);
   if (!(args.file || args.files)) usage(false, "Missing required argument: --file", help);
   if (!args.verification) usage(false, "Missing required argument: --verification", help);
-} else {
+  if (args["no-sync"] && hasSyncFlags) {
+    usage(false, "Conflicting flags: --no-sync cannot be combined with CURRENT.md sync flags", help);
+  }
+} else if (mode === "lite") {
   required(args, "changed", help);
-  usage(
-    !(args.goal || args.state || args["next-step"] || args.blockers || args.understanding),
-    "CURRENT.md sync flags (--goal/--state/--next-step/--blockers/--understanding) require --close",
-    help,
+  if (args.goal || args.state || args.blockers || args.understanding) {
+    usage(false, "CURRENT.md sync flags require --close", help);
+  }
+  if (args["next-step"]) {
+    usage(false, "--next-step requires --update or --close", help);
+  }
+  usage(!args["no-sync"], "--no-sync requires --close", help);
+} else {
+  // update
+  const hasUpdateField = Boolean(
+    args.result ||
+      args["next-step"] ||
+      args.file ||
+      args.files ||
+      args.decision ||
+      args.note ||
+      args.changed,
   );
+  usage(hasUpdateField, " --update requires at least one of: --result --next-step --file --decision --note/--changed", help);
+  if (args.goal || args.state || args.blockers || args.understanding) {
+    usage(false, "CURRENT.md sync flags require --close", help);
+  }
+  usage(!args["no-sync"], "--no-sync requires --close", help);
 }
 
 function listFiles(dir) {
@@ -109,7 +149,7 @@ function values(value) {
 
 function runStep(label, command, argv) {
   if (args["dry-run"]) {
-    console.log(`[DRY-RUN] ${label}: ${command} ${argv.join(" ")}`);
+    console.error(`[DRY-RUN] ${label}: ${command} ${argv.join(" ")}`);
     return { ok: true };
   }
   console.error(`\n> ${label}`);
@@ -122,7 +162,7 @@ function runStep(label, command, argv) {
   if (result.stdout) process.stderr.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   const ok = result.status === 0;
-  console.log(`${ok ? "OK" : "FAILED"} ${label}`);
+  console.error(`${ok ? "OK" : "FAILED"} ${label}`);
   return { ok, status: result.status };
 }
 
@@ -132,6 +172,7 @@ function ensureFreshMainline() {
   if (currentMainline !== threads.mainline) {
     throw new Error(`Mainline mismatch before write: CURRENT.md=${currentMainline}, THREADS.md=${threads.mainline}`);
   }
+  if (mode === "update") return;
   const sessionText = readSession(root, sessionId);
   const parent = extractField(sessionText, "Parent session");
   if (parent && parent !== threads.mainline && sessionId !== threads.mainline) {
@@ -153,15 +194,61 @@ function numberedList(value, fallback) {
   return items.length ? items.map((item, index) => `${index + 1}. ${item}`).join("\n") : fallback;
 }
 
-const wantsCurrentSync = Boolean(
-  args.goal || args.state || args["next-step"] || args.blockers || args.understanding,
-);
+function appendBullets(existing, items) {
+  const extra = items.map((item) => `- ${item}`).join("\n");
+  const base = String(existing || "").replace(/\s*$/, "");
+  return base ? `${base}\n${extra}` : extra;
+}
+
+const shouldSyncCurrent = mode === "close" && (hasSyncFlags || !args["no-sync"]);
+
+function prepareCloseSession() {
+  const session = parseSessionMd(readSession(root, sessionId));
+  session.result = String(args.changed);
+  const files = toList(args.file || args.files);
+  session.filesTouched = files.length
+    ? files.map((file) => `- ${file}`).join("\n")
+    : session.filesTouched;
+  if (args["next-step"]) {
+    session.exactNextStep = toList(args["next-step"]).join("\n");
+  } else if (/^(unknown|Session opened\.?)$/i.test(String(session.exactNextStep || "").trim())) {
+    session.exactNextStep = "See CURRENT.md Accepted Next Steps.";
+  }
+  const notes = toList(args.note);
+  if (notes.length) {
+    session.workNotes = appendBullets(session.workNotes, notes);
+  }
+  writeSession(root, sessionId, renderSessionMd(session));
+}
+
+function updateSessionFields() {
+  const session = parseSessionMd(readSession(root, sessionId));
+  if (session.status === "merged") {
+    throw new Error(`Refusing --update on merged session ${sessionId}. Open a new session instead.`);
+  }
+  if (args.result) session.result = String(args.result);
+  if (args["next-step"]) session.exactNextStep = toList(args["next-step"]).join("\n");
+  const files = toList(args.file || args.files);
+  if (files.length) {
+    if (args["replace-files"]) {
+      session.filesTouched = files.map((file) => `- ${file}`).join("\n");
+    } else {
+      session.filesTouched = appendBullets(session.filesTouched, files);
+    }
+  }
+  const decisions = toList(args.decision);
+  if (decisions.length) session.decisions = appendBullets(session.decisions, decisions);
+  const notes = [...toList(args.note), ...toList(args.changed)];
+  if (notes.length) session.workNotes = appendBullets(session.workNotes, notes);
+  writeSession(root, sessionId, renderSessionMd(session));
+}
 
 function syncCurrentMd() {
   const state = parseCurrentMd(readMemory(root, "CURRENT.md"));
   if (args.goal) state.activeGoal = String(args.goal);
   if (args.understanding) state.currentUnderstanding = String(args.understanding);
   if (args.state) state.currentState = bulletList(args.state, state.currentState);
+  else if (!args["no-sync"]) state.currentState = bulletList(args.changed, state.currentState);
   if (args["next-step"]) state.acceptedNextSteps = numberedList(args["next-step"], state.acceptedNextSteps);
   if (args.blockers) state.openBlockers = bulletList(args.blockers, state.openBlockers);
   writeMemory(root, "CURRENT.md", renderCurrentMd(state));
@@ -214,11 +301,27 @@ withMemoryLock(root, () => {
   if (mode === "lite") {
     try {
       if (!args["dry-run"]) updateLiteSession();
-      else console.log(`[DRY-RUN] append session Work Notes: ${args.changed}`);
+      else console.error(`[DRY-RUN] append session Work Notes: ${args.changed}`);
     } catch (error) {
       abort(`Pipeline aborted: lite session update failed: ${error.message}`);
     }
+  } else if (mode === "update") {
+    try {
+      if (!args["dry-run"]) updateSessionFields();
+      else console.error("[DRY-RUN] update session fields");
+      console.error("OK update session fields");
+    } catch (error) {
+      abort(`Pipeline aborted: session update failed: ${error.message}`);
+    }
   } else {
+    try {
+      if (!args["dry-run"]) prepareCloseSession();
+      else console.error(`[DRY-RUN] write session Result/Files/Next from close args`);
+      console.error("OK prepare session close fields");
+    } catch (error) {
+      abort(`Pipeline aborted: session close-field update failed: ${error.message}`);
+    }
+
     const appendArgv = [root, "--session", sessionId, "--changed", args.changed, "--no-check"];
     for (const file of values(args.file || args.files)) appendArgv.push("--file", file);
     for (const item of values(args.verification)) appendArgv.push("--verification", item);
@@ -234,11 +337,11 @@ withMemoryLock(root, () => {
     ]);
     if (!mergeResult.ok) abort("Pipeline aborted: merge-session failed.");
 
-    if (wantsCurrentSync) {
+    if (shouldSyncCurrent) {
       try {
         if (!args["dry-run"]) syncCurrentMd();
-        else console.log("[DRY-RUN] sync CURRENT.md prose sections");
-        console.log("OK sync CURRENT.md");
+        else console.error("[DRY-RUN] sync CURRENT.md prose sections");
+        console.error("OK sync CURRENT.md");
       } catch (error) {
         abort(`Pipeline aborted: CURRENT.md sync failed: ${error.message}`);
       }
@@ -249,4 +352,8 @@ withMemoryLock(root, () => {
   if (!postCheckResult.ok) abort("Pipeline aborted: post-check failed. Snapshot was restored.");
 });
 
-console.log(`safe-edit ${mode} pipeline completed successfully.`);
+emitResult(args, `safe-edit ${mode} pipeline completed successfully.`, {
+  mode,
+  sessionId,
+  message: `safe-edit ${mode} pipeline completed successfully.`,
+});

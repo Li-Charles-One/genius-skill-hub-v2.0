@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const {
   allowNoCheck,
+  emitResult,
   extractField,
   parseArgs,
   readMemory,
@@ -26,23 +27,34 @@ Usage:
   node repair-memory.cjs <project-root> [options]
 
 Repairs common WePlaning drift:
-  - aligns THREADS.md mainline with CURRENT.md mainline
   - marks mainline thread row and session file as merged
   - aligns Last merged session with mainline
   - rebuilds missing mainline THREADS row or session file with minimal data
 
+When CURRENT.md and THREADS.md mainline disagree, repair refuses to guess.
+Pass --prefer current|threads to choose the authority.
+
 Options:
-  --dry-run         Print intended repairs without writing
-  --no-check        Internal use only; external callers must run consistency checks
+  --prefer current|threads   Authority when mainline pointers disagree
+  --dry-run                  Print intended repairs without writing
+  --json                     Print machine-readable JSON result on stdout
+  --no-check                 Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 allowNoCheck(args, "repair-memory.cjs");
 
+const prefer = args.prefer;
+if (prefer && prefer !== "current" && prefer !== "threads") {
+  usage(false, "--prefer must be 'current' or 'threads'", help);
+}
+
 const root = path.resolve(args._[0] || process.cwd());
 const now = args.time || utcNow();
 let repairs = [];
+let targetMainline = null;
+
 withMemoryLock(root, () => {
   const current = readMemory(root, "CURRENT.md");
   const currentMainline = extractField(current, "Mainline session");
@@ -52,11 +64,37 @@ withMemoryLock(root, () => {
   }
 
   let threads = readThreads(root);
-  let row = threads.rows.find((item) => item.id === currentMainline);
+  const threadsMainline = threads.mainline;
+
+  targetMainline = currentMainline;
+  if (threadsMainline && threadsMainline !== currentMainline) {
+    if (!prefer) {
+      console.error(
+        `Mainline mismatch: CURRENT.md=${currentMainline}, THREADS.md=${threadsMainline}\n` +
+          "Refuse automatic repair (would risk inventing authority).\n" +
+          "Re-run with --prefer current  (trust CURRENT.md, rewrite THREADS/session)\n" +
+          "         or --prefer threads  (trust THREADS.md, rewrite CURRENT mainline).",
+      );
+      process.exit(1);
+    }
+    targetMainline = prefer === "threads" ? threadsMainline : currentMainline;
+    repairs.push(`authority: prefer ${prefer} -> ${targetMainline}`);
+  }
+
+  if (prefer === "threads" && currentMainline !== targetMainline) {
+    repairs.push(`CURRENT.md Mainline session: ${currentMainline} -> ${targetMainline}`);
+    if (!args["dry-run"]) {
+      let nextCurrent = replaceField(current, "Mainline session", targetMainline);
+      nextCurrent = replaceField(nextCurrent, "Last updated", now);
+      writeMemory(root, "CURRENT.md", nextCurrent);
+    }
+  }
+
+  let row = threads.rows.find((item) => item.id === targetMainline);
   if (!row) {
-    repairs.push(`THREADS.md add missing mainline row: ${currentMainline}`);
+    repairs.push(`THREADS.md add missing mainline row: ${targetMainline}`);
     row = {
-      id: currentMainline,
+      id: targetMainline,
       parent: "unknown",
       agent: "unknown",
       os: "unknown",
@@ -67,25 +105,25 @@ withMemoryLock(root, () => {
     threads.rows.push(row);
   }
 
-  if (threads.mainline !== currentMainline) {
-    repairs.push(`THREADS.md Mainline session: ${threads.mainline} -> ${currentMainline}`);
-    threads.mainline = currentMainline;
+  if (threads.mainline !== targetMainline) {
+    repairs.push(`THREADS.md Mainline session: ${threads.mainline} -> ${targetMainline}`);
+    threads.mainline = targetMainline;
   }
-  if (threads.lastMerged !== currentMainline) {
-    repairs.push(`THREADS.md Last merged session: ${threads.lastMerged} -> ${currentMainline}`);
-    threads.lastMerged = currentMainline;
+  if (threads.lastMerged !== targetMainline) {
+    repairs.push(`THREADS.md Last merged session: ${threads.lastMerged} -> ${targetMainline}`);
+    threads.lastMerged = targetMainline;
   }
   if (row.status !== "merged") {
-    repairs.push(`THREADS.md ${currentMainline} status: ${row.status} -> merged`);
+    repairs.push(`THREADS.md ${targetMainline} status: ${row.status} -> merged`);
     row.status = "merged";
   }
 
   let sessionText;
-  const mainlineSessionPath = sessionPath(root, currentMainline);
+  const mainlineSessionPath = sessionPath(root, targetMainline);
   if (!fs.existsSync(mainlineSessionPath)) {
-    repairs.push(`session ${currentMainline} rebuild missing mainline session file`);
+    repairs.push(`session ${targetMainline} rebuild missing mainline session file`);
     sessionText = renderSessionMd({
-      sessionId: currentMainline,
+      sessionId: targetMainline,
       agent: row.agent || "unknown",
       adapter: "unknown",
       os: row.os || "unknown",
@@ -97,22 +135,22 @@ withMemoryLock(root, () => {
       goal: "Reconstructed missing mainline session file.",
       contextRead: "- CURRENT.md\n- THREADS.md",
       workNotes: "- Rebuilt by repair-memory.cjs because the mainline session file was missing.",
-      filesTouched: `- .agent-memory/sessions/${currentMainline}.md`,
-      decisions: "- Preserve CURRENT.md as accepted mainline state.",
+      filesTouched: `- .agent-memory/sessions/${targetMainline}.md`,
+      decisions: "- Preserve chosen mainline authority.",
       result: "Reconstructed missing mainline session file from CURRENT.md and THREADS.md.",
       exactNextStep: "Review the reconstructed session if original session details are needed.",
     });
   } else {
-    sessionText = readSession(root, currentMainline);
+    sessionText = readSession(root, targetMainline);
   }
   const sessionStatus = extractField(sessionText, "Status");
   if (sessionStatus !== "merged") {
-    repairs.push(`session ${currentMainline} Status: ${sessionStatus || "missing"} -> merged`);
+    repairs.push(`session ${targetMainline} Status: ${sessionStatus || "missing"} -> merged`);
     if (sessionStatus) {
       sessionText = replaceField(sessionText, "Status", "merged");
     } else {
       const parsed = {
-        sessionId: currentMainline,
+        sessionId: targetMainline,
         agent: row.agent || "unknown",
         adapter: "unknown",
         os: row.os || "unknown",
@@ -124,7 +162,7 @@ withMemoryLock(root, () => {
         goal: "Reconstructed missing mainline session status.",
         contextRead: "- unknown",
         workNotes: "- Repaired by repair-memory.cjs.",
-        filesTouched: `- .agent-memory/sessions/${currentMainline}.md`,
+        filesTouched: `- .agent-memory/sessions/${targetMainline}.md`,
         decisions: "- unknown",
         result: "Session status repaired.",
         exactNextStep: "Review session metadata.",
@@ -137,16 +175,31 @@ withMemoryLock(root, () => {
 
   if (repairs.length > 0) {
     writeThreads(root, threads, now);
-    writeSession(root, currentMainline, sessionText);
+    writeSession(root, targetMainline, sessionText);
   }
 });
 
 if (args["dry-run"]) {
-  if (repairs.length === 0) console.log("No repairs needed.");
-  else repairs.forEach((item) => console.log(item));
+  if (args.json) {
+    console.log(JSON.stringify({ ok: true, dryRun: true, repairs, mainline: targetMainline }));
+  } else if (repairs.length === 0) {
+    console.log("No repairs needed.");
+  } else {
+    repairs.forEach((item) => console.log(item));
+  }
   process.exit(0);
 }
 
 if (!args["no-check"]) runCheck(root, __dirname);
-if (repairs.length === 0) console.log("No repairs needed.");
-else repairs.forEach((item) => console.log(item));
+
+if (args.json) {
+  emitResult(args, repairs.length ? repairs.join("; ") : "No repairs needed.", {
+    repairs,
+    mainline: targetMainline,
+    message: repairs.length ? `Applied ${repairs.length} repair(s).` : "No repairs needed.",
+  });
+} else if (repairs.length === 0) {
+  console.log("No repairs needed.");
+} else {
+  repairs.forEach((item) => console.log(item));
+}

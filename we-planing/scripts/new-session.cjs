@@ -5,6 +5,7 @@ const path = require("path");
 const {
   allowNoCheck,
   defaultAgent,
+  emitResult,
   generateSessionId,
   parseArgs,
   readThreads,
@@ -33,6 +34,7 @@ Options:
   --short-id <id>      Short suffix when generating an id
   --context <text>     Context-read item. Repeat or separate with ";;"
   --note <text>        Work-note item. Repeat or separate with ";;"
+  --json               Print machine-readable JSON result on stdout
   --no-check           Internal use only; external callers must run consistency checks
 `;
 
@@ -127,4 +129,4 @@ withMemoryLock(root, () => {
 });
 
 if (!args["no-check"]) runCheck(root, __dirname);
-console.log(sessionId);
+emitResult(args, sessionId, { sessionId, role, summary, goal, agent });
