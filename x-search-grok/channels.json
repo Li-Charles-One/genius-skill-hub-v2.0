@@ -1,30 +1,14 @@
 {
   "version": 1,
-  "comment": "Priority: smaller number = higher. Swap by changing priority/enabled/base. Secrets stay in .env.",
+  "comment": "Primary only: own CPA on us-api:8317 (cli-proxy-api). Add more channels here if needed.",
   "channels": [
     {
-      "id": "aijws",
+      "id": "cpa",
       "priority": 1,
       "enabled": true,
-      "base": "https://api.aijws.com/v1",
+      "base": "http://47.251.70.115:8317/v1",
       "models": ["grok-4.5"],
-      "key_env": ["CHANNEL_AIJWS_KEY"]
-    },
-    {
-      "id": "original",
-      "priority": 2,
-      "enabled": true,
-      "base": "https://ai.0xs.one/v1",
-      "models": ["grok-4.5"],
-      "key_env": ["CHANNEL_ORIGINAL_KEY", "GROK_API_KEY", "API_KEY", "XAI_API_KEY"]
-    },
-    {
-      "id": "suixiang",
-      "priority": 3,
-      "enabled": true,
-      "base": "https://sui-xiang.com/v1",
-      "models": ["grok-4.5"],
-      "key_env": ["CHANNEL_SUIXIANG_KEY"]
+      "key_env": ["CHANNEL_CPA_KEY", "CPA_API_KEY", "GROK_API_KEY"]
     }
   ]
 }

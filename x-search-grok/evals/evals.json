@@ -41,13 +41,12 @@
       "id": "channel-list",
       "prompt": "看看 x-search-grok 现在有哪些渠道和优先级",
       "trigger_expected": true,
-      "expected_output": "Runs scripts/x_search.py --list-channels and reports aijws/original/suixiang readiness without printing API keys.",
+      "expected_output": "Runs scripts/x_search.py --list-channels and reports cpa readiness without printing API keys.",
       "files": ["channels.json", "scripts/x_search.py"],
       "assertions": [
         {"type": "contains", "value": "--list-channels"},
-        {"type": "contains", "value": "aijws"},
-        {"type": "contains", "value": "original"},
-        {"type": "contains", "value": "suixiang"}
+        {"type": "contains", "value": "cpa"},
+        {"type": "contains", "value": "8317"}
       ]
     },
     {
