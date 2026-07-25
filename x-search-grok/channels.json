@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "comment": "Primary only: own CPA on us-api:8317 (cli-proxy-api). Add more channels here if needed.",
+  "comment": "Primary: api.apikey.fun Grok-compatible relay for x_search.",
   "channels": [
     {
       "id": "cpa",
       "priority": 1,
       "enabled": true,
-      "base": "http://47.251.70.115:8317/v1",
+      "base": "https://api.apikey.fun/v1",
       "models": ["grok-4.5"],
       "key_env": ["CHANNEL_CPA_KEY", "CPA_API_KEY", "GROK_API_KEY"]
     }
