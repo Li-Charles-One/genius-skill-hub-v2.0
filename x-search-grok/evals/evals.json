@@ -46,7 +46,7 @@
       "assertions": [
         {"type": "contains", "value": "--list-channels"},
         {"type": "contains", "value": "cpa"},
-        {"type": "contains", "value": "8317"}
+        {"type": "contains", "value": "charles-ai.space"}
       ]
     },
     {

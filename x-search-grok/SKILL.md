@@ -31,9 +31,9 @@ Built-in slot:
 
 | id | priority | role | key env |
 |---|---|---|---|
-| `cpa` | 1 | own CPA `us-api:8317` | `CHANNEL_CPA_KEY` / `CPA_API_KEY` / `GROK_API_KEY` |
+| `cpa` | 1 | `cpa.charles-ai.space` Grok relay | `CHANNEL_CPA_KEY` / `CPA_API_KEY` / `GROK_API_KEY` |
 
-Default model: `grok-4.5` (via CPA → xAI OAuth).
+Default model: `grok-4.5` (via `cpa.charles-ai.space`).
 
 **Swap / extend without code changes:**
 
