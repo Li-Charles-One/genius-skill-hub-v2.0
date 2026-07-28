@@ -7,7 +7,7 @@
       "priority": 1,
       "enabled": true,
       "base": "https://cpa.charles-ai.space/v1",
-      "models": ["grok-4.5"],
+      "models": ["grok-3-mini-fast", "grok-3-mini"],
       "key_env": ["CHANNEL_CPA_KEY", "CPA_API_KEY", "GROK_API_KEY"]
     }
   ]

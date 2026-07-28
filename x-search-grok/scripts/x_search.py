@@ -29,7 +29,7 @@ from typing import Any
 SKILL_DIR = Path(__file__).resolve().parents[1]
 CHANNELS_PATH = SKILL_DIR / "channels.json"
 DEFAULT_BASE = "https://cpa.charles-ai.space/v1"
-DEFAULT_MODEL = "grok-4.5"
+DEFAULT_MODEL = "grok-3-mini-fast"
 DEFAULT_FALLBACK_MODELS: list[str] = []
 DEFAULT_TIMEOUT = 180
 DEFAULT_TRANSIENT_RETRIES = 1

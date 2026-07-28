@@ -33,7 +33,7 @@ Built-in slot:
 |---|---|---|---|
 | `cpa` | 1 | `cpa.charles-ai.space` Grok relay | `CHANNEL_CPA_KEY` / `CPA_API_KEY` / `GROK_API_KEY` |
 
-Default model: `grok-4.5` (via `cpa.charles-ai.space`).
+Default model: `grok-3-mini-fast` (via `cpa.charles-ai.space`; fallback `grok-3-mini`).
 
 **Swap / extend without code changes:**
 
