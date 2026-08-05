@@ -1,12 +1,16 @@
 ---
 name: genius-omni
-description: "Universal image, video & audio analysis (Genius 视听). Default CPA gemini-3.6-flash-high; fallback Xiaomi MiMo mimo-v2.5. Use when user asks to analyze, OCR, review, describe, or transcribe any image/video/audio file. Supports 6 image modes, 4 video modes, 4 audio modes. Triggers: analyze image, analyze video, analyze audio, OCR, 看图, 视频分析, 听音频, 转写, 视听."
-version: 2.4.0
+description: "Universal image, video & audio analysis (Genius 视听). Default CPA gemini-3.6-flash-high (native generateContent); also google official Gemini, MiMo, or any custom multimodal provider via env. Supports 6 image / 4 video / 4 audio modes + YouTube. Triggers: analyze image, analyze video, analyze audio, OCR, 看图, 视频分析, 听音频, 转写, 视听, YouTube."
+version: 2.5.0
 ---
 
 # Genius Omni（视听）
 
-Universal multimodal analysis skill for AI agents. Analyzes **images, videos, and audio** via OpenAI-compatible multimodal API. **Default: CPA `gemini-3.6-flash-high`**. Fallback: Xiaomi MiMo `mimo-v2.5`. Media kind is auto-detected by extension; local files are sent as base64 data-URIs; public URLs pass through.
+Universal multimodal analysis for AI agents — **images, videos, audio, YouTube**.
+
+**Default:** CPA `gemini-3.6-flash-high` via **native** Gemini `generateContent`.  
+Also built-in: **Google official Gemini**, **Xiaomi MiMo**.  
+**Any other multimodal model** can be plugged in via env (see [Add any multimodal model](#add-any-multimodal-model)).
 
 > Skill name: **`genius-omni`** only（旧名 `genius-vision` 已废弃，勿再联接）。
 
@@ -102,24 +106,31 @@ python "<skill_dir>/scripts/vision.py" huge.wav --proxy-only
 python "<skill_dir>/scripts/vision.py" giant.png --proxy-only
 ```
 
-### Setup
+### Setup（推荐写 `scripts/.env`）
+
 ```bash
-# Default: CPA
-export VISION_PROVIDER=cpa
-export CPA_API_KEY="sk-your-cpa-key"
-export VISION_BASE_URL="https://cpa-jp.charles-ai.space/v1"
-export VISION_MODEL="gemini-3.6-flash-high"
+# Default provider pack
+VISION_PROVIDER=cpa
+CPA_API_KEY=sk-your-cpa-key
+# optional overrides:
+# CPA_MODEL=gemini-3.6-flash-high
+# CPA_BASE_URL=https://cpa-jp.charles-ai.space/v1
 
-# Optional fallback: MiMo
-export MIMO_API_KEY="tp-your-token-plan-key"
+# Optional: official Google Gemini
+# GOOGLE_API_KEY=AIza...
+# GOOGLE_MODEL=gemini-3.6-flash
 
-# Or scripts/.env (recommended)
+# Optional: MiMo
+# MIMO_API_KEY=tp-your-token-plan-key
 ```
 
-Switch provider:
+Switch / inspect:
 ```bash
-python scripts/vision.py shot.png describe --provider cpa   # default
+python scripts/vision.py --list-providers
+python scripts/vision.py shot.png describe --provider cpa      # default
+python scripts/vision.py shot.png describe --provider google
 python scripts/vision.py shot.png describe --provider mimo
+python scripts/vision.py "https://www.youtube.com/watch?v=..." video-summary
 ```
 
 ## Output Format
@@ -142,37 +153,110 @@ python scripts/vision.py shot.png describe --provider mimo
 
 ## Configuration
 
-### API Provider
+### Built-in providers
 
-| Provider | Base URL | Model | Key env |
-|---|---|---|---|
-| **`cpa`（默认）** | `https://cpa-jp.charles-ai.space/v1` | `gemini-3.6-flash-high` | `CPA_API_KEY` |
-| `mimo` | `https://token-plan-cn.xiaomimimo.com/v1` | `mimo-v2.5` | `MIMO_API_KEY` |
+| Provider | API style | Default model | Base URL | Key env |
+|---|---|---|---|---|
+| **`cpa`（默认）** | `gemini` native | `gemini-3.6-flash-high` | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
+| `google` | `gemini` native | `gemini-3.6-flash` | `https://generativelanguage.googleapis.com/v1` | `GOOGLE_API_KEY` / `GEMINI_API_KEY` |
+| `mimo` | `openai` | `mimo-v2.5` | `https://token-plan-cn.xiaomimimo.com/v1` | `MIMO_API_KEY` |
 
-MiMo 官方文档：
-- 图：https://mimo.mi.com/docs/zh-CN/usage-guide/multimodal-understanding/image-understanding
-- 视频：https://mimo.mi.com/docs/zh-CN/usage-guide/multimodal-understanding/video-understanding
-- 音频：https://mimo.mi.com/docs/zh-CN/usage-guide/multimodal-understanding/audio-understanding
+**API style 含义：**
+- `gemini` → `POST {root}/v1beta/models/{model}:generateContent`  
+  本地媒体：`inline_data`；YouTube：`file_data.file_uri`
+- `openai` → `POST {base}/chat/completions`  
+  `image_url` / `video_url` / `input_audio`
+
+### Add any multimodal model
+
+本 skill **不只绑死 CPA/MiMo**。任意兼容下面两种协议之一的多模态接口，都能配进来。
+
+#### 方式 A：用内置 pack，只改模型/密钥
+
+```bash
+# 官方 Google
+VISION_PROVIDER=google
+GOOGLE_API_KEY=AIzaSy...
+# optional:
+# GOOGLE_MODEL=gemini-2.5-flash
+# GOOGLE_BASE_URL=https://generativelanguage.googleapis.com/v1
+
+# 同一 CPA 换模型
+VISION_PROVIDER=cpa
+CPA_API_KEY=sk-...
+CPA_MODEL=gemini-3.5-flash-low
+```
+
+#### 方式 B：自定义 provider（任意名字）
+
+在 `scripts/.env` 写（名字随便，例如 `openrouter` / `relay` / `qwen`）：
+
+```bash
+VISION_PROVIDER=openrouter
+
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=google/gemini-2.5-flash
+OPENROUTER_API_STYLE=openai    # gemini | openai（可省略，会按 host/model 猜）
+```
+
+规则（`{NAME}` = provider 名大写）：
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `VISION_PROVIDER={name}` | 是 | 激活哪个 pack |
+| `{NAME}_BASE_URL` | 是 | API base（OpenAI 风格带 `/v1`；Gemini 官方可 `/v1`） |
+| `{NAME}_API_KEY` | 是 | 密钥（也认 `VISION_API_KEY`） |
+| `{NAME}_MODEL` | 是 | 模型 id |
+| `{NAME}_API_STYLE` | 否 | `gemini` 或 `openai`；不写则自动推断 |
+
+CLI 一次性覆盖（不改 .env）：
+
+```bash
+python scripts/vision.py shot.png describe \
+  --provider openrouter \
+  --base-url https://openrouter.ai/api/v1 \
+  --api-key sk-or-... \
+  --model google/gemini-2.5-flash
+```
+
+查看当前配置：
+
+```bash
+python scripts/vision.py --list-providers
+```
+
+#### 选 `gemini` 还是 `openai`？
+
+| 你的接口 | 设 |
+|---|---|
+| Google / CPA Gemini 原生（`generateContent`、支持 YouTube file_uri） | `gemini` |
+| OpenAI 兼容网关（`/chat/completions`，图 `image_url`） | `openai` |
+| 不确定 | 先 `--list-providers` 看推断；不行再显式设 `{NAME}_API_STYLE` |
+
+> 注意：不是每个 OpenAI 兼容网关都真支持视频/音频。YouTube 目前只有 **`gemini` style** 稳定。
+
+### Common env
 
 | Env Variable | Description | Default |
 |---|---|---|
-| `VISION_PROVIDER` | `cpa` \| `mimo` | `cpa` |
-| `CPA_API_KEY` | CPA API key（也认 `VISION_CPA_API_KEY` / `VISION_API_KEY`） | (required for cpa) |
-| `MIMO_API_KEY` | MiMo API key（也认 `ARK_API_KEY`） | (required for mimo) |
-| `VISION_MODEL` | Model name (active provider) | `gemini-3.6-flash-high` |
-| `VISION_BASE_URL` | API base URL (active provider) | CPA base |
-| `VISION_VIDEO_FPS` | 视频抽帧 fps（MiMo） | `2` |
+| `VISION_PROVIDER` | active provider id | `cpa` |
+| `VISION_MODEL` / `VISION_BASE_URL` | 仅覆盖**当前 active** provider | pack default |
+| `{NAME}_MODEL` / `{NAME}_BASE_URL` / `{NAME}_API_KEY` / `{NAME}_API_STYLE` | per-provider | — |
+| `VISION_API_STYLE` | 全局 style 覆盖（少用） | — |
+| `VISION_VIDEO_FPS` | 视频抽帧 fps（MiMo openai） | `2` |
 | `VISION_VIDEO_RESOLUTION` | `default` / `max`（MiMo） | `default` |
-| `VISION_SHOW_THINKING` | `1` 时输出 `reasoning_content` | off |
-| `VISION_MAX_TOKENS` | 思考+回答总上限 | `32768` |
+| `VISION_SHOW_THINKING` | `1` 输出 thinking | off |
+| `VISION_MAX_TOKENS` | 输出上限 | `32768` |
 
-### Models
+### Models (examples)
 
 | Model ID | Provider | 说明 |
 |---|---|---|
 | `gemini-3.6-flash-high` | cpa | **默认** |
-| `mimo-v2.5` | mimo | 全模态（图/视频/音频/文本） |
-| `mimo-v2.5-pro` | mimo | **不支持**多模态，勿用于本 skill |
+| `gemini-3.6-flash` | google | 官方 Gemini |
+| `mimo-v2.5` | mimo | 全模态（图/视频/音频） |
+| `mimo-v2.5-pro` | mimo | **不支持**多模态，勿用 |
 
 ### Media formats
 

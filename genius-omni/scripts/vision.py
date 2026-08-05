@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 """
-Genius AV (视听) — Image / video / audio analysis via OpenAI-compatible multimodal API.
+Genius AV (视听) — Image / video / audio analysis.
 
-Default provider: CPA (gemini-3.6-flash-high) via native generateContent.
-Fallback provider: Xiaomi MiMo (mimo-v2.5, Token Plan) via OpenAI chat.completions.
+Built-in providers:
+  cpa     (default) — Gemini native generateContent via CPA
+  google            — Official Google Gemini API
+  mimo              — Xiaomi MiMo OpenAI-compatible chat.completions
+
+Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
+  and optional {NAME}_API_STYLE=gemini|openai
 
 Usage:
-    python vision.py <file_path_or_url> <mode> [--output json|text] [--provider cpa|mimo]
+    python vision.py --list-providers
+    python vision.py <file_or_url> <mode> [--provider cpa|google|mimo|custom]
     python vision.py https://www.youtube.com/watch?v=... video-summary
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
 Audio modes (4):  audio-summary, audio-transcribe, audio-review, audio-scene
-Auto-detect:      video / audio / image by extension; YouTube URLs → video
-Compare:          python vision.py img1.png compare --compare-with img2.png
-
-CPA native: local → inline_data; YouTube → file_data.file_uri
-MiMo:       OpenAI-compatible image_url / video_url / input_audio
-
-Environment:
-    VISION_PROVIDER — cpa (default) | mimo
-    CPA_API_KEY / VISION_CPA_API_KEY / VISION_API_KEY — CPA key
-    MIMO_API_KEY / ARK_API_KEY — MiMo key
-    VISION_MODEL / VISION_BASE_URL — global overrides
 """
 
 import argparse
@@ -571,22 +566,46 @@ def ensure_media_under_limit(
 
 
 # ── API Call ──────────────────────────────────────────────────────────────
+#
+# Built-in packs + any custom provider via env:
+#   VISION_PROVIDER=myrelay
+#   MYRELAY_BASE_URL=https://...
+#   MYRELAY_API_KEY=...
+#   MYRELAY_MODEL=...
+#   MYRELAY_API_STYLE=gemini|openai   # optional; auto if omitted
+#
+# api_style:
+#   gemini  → /v1beta/models/{model}:generateContent (inline_data / YouTube file_data)
+#   openai  → /chat/completions (image_url / video_url / input_audio)
 
-PROVIDERS = {
+BUILTIN_PROVIDERS = {
     "cpa": {
         "base_url": "https://cpa-jp.charles-ai.space/v1",
         "model": "gemini-3.6-flash-high",
+        "api_style": "gemini",
         "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
+        "note": "CPA Gemini relay (native generateContent)",
+    },
+    "google": {
+        "base_url": "https://generativelanguage.googleapis.com/v1",
+        "model": "gemini-3.6-flash",
+        "api_style": "gemini",
+        "key_envs": ("GOOGLE_API_KEY", "GEMINI_API_KEY", "VISION_API_KEY"),
+        "note": "Official Google Gemini API",
     },
     "mimo": {
         "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
         "model": "mimo-v2.5",
+        "api_style": "openai",
         "key_envs": ("MIMO_API_KEY", "VISION_API_KEY", "ARK_API_KEY"),
+        "note": "Xiaomi MiMo Token Plan (OpenAI-compatible)",
     },
 }
+# Back-compat alias used by older docs / imports
+PROVIDERS = BUILTIN_PROVIDERS
 DEFAULT_PROVIDER = "cpa"
-DEFAULT_MODEL = PROVIDERS[DEFAULT_PROVIDER]["model"]
-DEFAULT_BASE_URL = PROVIDERS[DEFAULT_PROVIDER]["base_url"]
+DEFAULT_MODEL = BUILTIN_PROVIDERS[DEFAULT_PROVIDER]["model"]
+DEFAULT_BASE_URL = BUILTIN_PROVIDERS[DEFAULT_PROVIDER]["base_url"]
 
 
 def load_dotenv_map() -> dict:
@@ -613,22 +632,152 @@ def _env_or_file(name: str, file_keys: dict) -> str:
     return (os.environ.get(name) or file_keys.get(name) or "").strip()
 
 
-def resolve_provider(name: str | None = None) -> str:
-    """Resolve provider id: arg → VISION_PROVIDER → default (cpa)."""
+def _infer_api_style(pid: str, model: str, base_url: str) -> str:
+    """Heuristic when API style not set explicitly."""
+    m = (model or "").lower()
+    b = (base_url or "").lower()
+    if pid in ("cpa", "google"):
+        return "gemini"
+    if "generativelanguage.googleapis.com" in b or "googleapis.com/v1beta" in b:
+        return "gemini"
+    if m.startswith("gemini") and ("charles-ai" in b or "googleapis" in b or "mimo" not in b):
+        # Gemini on Google-like hosts → native; pure OpenAI relays may still need openai
+        if "openrouter" in b or "openai.com" in b or "api.openai.com" in b:
+            return "openai"
+        if "googleapis" in b or "charles-ai" in b or pid == "cpa":
+            return "gemini"
+    if m.startswith("mimo") or "xiaomimimo" in b:
+        return "openai"
+    return "openai"
+
+
+def provider_conf(pid: str | None = None) -> dict:
+    """Resolve full provider config (builtin or custom env pack)."""
     file_keys = load_dotenv_map()
+    pid = (pid or resolve_provider(None)).strip().lower()
+    p = pid.upper()
+    builtin = BUILTIN_PROVIDERS.get(pid, {})
+
+    base_url = (
+        _env_or_file(f"{p}_BASE_URL", file_keys)
+        or (builtin.get("base_url") or "")
+    )
+    model = (
+        _env_or_file(f"{p}_MODEL", file_keys)
+        or (builtin.get("model") or "")
+    )
+    style = (
+        _env_or_file(f"{p}_API_STYLE", file_keys)
+        or _env_or_file("VISION_API_STYLE", file_keys)
+        or builtin.get("api_style")
+        or ""
+    ).strip().lower()
+
+    key_envs = list(builtin.get("key_envs") or ())
+    # Always accept {PID}_API_KEY and VISION_API_KEY
+    for extra in (f"{p}_API_KEY", "VISION_API_KEY"):
+        if extra not in key_envs:
+            key_envs.append(extra)
+
+    if not style:
+        style = _infer_api_style(pid, model, base_url)
+    if style not in ("gemini", "openai"):
+        raise ValueError(
+            f"Invalid API style '{style}' for provider '{pid}'. Use gemini or openai."
+        )
+
+    if not base_url or not model:
+        if pid not in BUILTIN_PROVIDERS:
+            raise ValueError(
+                f"Unknown provider '{pid}'. Built-ins: {', '.join(sorted(BUILTIN_PROVIDERS))}. "
+                f"For a custom provider set {p}_BASE_URL, {p}_API_KEY, {p}_MODEL "
+                f"(optional {p}_API_STYLE=gemini|openai)."
+            )
+        if not base_url:
+            base_url = builtin["base_url"]
+        if not model:
+            model = builtin["model"]
+
+    return {
+        "id": pid,
+        "base_url": base_url.rstrip("/"),
+        "model": model,
+        "api_style": style,
+        "key_envs": tuple(key_envs),
+        "note": builtin.get("note") or f"custom provider '{pid}'",
+        "builtin": pid in BUILTIN_PROVIDERS,
+    }
+
+
+def list_providers() -> list[dict]:
+    """Return builtin packs + active custom if configured."""
+    file_keys = load_dotenv_map()
+    rows = []
+    for pid, conf in BUILTIN_PROVIDERS.items():
+        live = provider_conf(pid)
+        rows.append({
+            "id": pid,
+            "builtin": True,
+            "model": live["model"],
+            "base_url": live["base_url"],
+            "api_style": live["api_style"],
+            "note": conf.get("note", ""),
+            "has_key": bool(load_api_key(pid)),
+        })
+    # surface active custom provider if not builtin
+    active = resolve_provider(None)
+    if active not in BUILTIN_PROVIDERS:
+        live = provider_conf(active)
+        rows.append({
+            "id": active,
+            "builtin": False,
+            "model": live["model"],
+            "base_url": live["base_url"],
+            "api_style": live["api_style"],
+            "note": live["note"],
+            "has_key": bool(load_api_key(active)),
+        })
+    return rows
+
+
+def resolve_provider(name: str | None = None) -> str:
+    """Resolve provider id: arg → VISION_PROVIDER → default (cpa).
+
+    Explicit CLI/name is always accepted (config validated later).
+    Env-only custom ids need {ID}_BASE_URL (and model/key) in env/.env.
+    """
+    file_keys = load_dotenv_map()
+    explicit = name is not None and str(name).strip() != ""
     raw = name or _env_or_file("VISION_PROVIDER", file_keys) or DEFAULT_PROVIDER
-    pid = str(raw).strip().lower()
-    if pid not in PROVIDERS:
-        known = ", ".join(sorted(PROVIDERS))
-        raise ValueError(f"Unknown provider '{pid}'. Known: {known}")
+    pid = str(raw).strip().lower() or DEFAULT_PROVIDER
+    if pid in BUILTIN_PROVIDERS or explicit:
+        return pid
+    # Env-selected custom: require minimal pack definition
+    p = pid.upper()
+    has_base = bool(_env_or_file(f"{p}_BASE_URL", file_keys))
+    has_model = bool(
+        _env_or_file(f"{p}_MODEL", file_keys)
+        or _env_or_file("VISION_MODEL", file_keys)
+    )
+    has_key = bool(
+        _env_or_file(f"{p}_API_KEY", file_keys)
+        or _env_or_file("VISION_API_KEY", file_keys)
+    )
+    if not (has_base and (has_model or has_key)):
+        known = ", ".join(sorted(BUILTIN_PROVIDERS))
+        raise ValueError(
+            f"Unknown provider '{pid}'. Built-ins: {known}. "
+            f"Or define custom: {p}_BASE_URL + {p}_API_KEY + {p}_MODEL "
+            f"(optional {p}_API_STYLE=gemini|openai)."
+        )
     return pid
 
 
 def load_api_key(provider: str | None = None) -> str:
     """Load API key for active provider (env then .env)."""
     file_keys = load_dotenv_map()
-    pid = resolve_provider(provider)
-    for env_name in PROVIDERS[pid]["key_envs"]:
+    conf = provider_conf(provider)
+    for env_name in conf["key_envs"]:
         key = _env_or_file(env_name, file_keys)
         if key:
             return key
@@ -644,11 +793,10 @@ def resolve_endpoint(
     """Return (provider_id, base_url, model, api_key).
 
     Precedence: CLI → {PROVIDER}_* → VISION_* (only for active provider) → pack defaults.
-    Switching --provider mimo ignores CPA's VISION_MODEL / VISION_BASE_URL.
     """
     file_keys = load_dotenv_map()
     pid = resolve_provider(provider)
-    conf = PROVIDERS[pid]
+    conf = provider_conf(pid)
     p = pid.upper()
     active_pid = resolve_provider(None)
 
@@ -658,7 +806,6 @@ def resolve_endpoint(
         prov = _env_or_file(prov_env, file_keys)
         if prov:
             return prov
-        # Global VISION_* only applies to the configured active provider
         if pid == active_pid:
             glob = _env_or_file(global_env, file_keys)
             if glob:
@@ -669,6 +816,25 @@ def resolve_endpoint(
     resolved_base = pick(base_url, f"{p}_BASE_URL", "VISION_BASE_URL", conf["base_url"])
     resolved_key = api_key or load_api_key(pid)
     return pid, resolved_base.rstrip("/"), resolved_model, resolved_key
+
+
+def resolve_api_style(
+    provider: str | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+) -> str:
+    conf = provider_conf(provider)
+    if model or base_url:
+        return _infer_api_style(
+            conf["id"],
+            model or conf["model"],
+            base_url or conf["base_url"],
+        ) if not (
+            _env_or_file(f"{conf['id'].upper()}_API_STYLE", load_dotenv_map())
+            or _env_or_file("VISION_API_STYLE", load_dotenv_map())
+            or BUILTIN_PROVIDERS.get(conf["id"], {}).get("api_style")
+        ) else conf["api_style"]
+    return conf["api_style"]
 
 
 def encode_file(file_path: str) -> tuple[str, str]:
@@ -834,7 +1000,10 @@ def analyze_media(
             f"Set {key_hint} or create scripts/.env."
         )
 
-    use_gemini_native = _provider == "cpa" or model.startswith("gemini")
+    conf = provider_conf(_provider)
+    # Prefer explicit pack style; allow one-shot override via env already in conf.
+    # If user only overrides model/base, keep pack style unless conf has no style.
+    use_gemini_native = conf["api_style"] == "gemini"
 
     kind = media_kind(media_input)
     # URL without clear extension: infer from mode (skip YouTube — always video)
@@ -1096,9 +1265,18 @@ def analyze_media(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Genius AV (视听) — image/video/audio (default: CPA gemini-3.6-flash-high)"
+        description=(
+            "Genius AV (视听) — multimodal analysis. "
+            "Built-in providers: cpa (default), google, mimo. "
+            "Custom: set {NAME}_BASE_URL / _API_KEY / _MODEL."
+        )
     )
-    parser.add_argument("file", help="Image/video/audio path or URL")
+    parser.add_argument(
+        "file",
+        nargs="?",
+        default=None,
+        help="Image/video/audio path or URL",
+    )
     parser.add_argument(
         "mode",
         nargs="?",
@@ -1115,8 +1293,7 @@ def main():
     parser.add_argument(
         "--provider", "-p",
         default=None,
-        choices=sorted(PROVIDERS.keys()),
-        help="Provider pack (default: cpa)",
+        help="Provider id: cpa|google|mimo or custom name (default: cpa)",
     )
     parser.add_argument(
         "--model", "-m",
@@ -1148,9 +1325,35 @@ def main():
         action="store_true",
         help="Only build analysis proxy and print path (no API call)",
     )
+    parser.add_argument(
+        "--list-providers",
+        action="store_true",
+        help="List configured providers and exit",
+    )
     args = parser.parse_args()
 
     try:
+        if args.list_providers:
+            rows = list_providers()
+            if args.output == "json":
+                print(json.dumps(rows, ensure_ascii=False, indent=2))
+            else:
+                active = resolve_provider(None)
+                print(f"active={active}\n")
+                for r in rows:
+                    mark = "*" if r["id"] == active else " "
+                    key = "key=yes" if r["has_key"] else "key=no"
+                    print(
+                        f"{mark} {r['id']:10} style={r['api_style']:7} "
+                        f"model={r['model']}\n"
+                        f"    base={r['base_url']}\n"
+                        f"    {key}  {r['note']}"
+                    )
+            return
+
+        if not args.file:
+            parser.error("file is required (unless --list-providers)")
+
         if args.proxy_only:
             kind = media_kind(args.file)
             if kind == "video":
