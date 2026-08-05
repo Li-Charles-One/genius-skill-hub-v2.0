@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius CPA Image"
-  short_description: "JP CPA Gemini image generation (sync)"
-  default_prompt: "Use $genius-cpa-image for JP CPA gemini image generation; always pass --out workspace/genius_output"
+  short_description: "Multi-provider CPA images: Gemini + gpt-image-2"
+  default_prompt: "Use $genius-cpa-image for CPA image generation (gemini-3.1-flash-image or gpt-image-2); always pass --out workspace/genius_output"

@@ -8,6 +8,12 @@
       "expected": "Uses genius-cpa-image / cpa_image.py with gemini-3.1-flash-image"
     },
     {
+      "id": "trigger-gpt-image-2",
+      "prompt": "用 CPA 的 gpt-image-2 生成一个红色方块图标",
+      "should_trigger": true,
+      "expected": "Uses genius-cpa-image with --model gpt-image-2 on US CPA images API"
+    },
+    {
       "id": "trigger-cpa-name",
       "prompt": "Genius_Cpa_image 帮我生图",
       "should_trigger": true,
@@ -30,6 +36,12 @@
       "prompt": "基于这张参考图，用 CPA Gemini 改成侧身站立",
       "should_trigger": true,
       "expected": "cpa_image.py with --ref"
+    },
+    {
+      "id": "codex-image",
+      "prompt": "US CPA Codex 生图 gpt-image-2",
+      "should_trigger": true,
+      "expected": "gpt-image-2 via cpa-us"
     }
   ]
 }
