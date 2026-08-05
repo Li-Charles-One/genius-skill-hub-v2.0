@@ -1,0 +1,35 @@
+{
+  "skill_name": "genius-cpa-image",
+  "evals": [
+    {
+      "id": "trigger-cpa-gemini",
+      "prompt": "用 JP CPA 的 gemini-3.1-flash-image 画一只窗边橘猫",
+      "should_trigger": true,
+      "expected": "Uses genius-cpa-image / cpa_image.py with gemini-3.1-flash-image"
+    },
+    {
+      "id": "trigger-cpa-name",
+      "prompt": "Genius_Cpa_image 帮我生图",
+      "should_trigger": true,
+      "expected": "Triggers genius-cpa-image"
+    },
+    {
+      "id": "no-trigger-crun-nano",
+      "prompt": "用 nano-banana-2-lite 快速出一张草稿",
+      "should_trigger": false,
+      "expected": "Crun/nano belongs to genius-image, not this skill"
+    },
+    {
+      "id": "no-trigger-dreamina",
+      "prompt": "用即梦 Seedream 生成海报",
+      "should_trigger": false,
+      "expected": "Use dreamina-cli"
+    },
+    {
+      "id": "ref-edit",
+      "prompt": "基于这张参考图，用 CPA Gemini 改成侧身站立",
+      "should_trigger": true,
+      "expected": "cpa_image.py with --ref"
+    }
+  ]
+}

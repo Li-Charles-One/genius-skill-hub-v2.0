@@ -1,7 +1,0 @@
-__pycache__/
-*.py[cod]
-genius_output/
-bin/cloudflared.exe
-bin/cloudflared
-*.log
-.env

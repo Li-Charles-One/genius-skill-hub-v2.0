@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius CPA Image"
+  short_description: "JP CPA Gemini image generation (sync)"
+  default_prompt: "Use $genius-cpa-image for JP CPA gemini image generation; always pass --out workspace/genius_output"
