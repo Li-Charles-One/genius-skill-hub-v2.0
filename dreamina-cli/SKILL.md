@@ -9,131 +9,160 @@ Use this skill when you need Dreamina（即梦） image or video generation, log
 
 即梦 is the Chinese product name of Dreamina. If the user says 即梦, treat it as Dreamina and use this skill.
 
-This skill is intentionally short. Detailed flags and supported values belong to the CLI itself, so always treat `dreamina -h` and `dreamina <subcommand> -h` as the primary reference.
+This skill is intentionally short. Detailed flags and supported values belong to the CLI itself, so always treat `dreamina -h` and `dreamina <subcommand> -h` as the primary reference. Model lists, resolution limits, and duration ranges change over time — never hardcode them from memory.
+
+## Install / update CLI
+
+```bash
+curl -fsSL https://jimeng.jianying.com/cli | bash
+dreamina version
+```
+
+Typical install path: `~/.local/bin/dreamina` (ensure that directory is on `PATH`).
 
 ## What this tool is for
 
-`dreamina` is the local CLI entrypoint for all currently exposed Dreamina（即梦） image and video generation workflows, plus the account/session operations around them.
+`dreamina` is the local CLI entrypoint for currently exposed Dreamina（即梦） image/video workflows, plus account/session operations.
 
 Use it for:
 
 - checking or reusing an existing Dreamina login session
-- checking account credit
+- checking account credit (`user_credit`)
 - managing sessions with `dreamina session`
-- clearing the local OAuth login state with `dreamina logout`
-- submitting image generation tasks
-- submitting video generation tasks
-- querying async task results and downloading result media
+- clearing local OAuth state with `dreamina logout`
+- submitting image generation / edit / upscale tasks
+- submitting video generation tasks (including Seedance family, e.g. 2.0 / 2.5)
+- querying async task results and downloading media
 - reviewing saved task history
 
 ## Default workflow
 
 When using this CLI as an agent:
 
-1. **Preflight:** verify the CLI is available before doing anything else. Run `dreamina -h`. If the command is not found, stop and report: the `dreamina` CLI is not installed or not on PATH. Do not proceed until the user confirms it is available.
-2. Before using any command for real, run `dreamina <subcommand> -h`.
-3. Reuse the current login state unless the user explicitly asks you to `login`, `relogin`, `logout`, or finish a headless login with `checklogin`.
-4. When login is required, run `dreamina login` or `dreamina relogin`. The CLI uses OAuth Device Flow and prints `verification_uri`, `user_code`, and `device_code`.
-5. Default login waits for authorization to complete. With `--headless`, the CLI prints the device-flow material and exits; then use `dreamina login checklogin --device_code=<device_code>` to finish the login later.
-6. Be explicit about whether you are only reading help, submitting a real task, or querying an existing task.
-7. Warn the user before running commands that may consume credits.
+1. **Preflight:** run `dreamina -h` (and optionally `dreamina version`). If `command not found`, install/update with `curl -fsSL https://jimeng.jianying.com/cli | bash`, then re-check. Do not invent flags.
+2. Before any real command, run `dreamina <subcommand> -h` and follow **that** help for required flags and model constraints.
+3. Reuse current login unless the user asks to `login`, `relogin`, `logout`, or finish headless login with `checklogin`.
+4. Login uses OAuth Device Flow and prints `verification_uri`, `user_code`, and `device_code`.
+5. Default login waits for authorization. With `--headless`, print material and exit; finish later with `dreamina login checklogin --device_code=<device_code>` (optional `--poll=N`).
+6. Be explicit whether you are only reading help, submitting a paid task, or querying an existing `submit_id`.
+7. Warn before commands that consume credits.
+8. Prefer `--poll=N` on generators for a short wait; if still `querying`, continue with `query_result`.
 
 ## Login completion: mandatory user-visible confirmation
 
-`dreamina login` / `dreamina relogin` prints OAuth Device Flow instructions and then waits for authorization. When the command finishes successfully, tell the user explicitly that login succeeded or the local OAuth state was reused.
+`dreamina login` / `dreamina relogin` prints OAuth Device Flow instructions and then waits (unless headless). When the command finishes, tell the user explicitly that login succeeded, state was reused, or it failed.
 
 - **Do not** wait for the user to ask “登录好了吗”.
-- **Do not** stop after only sending the device code: keep the login command running, read stdout to the end, then confirm success/reuse/failure.
-- **Failure** must still be reported with the concrete error and the next step.
+- **Do not** stop after only sending the device code: keep the login command running, read stdout to the end, then confirm.
+- **Failure** must include the concrete error and next step.
 
 ## Choosing the right command
 
 At a high level:
 
-- Use `user_credit` to check budget.
-- Use `session` to create, list, search, rename, or delete sessions; all generator commands accept `--session=<id>` and `0` is the default session.
-- Use `query_result` when you already have a `submit_id`; add `--download_dir` when you want the generated media saved locally.
-- Use `list_task` to review recent saved tasks, especially when you want to filter by status or task type.
-- Use `text2image` for prompt-only image generation, `image2image` for image-guided editing, and `image_upscale` for upscaling.
-- Use `text2video` for prompt-only video generation.
-- Use `image2video` when one main image is enough; if the user has multiple images for a coherent story, prefer `multiframe2video`.
-- Use `frames2video` for first-and-last-frame driven video generation.
-- Use `multiframe2video` for Dreamina's intelligent multi-frame flow: multiple images in, one coherent story video out.
-- Use `multimodal2video` for Dreamina's flagship video mode when the task needs all-around references across images, video, and audio; it supports the `seedance2.0` family. If the legacy name `ref2video` appears, trust `dreamina -h` for the current command surface.
+| Need | Command |
+|---|---|
+| Budget | `user_credit` |
+| Sessions | `session` create/list/search/rename/delete (`--session=<id>`; `0` is default) |
+| Query one task | `query_result --submit_id=<id>` (+ `--download_dir` to save media) |
+| List tasks | `list_task` (filter by status / type / submit_id) |
+| Text → image | `text2image` |
+| Image edit | `image2image` |
+| Upscale | `image_upscale` |
+| Text → video | `text2video` |
+| One image → video | `image2video` |
+| First+last frame video | `frames2video` |
+| Multi-image story video | `multiframe2video` (fixed model; no model picker) |
+| Flagship multimodal / 全能参考 | `multimodal2video` (images/video/audio; Seedance family incl. 2.5). Legacy name `ref2video` → trust current `dreamina -h` |
 
-For the exact flags and supported combinations, rely on each subcommand's `-h`.
+Exact flags always come from each subcommand’s `-h`.
+
+## Critical CLI rules (current generation surface)
+
+These are easy to miss and currently enforced strictly by the CLI:
+
+1. **`--resolution_type` is required** on common image commands (`text2image`, `image2image`, `image_upscale`) and must match the model’s allowed set.
+2. **`--video_resolution` is required** on current video generators (`text2video`, `image2video`, `frames2video`, `multiframe2video`, `multimodal2video`).
+3. Image commands support **custom `--width` + `--height` together**, mutually exclusive with `--ratio`; still require `--resolution_type`. Final pixels may be backend-aligned — trust `query_result`.
+4. Generators accept **`--poll=N`**: submit then poll up to N seconds (1s interval). `0` disables polling.
+5. Defaults (when help says so) may include e.g. image `model_version=5.0`, video `seedance2.0fast` / `seedance2.0_vip` depending on command — **do not override defaults unless the user asked**.
+6. **Seedance 2.5** (`seedance2.5`) appears on video commands as a VIP-oriented option with different resolution/duration limits than 2.0 family. Confirm on `-h` before use.
+7. Unsupported/legacy values are **rejected**, not silently rewritten.
+8. Runtime availability and queues can change even if a model is listed in help.
 
 ## Model selection rule
 
 Do not hardcode model support from this skill.
 
-If the user specifies a model, always check the relevant subcommand help before running it:
-
 ```bash
 dreamina <subcommand> -h
 ```
 
-Use the subcommand help to confirm:
+Confirm:
 
-- whether that command exposes model selection
-- whether the requested model is supported on that command
-- what other constraints apply to that model, such as duration, ratio, resolution, or whether the command supports `model_version` at all
+- whether the command exposes `--model_version`
+- whether the requested model is listed
+- constraints: duration, ratio, resolution, VIP, input counts
 
 Additional guidance:
 
-- some commands do not expose model selection at all
-- some models, especially the `seedance2.0` family, can be capacity-constrained
-- if the user cares more about speed than maximum quality, do not default to `seedance2.0` unless they explicitly ask for it
+- some commands have **no** model selection (`multiframe2video`)
+- if the user does not specify a model, keep the subcommand default
+- if they care about speed vs quality, pick only when help makes the trade-off clear; do not force Seedance 2.0/2.5 unless asked or quality is the priority
+- capacity-constrained / VIP models: set expectations before spending credits
 
-## How to judge submit success
+## How to judge submit acceptance vs terminal success
 
-Do not rely on shell exit code alone.
+Do **not** rely on shell exit code alone.
 
-For async generation commands, treat a submit as successful only when:
+| Signal | Meaning |
+|---|---|
+| `submit_id` present + `gen_status=querying` | **Accepted only** — not finished |
+| `gen_status=success` | Terminal success |
+| `gen_status=fail` | Terminal failure — report `fail_reason` verbatim |
 
-- `submit_id` is present
-- `gen_status` is `querying` or `success`
+After `--poll=N`, if still `querying`:
 
-If `gen_status` is `fail`, inspect `fail_reason` and reply proactively with the concrete reason.
+1. Save `submit_id` (e.g. `.dreamina_tasks.txt`: `<timestamp> <command> <submit_id>`)
+2. Continue with `query_result --submit_id=<id>` (+ `--download_dir` when needed)
+3. Use `list_task` for bulk review
+
+Before re-submitting a paid task, check saved IDs so you do not double-spend.
 
 ## Follow-up pattern for async tasks
 
-After a submit returns `querying`:
-
-1. Save the `submit_id` — write it to a local file (e.g. `.dreamina_tasks.txt`, one line per entry: `<timestamp> <command> <submit_id>`) before polling. This prevents re-submission if the session resets or the agent context reloads.
-2. Use `query_result --submit_id=<id>` for follow-up.
-3. Use `list_task` when you want to review saved tasks in bulk.
-
-Before re-submitting any paid task, check the saved log to confirm no in-progress submit_id already exists for this request.
-
-If you are running a test sweep, keep results in a machine-readable format so you can query the returned `submit_id` values later.
+1. Prefer generator `--poll=N` for a short wait.
+2. Persist `submit_id` before long polling or context switches.
+3. Finish with `query_result` until `success` or `fail`.
+4. For test sweeps, keep machine-readable logs of command, args, `submit_id`, status.
 
 ## Common failure handling
 
 | Error / symptom | Action |
 |:--|:--|
-| `dreamina: command not found` | CLI not installed or not on PATH — stop, report to user |
-| `AigcComplianceConfirmationRequired` | Ask user to complete web-side authorization at Dreamina, then retry once |
-| Network timeout / connection error | Wait 10–30s and retry once; if it fails again, report the error and let the user decide |
-| Rate limit / quota exceeded | Report the exact message; do not retry automatically — wait for user confirmation |
-| `gen_status: fail` + `fail_reason` | Report `fail_reason` verbatim; do not silently retry |
+| `dreamina: command not found` | Install/update: `curl -fsSL https://jimeng.jianying.com/cli \| bash`; ensure `~/.local/bin` on PATH |
+| Missing required `--resolution_type` / `--video_resolution` | Re-read `-h`; add the required flag (current CLI rejects omit on many commands) |
+| `AigcComplianceConfirmationRequired` | User must complete first-time model use / authorization on Dreamina Web, then retry once |
+| Network timeout / connection error | Wait 10–30s, retry once; if fails again, report and stop |
+| Rate limit / quota exceeded | Report exact message; do not auto-retry |
+| `gen_status: fail` + `fail_reason` | Report `fail_reason` verbatim; do not silent-retry |
+| VIP-only model/resolution rejected | Explain VIP requirement; offer a non-VIP alternative from current `-h` |
 
 ## Important user-facing rules
 
-- Some generation commands are asynchronous; submit and query are separate steps.
-- Some models may require a one-time authorization on Dreamina Web.
-  If the CLI returns `AigcComplianceConfirmationRequired`, reply proactively: ask them to complete that web-side confirmation first, then retry.
-- Do not assume that different commands support the same models, ratios, durations, or resolutions.
-  Check each subcommand's `-h` before use.
+- Generation is usually asynchronous: submit ≠ finished.
+- Some models need a one-time Dreamina Web confirmation before CLI works.
+- Different commands do **not** share the same models / ratios / durations / resolutions.
+- Always re-check `-h` after CLI updates (`dreamina version`).
 
 ## Good agent behavior
 
-- Relay OAuth Device Flow instructions exactly enough for the user to complete login.
-- Always close the loop when the login command finishes with a user-visible confirmation.
-- Prefer small, reviewable batches when running real generation tasks.
-- Keep a record of the command, arguments, `submit_id`, and final status for every paid test you run.
-- When the user cares about generation speed, do not default to the `seedance2.0` family unless they explicitly ask for it or clearly prioritize output quality.
-- If you are preparing a report, separate:
+- Relay OAuth Device Flow material clearly enough for the user to finish login.
+- Always close the login loop with success/reuse/failure.
+- Prefer small, reviewable paid batches.
+- Record command, arguments, `submit_id`, and terminal status for every paid run.
+- When reporting, separate:
   - help-only inspection
-  - submit-stage validation
-  - later async result follow-up
+  - submit acceptance (`querying`)
+  - terminal result (`success` / `fail`)
+  - downloaded file paths (if any)
