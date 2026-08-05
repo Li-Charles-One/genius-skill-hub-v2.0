@@ -76,4 +76,51 @@ with tempfile.TemporaryDirectory() as td:
     assert tasks[1]["aspect"] == "1:4"
     print("  PASS batch")
 
+print("=== local job store ===")
+with tempfile.TemporaryDirectory() as td:
+    out = Path(td)
+    mod.OUT_DIR = out
+    mod.JOBS_DIR = out / "Jobs"
+    mod.LOG_DIR = out / "Logs"
+    mod.LOG_FILE = mod.LOG_DIR / "cpa_image_log.jsonl"
+    job_id = mod.new_job_id("test")
+    job = {
+        "job_id": job_id,
+        "kind": "single",
+        "status": "queued",
+        "created_at": mod.now_iso(),
+        "payload": {"task": {"prompt": "x"}, "name": "n"},
+        "result": None,
+        "error": None,
+    }
+    path = mod.write_job(job)
+    assert path.is_file()
+    loaded = mod.read_job(job_id)
+    assert loaded["status"] == "queued"
+    mod.update_job(job_id, status="running", pid=123)
+    assert mod.read_job(job_id)["status"] == "running"
+    assert mod.is_terminal_status("success")
+    assert not mod.is_terminal_status("running")
+    print("  PASS job store")
+
+print("=== cooldown fail-fast ===")
+body = json.dumps({
+    "error": {
+        "code": "model_cooldown",
+        "message": "All credentials cooling down",
+        "model": "gemini-3.1-flash-image",
+        "provider": "antigravity",
+        "reset_seconds": 100,
+        "reset_time": "1h40m",
+    }
+})
+msg = mod.format_http_error(429, body)
+assert "model_cooldown" in msg
+assert "reset_time=1h40m" in msg
+assert "reset_seconds=100" in msg
+assert mod.is_non_retryable_error(RuntimeError(msg))
+assert mod.is_non_retryable_error(RuntimeError("HTTP 400: bad aspect"))
+assert not mod.is_non_retryable_error(RuntimeError("request failed 3 times: timeout"))
+print("  PASS cooldown formatting + no-retry policy")
+
 print("=== self-test done ===")

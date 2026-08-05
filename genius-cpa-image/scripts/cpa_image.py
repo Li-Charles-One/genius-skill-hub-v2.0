@@ -21,23 +21,74 @@ import json
 import mimetypes
 import os
 import re
+import subprocess
 import sys
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 import requests
 
-API_KEY = os.getenv("CPA_JP_API_KEY") or os.getenv("CPA_API_KEY")
-BASE = (os.getenv("CPA_JP_BASE") or "https://cpa-jp.charles-ai.space").rstrip("/")
-
 HERE = Path(__file__).resolve().parent
+SKILL_DIR = HERE.parent
 OUT_DIR = Path.cwd() / "genius_output"
 LOG_DIR = OUT_DIR / "Logs"
+JOBS_DIR = OUT_DIR / "Jobs"
 LOG_FILE = LOG_DIR / "cpa_image_log.jsonl"
 LOG_MAX_SIZE = 10 * 1024 * 1024
 LOG_ARCHIVE_DAYS = 7
+DEFAULT_WAIT_TIMEOUT = 600
+JOB_POLL_INTERVAL = 1.0
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    """Parse a simple KEY=VALUE .env file. Never raise on missing file."""
+    if not path.exists() or not path.is_file():
+        return {}
+    data: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        data[key.strip()] = value.strip().strip('"').strip("'")
+    return data
+
+
+def load_dotenv_map() -> dict[str, str]:
+    """Load first existing local secrets file (never committed).
+
+    Search order:
+      1) skill root .env
+      2) scripts/.env
+      3) skill root Genius_cpa_image.env
+    """
+    candidates = [
+        SKILL_DIR / ".env",
+        HERE / ".env",
+        SKILL_DIR / "Genius_cpa_image.env",
+    ]
+    for path in candidates:
+        data = load_dotenv(path)
+        if data:
+            return data
+    return {}
+
+
+def env_or_file(name: str, file_keys: dict[str, str], default: str = "") -> str:
+    """Prefer process env (override), then skill-local .env."""
+    return (os.environ.get(name) or file_keys.get(name) or default).strip()
+
+
+_FILE_KEYS = load_dotenv_map()
+API_KEY = env_or_file("CPA_JP_API_KEY", _FILE_KEYS) or env_or_file(
+    "CPA_API_KEY", _FILE_KEYS
+)
+BASE = env_or_file(
+    "CPA_JP_BASE", _FILE_KEYS, "https://cpa-jp.charles-ai.space"
+).rstrip("/")
 
 # Official Gemini 3.1 Flash Image ratios (incl. extreme)
 ASPECTS = {
@@ -80,7 +131,11 @@ def configure_stdio():
 
 def require_api_key():
     if not API_KEY:
-        raise RuntimeError("CPA_JP_API_KEY (or CPA_API_KEY) not set")
+        raise RuntimeError(
+            "CPA_JP_API_KEY (or CPA_API_KEY) not set. "
+            "Export it, or put it in skill .env / scripts/.env "
+            "(see .env.example). Never commit real keys."
+        )
     return API_KEY
 
 
@@ -91,19 +146,90 @@ def headers():
     }
 
 
+def parse_error_payload(text: str):
+    """Best-effort parse of CPA/Gemini JSON error body."""
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    err = data.get("error")
+    if isinstance(err, dict):
+        return err
+    return data if any(k in data for k in ("code", "message", "reset_time", "reset_seconds")) else None
+
+
+def format_http_error(status: int, body: str) -> str:
+    err = parse_error_payload(body)
+    if not err:
+        snippet = (body or "").strip().replace("\n", " ")
+        if len(snippet) > 300:
+            snippet = snippet[:300] + "..."
+        return f"HTTP {status}: {snippet or '(empty body)'}"
+
+    code = err.get("code")
+    message = err.get("message") or err.get("msg") or str(err)
+    model = err.get("model")
+    provider = err.get("provider")
+    reset_time = err.get("reset_time") or err.get("resetTime")
+    reset_seconds = err.get("reset_seconds")
+    if reset_seconds is None:
+        reset_seconds = err.get("resetSeconds")
+
+    parts = [f"HTTP {status}"]
+    if code:
+        parts.append(f"code={code}")
+    if model:
+        parts.append(f"model={model}")
+    if provider:
+        parts.append(f"provider={provider}")
+    if reset_time:
+        parts.append(f"reset_time={reset_time}")
+    if reset_seconds is not None:
+        parts.append(f"reset_seconds={reset_seconds}")
+    parts.append(f"message={message}")
+    return " ".join(parts)
+
+
+def is_non_retryable_error(exc: BaseException) -> bool:
+    """Cooldown / auth / bad-request should fail fast (no multi-retry loops)."""
+    msg = str(exc).lower()
+    if "model_cooldown" in msg or "cooling down" in msg:
+        return True
+    if "reset_time=" in msg or "reset_seconds=" in msg:
+        return True
+    # 429 with explicit cooldown/rate limit text
+    if "http 429" in msg:
+        return True
+    if "http 400" in msg or "http 401" in msg or "http 403" in msg or "http 404" in msg:
+        return True
+    return False
+
+
 def request_with_retry(method, url, retries=MAX_RETRIES, **kwargs):
-    last = None
+    """Retry transient network errors only.
+
+    model_cooldown / HTTP 429 fail immediately — do not burn retries.
+    """
+    last_exc = None
     for i in range(retries):
         try:
             r = requests.request(method, url, **kwargs)
             if r.status_code == 429:
-                time.sleep(2 ** i + 1)
-                continue
+                # Fail fast: provider cooldown can last hours; retrying is wasteful.
+                raise RuntimeError(format_http_error(429, r.text or ""))
             return r
+        except RuntimeError:
+            raise
         except requests.RequestException as e:
-            last = e
+            last_exc = e
+            if i + 1 >= retries:
+                break
             time.sleep(2 ** i)
-    raise RuntimeError(f"request failed {retries} times: {last}")
+    raise RuntimeError(f"request failed {retries} times: {last_exc}")
 
 
 def emit_result(**fields):
@@ -135,6 +261,439 @@ def clean_old_logs():
         if f.stat().st_mtime < cutoff:
             f.unlink()
             log_print(f"  [log] removed archive: {f.name}")
+
+
+def now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def job_path(job_id: str) -> Path:
+    return JOBS_DIR / f"{job_id}.json"
+
+
+def job_log_path(job_id: str) -> Path:
+    return JOBS_DIR / f"{job_id}.log"
+
+
+def new_job_id(prefix: str = "cpa") -> str:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{prefix}-{stamp}-{uuid.uuid4().hex[:8]}"
+
+
+def write_job(job: dict) -> Path:
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    job = dict(job)
+    job["updated_at"] = now_iso()
+    path = job_path(job["job_id"])
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
+def read_job(job_id: str) -> dict:
+    path = job_path(job_id)
+    if not path.is_file():
+        raise RuntimeError(f"job not found: {job_id} ({path})")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise RuntimeError(f"invalid job file {path}: {e}")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"invalid job file {path}: not an object")
+    return data
+
+
+def update_job(job_id: str, **fields) -> dict:
+    job = read_job(job_id)
+    job.update(fields)
+    write_job(job)
+    return job
+
+
+def is_terminal_status(status: str) -> bool:
+    return status in {"success", "failed", "partial", "batch_done"}
+
+
+def print_job_summary(job: dict, verbose: bool = True):
+    job_id = job.get("job_id")
+    status = job.get("status")
+    kind = job.get("kind") or "single"
+    log_print(f"job_id : {job_id}")
+    log_print(f"status : {status}")
+    log_print(f"kind   : {kind}")
+    if job.get("created_at"):
+        log_print(f"created: {job['created_at']}")
+    if job.get("updated_at"):
+        log_print(f"updated: {job['updated_at']}")
+    if job.get("pid"):
+        log_print(f"pid    : {job['pid']}")
+    if job.get("error"):
+        log_print(f"error  : {job['error']}")
+    result = job.get("result") or {}
+    if isinstance(result, dict):
+        if result.get("path"):
+            log_print(f"path   : {result['path']}")
+        if result.get("duration_s") is not None:
+            log_print(f"duration: {result['duration_s']}s")
+        if result.get("ok") is not None:
+            log_print(f"ok/fail: {result.get('ok')}/{result.get('fail')}")
+    if verbose and job.get("log_path"):
+        log_print(f"log    : {job['log_path']}")
+
+
+def spawn_job_worker(job_id: str) -> int:
+    """Detach a worker process that continues after the CLI exits."""
+    script = Path(__file__).resolve()
+    log_file = job_log_path(job_id)
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        sys.executable,
+        "-u",
+        str(script),
+        "--_run-job",
+        job_id,
+        "--out",
+        str(OUT_DIR),
+    ]
+    # Keep current env so CPA_JP_* overrides still work; .env is also reloaded by worker.
+    env = os.environ.copy()
+    with open(log_file, "a", encoding="utf-8") as logf:
+        logf.write(f"\n===== worker spawn {now_iso()} =====\n")
+        logf.write("cmd: " + " ".join(cmd) + "\n")
+        logf.flush()
+        proc = subprocess.Popen(
+            cmd,
+            stdout=logf,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            cwd=str(Path.cwd()),
+            env=env,
+            start_new_session=True,
+            close_fds=True,
+        )
+    return proc.pid
+
+
+def submit_async_job(kind: str, payload: dict) -> dict:
+    require_api_key()
+    job_id = new_job_id("cpa")
+    log_file = job_log_path(job_id)
+    job = {
+        "job_id": job_id,
+        "kind": kind,
+        "status": "queued",
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        "out_dir": str(OUT_DIR),
+        "log_path": str(log_file),
+        "payload": payload,
+        "result": None,
+        "error": None,
+        "pid": None,
+    }
+    write_job(job)
+    pid = spawn_job_worker(job_id)
+    job = update_job(job_id, pid=pid, status="queued")
+    log_print(f">> async submitted job_id={job_id} pid={pid}")
+    log_print(f"   status file: {job_path(job_id)}")
+    log_print(f"   worker log : {log_file}")
+    emit_result(
+        status="queued",
+        job_id=job_id,
+        kind=kind,
+        pid=pid,
+        path=job_path(job_id),
+        provider="cpa-jp",
+        api="generateContent",
+        mode="async-local",
+    )
+    return job
+
+
+def run_job_worker(job_id: str):
+    """Internal worker entry: execute a previously queued local job."""
+    job = read_job(job_id)
+    if job.get("status") in {"success", "failed", "partial", "batch_done"}:
+        log_print(f">> job {job_id} already terminal: {job.get('status')}")
+        return
+    update_job(job_id, status="running", pid=os.getpid(), started_at=now_iso())
+    kind = job.get("kind") or "single"
+    payload = job.get("payload") or {}
+    t0 = time.time()
+    try:
+        if kind == "single":
+            task = payload.get("task") or {}
+            name = payload.get("name")
+            info = generate_one(task, name=name)
+            result = {
+                "task_id": info["task_id"],
+                "path": str(info["path"]),
+                "size": info["size"],
+                "duration_s": round(info["duration_s"], 1),
+                "model": info["model"],
+                "prompt": info["prompt"],
+                "aspect": info["aspect"],
+                "resolution": info["resolution"],
+                "n_images": info.get("n_images"),
+            }
+            update_job(
+                job_id,
+                status="success",
+                finished_at=now_iso(),
+                result=result,
+                error=None,
+                duration_s=round(time.time() - t0, 1),
+            )
+            log_print(f">> job success path={info['path']}")
+            emit_result(
+                status="success",
+                job_id=job_id,
+                model=info["model"],
+                provider="cpa-jp",
+                api="generateContent",
+                mode="async-local",
+                task_id=info["task_id"],
+                path=info["path"],
+                aspect=info["aspect"],
+                resolution=info["resolution"],
+                duration_s=round(info["duration_s"], 1),
+                size_kb=round(info["size"] / 1024, 1),
+            )
+            write_log({
+                "timestamp": now_iso(),
+                "job_id": job_id,
+                "task_id": info["task_id"],
+                "model": info["model"],
+                "provider": "cpa-jp",
+                "api": "generateContent",
+                "mode": "async-local",
+                "prompt": info["prompt"],
+                "aspect": info["aspect"],
+                "resolution": info["resolution"],
+                "duration_s": round(info["duration_s"], 1),
+                "file_size_kb": round(info["size"] / 1024, 1),
+                "file_path": str(info["path"]),
+                "status": "success",
+            })
+        elif kind == "batch":
+            tasks = payload.get("tasks") or []
+            concurrent = int(payload.get("concurrent") or DEFAULT_CONCURRENT)
+            if not tasks:
+                raise RuntimeError("async batch payload has no tasks")
+            n = len(tasks)
+            log_print(
+                f">> async batch job={job_id} tasks={n} concurrent={concurrent}"
+            )
+            ok = fail = 0
+            paths = []
+
+            def one(idx, task):
+                info = generate_one(task, name=task.get("name"))
+                return idx, info
+
+            with ThreadPoolExecutor(max_workers=max(1, concurrent)) as ex:
+                futures = [ex.submit(one, i, t) for i, t in enumerate(tasks)]
+                for fut in as_completed(futures):
+                    try:
+                        idx, info = fut.result()
+                        ok += 1
+                        paths.append(str(info["path"]))
+                        log_print(
+                            f"  [{idx+1}/{n}] OK {info['path'].name} "
+                            f"({info['aspect']}/{info['resolution']}, {info['duration_s']:.1f}s)"
+                        )
+                        emit_result(
+                            status="success",
+                            job_id=job_id,
+                            model=info["model"],
+                            provider="cpa-jp",
+                            api="generateContent",
+                            mode="async-local",
+                            task_id=info["task_id"],
+                            path=info["path"],
+                            aspect=info["aspect"],
+                            resolution=info["resolution"],
+                            duration_s=round(info["duration_s"], 1),
+                            size_kb=round(info["size"] / 1024, 1),
+                        )
+                        write_log({
+                            "timestamp": now_iso(),
+                            "job_id": job_id,
+                            "task_id": info["task_id"],
+                            "model": info["model"],
+                            "provider": "cpa-jp",
+                            "api": "generateContent",
+                            "mode": "async-local",
+                            "prompt": info["prompt"],
+                            "aspect": info["aspect"],
+                            "resolution": info["resolution"],
+                            "duration_s": round(info["duration_s"], 1),
+                            "file_size_kb": round(info["size"] / 1024, 1),
+                            "file_path": str(info["path"]),
+                            "status": "success",
+                        })
+                    except Exception as e:
+                        fail += 1
+                        log_print(f"  FAIL: {e}")
+                        emit_result(
+                            status="failed",
+                            job_id=job_id,
+                            provider="cpa-jp",
+                            mode="async-local",
+                            error=str(e),
+                        )
+                        write_log({
+                            "timestamp": now_iso(),
+                            "job_id": job_id,
+                            "provider": "cpa-jp",
+                            "api": "generateContent",
+                            "mode": "async-local",
+                            "status": "failed",
+                            "error": str(e),
+                        })
+
+            if fail and not ok:
+                status = "failed"
+            elif fail:
+                status = "partial"
+            else:
+                status = "success"
+            result = {
+                "ok": ok,
+                "fail": fail,
+                "total": n,
+                "paths": paths,
+                "duration_s": round(time.time() - t0, 1),
+            }
+            update_job(
+                job_id,
+                status=status,
+                finished_at=now_iso(),
+                result=result,
+                error=None if ok else f"{fail}/{n} tasks failed",
+                duration_s=result["duration_s"],
+            )
+            log_print(f">> async batch done status={status} ok={ok} fail={fail}")
+            emit_result(
+                status="batch_done",
+                job_id=job_id,
+                ok=ok,
+                fail=fail,
+                duration_s=result["duration_s"],
+                mode="async-local",
+            )
+        else:
+            raise RuntimeError(f"unknown job kind: {kind}")
+    except Exception as e:
+        update_job(
+            job_id,
+            status="failed",
+            finished_at=now_iso(),
+            error=str(e),
+            duration_s=round(time.time() - t0, 1),
+        )
+        log_print(f">> job failed: {e}")
+        emit_result(
+            status="failed",
+            job_id=job_id,
+            provider="cpa-jp",
+            mode="async-local",
+            error=str(e),
+        )
+        write_log({
+            "timestamp": now_iso(),
+            "job_id": job_id,
+            "provider": "cpa-jp",
+            "api": "generateContent",
+            "mode": "async-local",
+            "status": "failed",
+            "error": str(e),
+        })
+        raise
+
+
+def run_status(job_id: str):
+    job = read_job(job_id)
+    print_job_summary(job, verbose=True)
+    emit_result(
+        status=job.get("status"),
+        job_id=job_id,
+        kind=job.get("kind"),
+        path=(job.get("result") or {}).get("path") if isinstance(job.get("result"), dict) else None,
+        error=job.get("error"),
+        mode="async-local",
+    )
+    return job
+
+
+def run_wait(job_id: str, timeout: float = DEFAULT_WAIT_TIMEOUT):
+    t0 = time.time()
+    log_print(f">> wait job_id={job_id} timeout={timeout}s")
+    while True:
+        job = read_job(job_id)
+        status = job.get("status") or "unknown"
+        if is_terminal_status(status):
+            print_job_summary(job, verbose=True)
+            emit_result(
+                status=status,
+                job_id=job_id,
+                kind=job.get("kind"),
+                path=(job.get("result") or {}).get("path")
+                if isinstance(job.get("result"), dict)
+                else None,
+                error=job.get("error"),
+                waited_s=round(time.time() - t0, 1),
+                mode="async-local",
+            )
+            if status == "failed":
+                sys.exit(1)
+            return job
+        if time.time() - t0 >= timeout:
+            print_job_summary(job, verbose=True)
+            emit_result(
+                status="timeout",
+                job_id=job_id,
+                kind=job.get("kind"),
+                waited_s=round(time.time() - t0, 1),
+                mode="async-local",
+            )
+            raise RuntimeError(
+                f"wait timeout after {timeout}s; job still {status}. "
+                f"Check {job_path(job_id)} / {job_log_path(job_id)}"
+            )
+        time.sleep(JOB_POLL_INTERVAL)
+
+
+def run_list_jobs(limit: int = 20):
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    files = sorted(JOBS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        log_print(">> no jobs")
+        emit_result(status="empty", mode="async-local", count=0)
+        return
+    shown = 0
+    for path in files:
+        if shown >= limit:
+            break
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(job, dict):
+            continue
+        shown += 1
+        result = job.get("result") or {}
+        path_hint = ""
+        if isinstance(result, dict) and result.get("path"):
+            path_hint = f" path={result['path']}"
+        elif isinstance(result, dict) and result.get("ok") is not None:
+            path_hint = f" ok={result.get('ok')} fail={result.get('fail')}"
+        log_print(
+            f"{job.get('job_id')}\t{job.get('status')}\t{job.get('kind')}\t"
+            f"{job.get('updated_at') or job.get('created_at') or ''}{path_hint}"
+        )
+    emit_result(status="listed", mode="async-local", count=shown)
 
 
 def safe_filename_stem(text, max_len=36):
@@ -393,10 +952,8 @@ def submit(task):
     except Exception:
         raise RuntimeError(f"non-JSON HTTP {r.status_code}: {r.text[:300]}")
     if r.status_code >= 400:
-        err = d.get("error") if isinstance(d, dict) else d
-        if isinstance(err, dict):
-            raise RuntimeError(f"HTTP {r.status_code}: {err.get('message') or err}")
-        raise RuntimeError(f"HTTP {r.status_code}: {err or d}")
+        # Prefer structured formatter so cooldown/reset fields survive.
+        raise RuntimeError(format_http_error(r.status_code, r.text or json.dumps(d, ensure_ascii=False)))
     images, texts = extract_images_from_generate_content(d)
     # use response id if any, else timestamp
     tid = d.get("responseId") or d.get("id") or f"cpa-{int(time.time())}"
@@ -459,6 +1016,9 @@ def generate_one(task, name=None):
             break
         except Exception as e:
             last_err = e
+            if is_non_retryable_error(e):
+                log_print(f"  [no-retry] {e}")
+                break
             log_print(f"  [retryable] {e}")
     if result is None:
         raise RuntimeError(last_err or "generation failed")
@@ -505,6 +1065,14 @@ def run_single(args):
         log_print(f">> refs: {len(args.ref)}")
     if args.google_search:
         log_print(">> google_search: on")
+    if getattr(args, "async_mode", False):
+        # Validate early so queued jobs fail fast before detach.
+        validated = validate_task(dict(task))
+        submit_async_job(
+            "single",
+            {"task": validated, "name": args.name},
+        )
+        return
     try:
         info = generate_one(task, name=args.name)
     except Exception as e:
@@ -571,6 +1139,12 @@ def run_batch(args):
     tasks = load_batch(args.batch)
     n = len(tasks)
     log_print(f">> batch: {n} tasks, concurrent={args.concurrent}, api=generateContent, base={BASE}")
+    if getattr(args, "async_mode", False):
+        submit_async_job(
+            "batch",
+            {"tasks": tasks, "concurrent": args.concurrent},
+        )
+        return
     ok = fail = 0
     t0 = time.time()
 
@@ -644,17 +1218,36 @@ def main():
     ap.add_argument("--no-gen", action="store_true", help="required with --preflight")
     ap.add_argument("--list-models", action="store_true")
     ap.add_argument("--out", default=None, help="output directory (default ./genius_output)")
+    # Local async jobs (client-side background workers; not server-side job API)
+    ap.add_argument("--async", dest="async_mode", action="store_true",
+                    help="submit single/batch job and return immediately")
+    ap.add_argument("--status", metavar="JOB_ID", help="show local async job status")
+    ap.add_argument("--wait", metavar="JOB_ID", help="wait until local async job finishes")
+    ap.add_argument("--list-jobs", action="store_true", help="list recent local async jobs")
+    ap.add_argument("--timeout", type=float, default=DEFAULT_WAIT_TIMEOUT,
+                    help=f"seconds for --wait (default {DEFAULT_WAIT_TIMEOUT})")
+    ap.add_argument("--_run-job", dest="run_job", metavar="JOB_ID",
+                    help=argparse.SUPPRESS)
     args = ap.parse_args()
 
-    global OUT_DIR, LOG_DIR, LOG_FILE
+    global OUT_DIR, LOG_DIR, LOG_FILE, JOBS_DIR
     if args.out:
-        OUT_DIR = Path(args.out)
+        OUT_DIR = Path(args.out).expanduser().resolve()
+    else:
+        OUT_DIR = Path(OUT_DIR).expanduser().resolve()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR = OUT_DIR / "Logs"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     LOG_FILE = LOG_DIR / "cpa_image_log.jsonl"
+    JOBS_DIR = OUT_DIR / "Jobs"
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
+        # Internal worker: keep before clean_old_logs noise if desired, but logs ok.
+        if args.run_job:
+            clean_old_logs()
+            run_job_worker(args.run_job)
+            return
         if args.preflight:
             if not args.no_gen:
                 raise RuntimeError("--preflight requires --no-gen")
@@ -664,13 +1257,25 @@ def main():
             for mid in list_models():
                 log_print(mid)
             return
+        if args.list_jobs:
+            run_list_jobs()
+            return
+        if args.status:
+            run_status(args.status)
+            return
+        if args.wait:
+            run_wait(args.wait, timeout=args.timeout)
+            return
         clean_old_logs()
         if args.batch:
             run_batch(args)
         elif args.prompt:
             run_single(args)
         else:
-            ap.error("need prompt, --batch, --preflight, or --list-models")
+            ap.error(
+                "need prompt, --batch, --preflight, --list-models, "
+                "--status, --wait, or --list-jobs"
+            )
     except RuntimeError as e:
         sys.exit(f"ERROR: {e}")
 
