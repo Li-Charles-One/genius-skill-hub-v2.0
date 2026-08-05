@@ -2,20 +2,21 @@
 """
 Genius AV (视听) — Image / video / audio analysis via OpenAI-compatible multimodal API.
 
-Default provider: CPA (gemini-3.6-flash-high).
-Fallback provider: Xiaomi MiMo (mimo-v2.5, Token Plan).
+Default provider: CPA (gemini-3.6-flash-high) via native generateContent.
+Fallback provider: Xiaomi MiMo (mimo-v2.5, Token Plan) via OpenAI chat.completions.
 
 Usage:
     python vision.py <file_path_or_url> <mode> [--output json|text] [--provider cpa|mimo]
-    python vision.py <file> describe --model gemini-3.6-flash-high
+    python vision.py https://www.youtube.com/watch?v=... video-summary
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
 Audio modes (4):  audio-summary, audio-transcribe, audio-review, audio-scene
-Auto-detect:      video / audio / image by extension (URL path suffix also works)
+Auto-detect:      video / audio / image by extension; YouTube URLs → video
 Compare:          python vision.py img1.png compare --compare-with img2.png
 
-For video/audio, ffprobe duration is injected as ground truth when available.
+CPA native: local → inline_data; YouTube → file_data.file_uri
+MiMo:       OpenAI-compatible image_url / video_url / input_audio
 
 Environment:
     VISION_PROVIDER — cpa (default) | mimo
@@ -207,8 +208,20 @@ def _path_suffix(path_or_url: str) -> str:
     return Path(clean).suffix.lower()
 
 
+def is_youtube_url(url: str) -> bool:
+    if not url.startswith(("http://", "https://")):
+        return False
+    host = url.split("://", 1)[1].split("/", 1)[0].lower()
+    return host in {
+        "youtube.com", "www.youtube.com", "m.youtube.com",
+        "youtu.be", "www.youtu.be", "music.youtube.com",
+    } or "youtube.com" in host
+
+
 def media_kind(path_or_url: str) -> str:
     """Return 'video' | 'audio' | 'image' from extension (works for URLs too)."""
+    if is_youtube_url(path_or_url):
+        return "video"
     suffix = _path_suffix(path_or_url)
     if suffix in AUDIO_EXTENSIONS:
         return "audio"
@@ -695,6 +708,101 @@ def encode_file(file_path: str) -> tuple[str, str]:
     return data, media_type
 
 
+def _gemini_api_root(base_url: str) -> str:
+    """Map OpenAI-style .../v1 base to host root for /v1beta/... routes."""
+    u = base_url.rstrip("/")
+    if u.endswith("/v1"):
+        return u[: -len("/v1")]
+    if u.endswith("/v1beta/openai"):
+        return u[: -len("/v1beta/openai")]
+    if u.endswith("/openai"):
+        return u[: -len("/openai")]
+    return u
+
+
+def _http_proxy() -> str | None:
+    return (
+        os.environ.get("HTTPS_PROXY")
+        or os.environ.get("https_proxy")
+        or os.environ.get("HTTP_PROXY")
+        or os.environ.get("http_proxy")
+        or os.environ.get("ALL_PROXY")
+        or os.environ.get("all_proxy")
+        or None
+    )
+
+
+def _gemini_inline_part(path: str, part_kind: str) -> dict:
+    b64, mime = encode_file(path)
+    return {"inline_data": {"mime_type": mime, "data": b64}}
+
+
+def _gemini_media_part(path_or_url: str, part_kind: str) -> dict:
+    if is_youtube_url(path_or_url):
+        return {
+            "file_data": {
+                "file_uri": path_or_url,
+                "mime_type": "video/*",
+            }
+        }
+    if path_or_url.startswith(("http://", "https://")):
+        # Public direct media URL via file_data (best-effort on CPA)
+        mime = {
+            "image": "image/jpeg",
+            "video": "video/mp4",
+            "audio": "audio/mpeg",
+        }.get(part_kind, "application/octet-stream")
+        suffix = _path_suffix(path_or_url)
+        if suffix:
+            try:
+                # reuse encode_file mime table via a dummy — map common suffixes
+                mime_map = {
+                    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                    ".gif": "image/gif", ".webp": "image/webp",
+                    ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
+                    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
+                    ".flac": "audio/flac", ".ogg": "audio/ogg",
+                }
+                mime = mime_map.get(suffix, mime)
+            except Exception:
+                pass
+        return {"file_data": {"file_uri": path_or_url, "mime_type": mime}}
+    return _gemini_inline_part(path_or_url, part_kind)
+
+
+def _extract_gemini_text(data: dict, show_think: bool = False) -> str:
+    texts = []
+    thoughts = []
+    for cand in data.get("candidates") or []:
+        for part in (cand.get("content") or {}).get("parts") or []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("text"):
+                if part.get("thought"):
+                    thoughts.append(part["text"])
+                else:
+                    texts.append(part["text"])
+    result = "\n".join(texts).strip()
+    if not result and thoughts:
+        result = "\n".join(thoughts).strip()
+    if show_think and thoughts and texts:
+        result = (
+            "<thinking>\n" + "\n".join(thoughts) + "\n</thinking>\n\n" + "\n".join(texts)
+        )
+    if result:
+        return result
+    # fallback OpenAI-shaped (some gateways)
+    try:
+        msg = data["choices"][0]["message"]
+        return msg.get("content") or msg.get("reasoning_content") or ""
+    except Exception:
+        pass
+    err = data.get("error") or {}
+    if err:
+        raise RuntimeError(f"API error: {err.get('message') or err}")
+    raise RuntimeError(f"Empty model response: {json.dumps(data, ensure_ascii=False)[:300]}")
+
+
 def analyze_media(
     media_input: str,
     mode: str = "describe",
@@ -705,11 +813,12 @@ def analyze_media(
     compare_with: str = None,
     force_proxy: bool = False,
 ) -> str:
-    """Analyze image / video / audio via OpenAI-compatible multimodal API.
+    """Analyze image / video / audio.
 
-    Auto-detects kind by extension. Local files → base64 data-URI;
-    public URLs pass through. Audio uses input_audio; video uses video_url;
-    images use image_url.
+    CPA/Gemini: native /v1beta/models/{model}:generateContent
+      - local → inline_data base64
+      - YouTube → file_data.file_uri
+    MiMo: OpenAI-compatible /chat/completions
     """
     _provider, base_url, model, api_key = resolve_endpoint(
         provider=provider,
@@ -725,9 +834,15 @@ def analyze_media(
             f"Set {key_hint} or create scripts/.env."
         )
 
+    use_gemini_native = _provider == "cpa" or model.startswith("gemini")
+
     kind = media_kind(media_input)
-    # URL without clear extension: infer from mode
-    if media_input.startswith(("http://", "https://")) and _path_suffix(media_input) == "":
+    # URL without clear extension: infer from mode (skip YouTube — always video)
+    if (
+        media_input.startswith(("http://", "https://"))
+        and _path_suffix(media_input) == ""
+        and not is_youtube_url(media_input)
+    ):
         if mode in AUDIO_MODES:
             kind = "audio"
         elif mode in VIDEO_MODES or mode.startswith("video-"):
@@ -739,11 +854,12 @@ def analyze_media(
     is_video_input = kind == "video"
     is_audio_input = kind == "audio"
     timeout = 180 if (is_video_input or is_audio_input) else 60
-    # CPA/Gemini: prefer H.264 proxies (HEVC-in-mp4 often fails or is ignored)
-    prefer_h264 = _provider == "cpa" or model.startswith("gemini")
+    # CPA/Gemini local video: prefer H.264 for broader decoder support
+    prefer_h264 = use_gemini_native
 
     actual_duration = None
     is_local = not media_input.startswith(("http://", "https://"))
+    is_yt = is_youtube_url(media_input)
     upload_path = media_input
 
     if is_local:
@@ -774,150 +890,183 @@ def analyze_media(
                 + prompt
             )
 
-    content = []
-
-    def media_part(url: str, part_kind: str) -> dict:
-        if part_kind == "audio":
-            # MiMo: input_audio.data as data-URI or URL.
-            # Gemini OpenAI-compat: raw base64 + format.
-            if _provider == "cpa" or model.startswith("gemini"):
-                data = url
-                fmt = "mp3"
-                if url.startswith("data:") and ";base64," in url:
-                    header, data = url.split(";base64,", 1)
-                    # data:audio/mpeg → mp3; audio/wav → wav; audio/mp4 → m4a
-                    mime = header.split(":", 1)[-1].lower()
-                    if "wav" in mime:
-                        fmt = "wav"
-                    elif "mp4" in mime or "m4a" in mime or "aac" in mime:
-                        fmt = "mp4"
-                    elif "ogg" in mime:
-                        fmt = "ogg"
-                    elif "flac" in mime:
-                        fmt = "flac"
-                    else:
-                        fmt = "mp3"
-                return {
-                    "type": "input_audio",
-                    "input_audio": {"data": data, "format": fmt},
-                }
-            return {
-                "type": "input_audio",
-                "input_audio": {"data": url},
-            }
-        if part_kind == "video":
-            # CPA/Gemini OpenAI-compat silently ignores video_url (invents content).
-            # Working form: image_url with data:video/mp4;base64,... (or public URL).
-            if _provider == "cpa" or model.startswith("gemini"):
-                return {
-                    "type": "image_url",
-                    "image_url": {"url": url},
-                }
-            part = {
-                "type": "video_url",
-                "video_url": {"url": url},
-            }
-            if model.startswith("mimo"):
-                part["fps"] = float(os.environ.get("VISION_VIDEO_FPS", "2"))
-                part["media_resolution"] = os.environ.get(
-                    "VISION_VIDEO_RESOLUTION", "default"
-                )
-            return part
-        return {
-            "type": "image_url",
-            "image_url": {"url": url},
-        }
-
-    def build_content(path_or_url: str) -> list:
-        parts = []
-        if path_or_url.startswith(("http://", "https://")):
-            parts.append(media_part(path_or_url, kind))
-        else:
-            b64_data, mime = encode_file(path_or_url)
-            parts.append(media_part(f"data:{mime};base64,{b64_data}", kind))
-
-        if mode == "compare" and compare_with:
-            if compare_with.startswith(("http://", "https://")):
-                parts.append(media_part(compare_with, "image"))
-            else:
-                b64_data2, mime2 = encode_file(compare_with)
-                parts.append(media_part(f"data:{mime2};base64,{b64_data2}", "image"))
-
-        parts.append({"type": "text", "text": prompt})
-        return parts
-
-    content = build_content(upload_path if is_local else media_input)
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "api-key": api_key,
-        "Content-Type": "application/json",
-    }
-    max_out = int(os.environ.get("VISION_MAX_TOKENS", "32768"))
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": content}],
-        "max_completion_tokens": max_out,
-        "max_tokens": max_out,
-    }
-    # MiMo: always force deep thinking
-    if model.startswith("mimo"):
-        payload["thinking"] = {"type": "enabled"}
-
     if is_video_input or is_audio_input:
         timeout = max(timeout, 300)
 
-    def post_once(body: dict):
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(
-                f"{base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            )
-            if resp.status_code != 200:
-                try:
-                    error_body = resp.json()
-                    error_msg = error_body.get("error", {}).get("message", resp.text[:300])
-                except Exception:
-                    error_msg = resp.text[:300]
-                raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
-            return resp.json()
-
-    try:
-        data = post_once(payload)
-    except RuntimeError as e:
-        # Codec rejection on first video proxy → rebuild H.264-only and retry once
-        err = str(e)
-        can_retry = (
-            is_local
-            and is_video_input
-            and ("400" in err or "Param" in err or "Invalid" in err or "corrupted" in err.lower())
-        )
-        if not can_retry:
-            raise
-        print(
-            f"[genius-omni] API failed ({err[:120]}); "
-            "retrying with H.264 video proxy…",
-            file=sys.stderr,
-        )
-        proxy, enc = _make_video_proxy_h264_only(media_input)
-        print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
-        content = build_content(proxy)
-        payload["messages"] = [{"role": "user", "content": content}]
-        data = post_once(payload)
-
-    message = data["choices"][0]["message"]
-    result_text = message.get("content") or ""
-    if not result_text and message.get("reasoning_content"):
-        result_text = message["reasoning_content"]
     show_think = os.environ.get("VISION_SHOW_THINKING", "").strip().lower() in (
         "1", "true", "yes", "on",
     )
-    if show_think and message.get("reasoning_content") and message.get("content"):
-        result_text = (
-            f"<thinking>\n{message['reasoning_content']}\n</thinking>\n\n"
-            f"{message['content']}"
-        )
+    max_out = int(os.environ.get("VISION_MAX_TOKENS", "32768"))
+    proxy = _http_proxy()
+
+    # ── CPA / Gemini native generateContent ──────────────────────────
+    if use_gemini_native:
+        def build_gemini_parts(path_or_url: str) -> list:
+            parts = [_gemini_media_part(path_or_url, kind)]
+            if mode == "compare" and compare_with:
+                parts.append(_gemini_media_part(compare_with, "image"))
+            parts.append({"text": prompt})
+            return parts
+
+        def post_gemini(parts: list) -> dict:
+            root = _gemini_api_root(base_url)
+            endpoint = f"{root}/v1beta/models/{model}:generateContent"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "x-goog-api-key": api_key,
+                "Content-Type": "application/json",
+            }
+            body = {
+                "contents": [{"role": "user", "parts": parts}],
+                "generationConfig": {
+                    "maxOutputTokens": max_out,
+                },
+            }
+            with httpx.Client(timeout=timeout, proxy=proxy) as client:
+                resp = client.post(endpoint, headers=headers, json=body)
+                if resp.status_code != 200:
+                    try:
+                        error_body = resp.json()
+                        error_msg = (
+                            error_body.get("error", {}).get("message")
+                            or resp.text[:300]
+                        )
+                    except Exception:
+                        error_msg = resp.text[:300]
+                    raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
+                return resp.json()
+
+        path_for_api = upload_path if is_local else media_input
+        try:
+            data = post_gemini(build_gemini_parts(path_for_api))
+            result_text = _extract_gemini_text(data, show_think=show_think)
+        except RuntimeError as e:
+            err = str(e)
+            can_retry = (
+                is_local
+                and is_video_input
+                and ("400" in err or "Param" in err or "Invalid" in err
+                     or "corrupted" in err.lower() or "decode" in err.lower())
+            )
+            if not can_retry:
+                raise
+            print(
+                f"[genius-omni] API failed ({err[:120]}); "
+                "retrying with H.264 video proxy…",
+                file=sys.stderr,
+            )
+            proxy_path, enc = _make_video_proxy_h264_only(media_input)
+            print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
+            data = post_gemini(build_gemini_parts(proxy_path))
+            result_text = _extract_gemini_text(data, show_think=show_think)
+
+    # ── MiMo / OpenAI-compatible chat.completions ────────────────────
+    else:
+        def media_part(url: str, part_kind: str) -> dict:
+            if part_kind == "audio":
+                return {
+                    "type": "input_audio",
+                    "input_audio": {"data": url},
+                }
+            if part_kind == "video":
+                part = {
+                    "type": "video_url",
+                    "video_url": {"url": url},
+                }
+                if model.startswith("mimo"):
+                    part["fps"] = float(os.environ.get("VISION_VIDEO_FPS", "2"))
+                    part["media_resolution"] = os.environ.get(
+                        "VISION_VIDEO_RESOLUTION", "default"
+                    )
+                return part
+            return {
+                "type": "image_url",
+                "image_url": {"url": url},
+            }
+
+        def build_content(path_or_url: str) -> list:
+            parts = []
+            if path_or_url.startswith(("http://", "https://")):
+                parts.append(media_part(path_or_url, kind))
+            else:
+                b64_data, mime = encode_file(path_or_url)
+                parts.append(media_part(f"data:{mime};base64,{b64_data}", kind))
+
+            if mode == "compare" and compare_with:
+                if compare_with.startswith(("http://", "https://")):
+                    parts.append(media_part(compare_with, "image"))
+                else:
+                    b64_data2, mime2 = encode_file(compare_with)
+                    parts.append(media_part(f"data:{mime2};base64,{b64_data2}", "image"))
+
+            parts.append({"type": "text", "text": prompt})
+            return parts
+
+        content = build_content(upload_path if is_local else media_input)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": content}],
+            "max_completion_tokens": max_out,
+            "max_tokens": max_out,
+        }
+        if model.startswith("mimo"):
+            payload["thinking"] = {"type": "enabled"}
+
+        def post_once(body: dict):
+            with httpx.Client(timeout=timeout, proxy=proxy) as client:
+                resp = client.post(
+                    f"{base_url}/chat/completions",
+                    headers=headers,
+                    json=body,
+                )
+                if resp.status_code != 200:
+                    try:
+                        error_body = resp.json()
+                        error_msg = error_body.get("error", {}).get(
+                            "message", resp.text[:300]
+                        )
+                    except Exception:
+                        error_msg = resp.text[:300]
+                    raise RuntimeError(f"API error {resp.status_code}: {error_msg}")
+                return resp.json()
+
+        try:
+            data = post_once(payload)
+        except RuntimeError as e:
+            err = str(e)
+            can_retry = (
+                is_local
+                and is_video_input
+                and ("400" in err or "Param" in err or "Invalid" in err
+                     or "corrupted" in err.lower())
+            )
+            if not can_retry:
+                raise
+            print(
+                f"[genius-omni] API failed ({err[:120]}); "
+                "retrying with H.264 video proxy…",
+                file=sys.stderr,
+            )
+            proxy_path, enc = _make_video_proxy_h264_only(media_input)
+            print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
+            content = build_content(proxy_path)
+            payload["messages"] = [{"role": "user", "content": content}]
+            data = post_once(payload)
+
+        message = data["choices"][0]["message"]
+        result_text = message.get("content") or ""
+        if not result_text and message.get("reasoning_content"):
+            result_text = message["reasoning_content"]
+        if show_think and message.get("reasoning_content") and message.get("content"):
+            result_text = (
+                f"<thinking>\n{message['reasoning_content']}\n</thinking>\n\n"
+                f"{message['content']}"
+            )
 
     if (is_video_input or is_audio_input) and actual_duration is not None:
         footer_parts = [f"ffprobe 实测: **{format_duration(actual_duration)}**"]

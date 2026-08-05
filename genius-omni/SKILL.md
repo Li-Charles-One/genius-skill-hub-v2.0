@@ -1,7 +1,7 @@
 ---
 name: genius-omni
 description: "Universal image, video & audio analysis (Genius 视听). Default CPA gemini-3.6-flash-high; fallback Xiaomi MiMo mimo-v2.5. Use when user asks to analyze, OCR, review, describe, or transcribe any image/video/audio file. Supports 6 image modes, 4 video modes, 4 audio modes. Triggers: analyze image, analyze video, analyze audio, OCR, 看图, 视频分析, 听音频, 转写, 视听."
-version: 2.3.0
+version: 2.4.0
 ---
 
 # Genius Omni（视听）
@@ -178,9 +178,9 @@ MiMo 官方文档：
 
 | Kind | Extensions | API content type |
 |------|------------|------------------|
-| Image | jpg/png/gif/webp/bmp | `image_url` |
-| Video | mp4/mov/avi/mkv/webm/… | **CPA/Gemini**: `image_url` + `data:video/mp4;base64,...`（`video_url` 会被静默忽略）; **MiMo**: `video_url` |
-| Audio | mp3/wav/flac/m4a/ogg（官方主推） | `input_audio`（CPA 需 raw base64 + `format`） |
+| Image | jpg/png/gif/webp/bmp | **CPA**: `inline_data`; **MiMo**: `image_url` |
+| Video | mp4/mov/avi/mkv/webm/… / YouTube | **CPA native** `/v1beta/...:generateContent`：本地 `inline_data`，YouTube `file_data.file_uri`；**MiMo**: `video_url` |
+| Audio | mp3/wav/flac/m4a/ogg（官方主推） | **CPA**: `inline_data`；**MiMo**: `input_audio` |
 
 **Limits (MiMo)**：Base64 编码后约 ≤50MB（脚本按 **raw ≤35MB** 留余量）；音频 URL ≤100MB；视频 URL ≤300MB。
 
