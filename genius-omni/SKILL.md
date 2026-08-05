@@ -1,12 +1,12 @@
 ---
 name: genius-omni
-description: "Universal image, video & audio analysis (Genius 视听) via Xiaomi MiMo mimo-v2.5. Use when user asks to analyze, OCR, review, describe, or transcribe any image/video/audio file. Supports 6 image modes, 4 video modes, 4 audio modes. Triggers: analyze image, analyze video, analyze audio, OCR, 看图, 视频分析, 听音频, 转写, 视听."
-version: 2.2.1
+description: "Universal image, video & audio analysis (Genius 视听). Default CPA gemini-3.6-flash-high; fallback Xiaomi MiMo mimo-v2.5. Use when user asks to analyze, OCR, review, describe, or transcribe any image/video/audio file. Supports 6 image modes, 4 video modes, 4 audio modes. Triggers: analyze image, analyze video, analyze audio, OCR, 看图, 视频分析, 听音频, 转写, 视听."
+version: 2.3.0
 ---
 
 # Genius Omni（视听）
 
-Universal multimodal analysis skill for AI agents. Analyzes **images, videos, and audio** via Xiaomi MiMo (`mimo-v2.5`) OpenAI-compatible API. Media kind is auto-detected by extension; local files are sent as base64 data-URIs; public URLs pass through.
+Universal multimodal analysis skill for AI agents. Analyzes **images, videos, and audio** via OpenAI-compatible multimodal API. **Default: CPA `gemini-3.6-flash-high`**. Fallback: Xiaomi MiMo `mimo-v2.5`. Media kind is auto-detected by extension; local files are sent as base64 data-URIs; public URLs pass through.
 
 > Skill name: **`genius-omni`** only（旧名 `genius-vision` 已废弃，勿再联接）。
 
@@ -104,12 +104,22 @@ python "<skill_dir>/scripts/vision.py" giant.png --proxy-only
 
 ### Setup
 ```bash
-export MIMO_API_KEY="tp-your-token-plan-key"
-export VISION_BASE_URL="https://token-plan-cn.xiaomimimo.com/v1"
-export VISION_MODEL="mimo-v2.5"
+# Default: CPA
+export VISION_PROVIDER=cpa
+export CPA_API_KEY="sk-your-cpa-key"
+export VISION_BASE_URL="https://cpa-jp.charles-ai.space/v1"
+export VISION_MODEL="gemini-3.6-flash-high"
 
-# Or scripts/.env
-echo 'MIMO_API_KEY=tp-your-key' > "<skill_dir>/scripts/.env"
+# Optional fallback: MiMo
+export MIMO_API_KEY="tp-your-token-plan-key"
+
+# Or scripts/.env (recommended)
+```
+
+Switch provider:
+```bash
+python scripts/vision.py shot.png describe --provider cpa   # default
+python scripts/vision.py shot.png describe --provider mimo
 ```
 
 ## Output Format
@@ -133,38 +143,44 @@ echo 'MIMO_API_KEY=tp-your-key' > "<skill_dir>/scripts/.env"
 ## Configuration
 
 ### API Provider
-Default: **Xiaomi MiMo Token Plan** — `mimo-v2.5`（全模态：图 / 视频 / 音频）
 
-官方文档：
+| Provider | Base URL | Model | Key env |
+|---|---|---|---|
+| **`cpa`（默认）** | `https://cpa-jp.charles-ai.space/v1` | `gemini-3.6-flash-high` | `CPA_API_KEY` |
+| `mimo` | `https://token-plan-cn.xiaomimimo.com/v1` | `mimo-v2.5` | `MIMO_API_KEY` |
+
+MiMo 官方文档：
 - 图：https://mimo.mi.com/docs/zh-CN/usage-guide/multimodal-understanding/image-understanding
 - 视频：https://mimo.mi.com/docs/zh-CN/usage-guide/multimodal-understanding/video-understanding
 - 音频：https://mimo.mi.com/docs/zh-CN/usage-guide/multimodal-understanding/audio-understanding
-- 深度思考：https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/text-generation/deep-thinking
 
 | Env Variable | Description | Default |
 |---|---|---|
-| `MIMO_API_KEY` | MiMo API key（也认 `VISION_API_KEY` / `ARK_API_KEY`） | (required) |
-| `VISION_MODEL` | Model name | `mimo-v2.5` |
-| `VISION_BASE_URL` | API base URL | `https://token-plan-cn.xiaomimimo.com/v1` |
-| `VISION_VIDEO_FPS` | 视频抽帧 fps | `2` |
-| `VISION_VIDEO_RESOLUTION` | `default` / `max` | `default` |
+| `VISION_PROVIDER` | `cpa` \| `mimo` | `cpa` |
+| `CPA_API_KEY` | CPA API key（也认 `VISION_CPA_API_KEY` / `VISION_API_KEY`） | (required for cpa) |
+| `MIMO_API_KEY` | MiMo API key（也认 `ARK_API_KEY`） | (required for mimo) |
+| `VISION_MODEL` | Model name (active provider) | `gemini-3.6-flash-high` |
+| `VISION_BASE_URL` | API base URL (active provider) | CPA base |
+| `VISION_VIDEO_FPS` | 视频抽帧 fps（MiMo） | `2` |
+| `VISION_VIDEO_RESOLUTION` | `default` / `max`（MiMo） | `default` |
 | `VISION_SHOW_THINKING` | `1` 时输出 `reasoning_content` | off |
 | `VISION_MAX_TOKENS` | 思考+回答总上限 | `32768` |
 
 ### Models
 
-| Model ID | 能力 | 说明 |
+| Model ID | Provider | 说明 |
 |---|---|---|
-| `mimo-v2.5` | 全模态（图/视频/音频/文本） | **默认，视听必用** |
-| `mimo-v2.5-pro` | 文本/Agent 旗舰 | **不支持**多模态，勿用于本 skill |
+| `gemini-3.6-flash-high` | cpa | **默认** |
+| `mimo-v2.5` | mimo | 全模态（图/视频/音频/文本） |
+| `mimo-v2.5-pro` | mimo | **不支持**多模态，勿用于本 skill |
 
 ### Media formats
 
 | Kind | Extensions | API content type |
 |------|------------|------------------|
 | Image | jpg/png/gif/webp/bmp | `image_url` |
-| Video | mp4/mov/avi/mkv/webm/… | `video_url` (+ fps, media_resolution) |
-| Audio | mp3/wav/flac/m4a/ogg（官方主推） | `input_audio` |
+| Video | mp4/mov/avi/mkv/webm/… | **CPA/Gemini**: `image_url` + `data:video/mp4;base64,...`（`video_url` 会被静默忽略）; **MiMo**: `video_url` |
+| Audio | mp3/wav/flac/m4a/ogg（官方主推） | `input_audio`（CPA 需 raw base64 + `format`） |
 
 **Limits (MiMo)**：Base64 编码后约 ≤50MB（脚本按 **raw ≤35MB** 留余量）；音频 URL ≤100MB；视频 URL ≤300MB。
 
@@ -201,7 +217,7 @@ python scripts/vision.py clip.mp4 video-summary --force-proxy
 ## Pitfalls
 
 1. 本地文件 → base64 data-URI；公网 URL 直接透传。
-2. 仅 `mimo-v2.5` 支持多模态；`pro` 不能看图/听音频。
+2. MiMo 仅 `mimo-v2.5` 支持多模态；`pro` 不能看图/听音频。切换 `--provider mimo` 时用 MiMo key。
 3. 音频 API 字段是 `input_audio.data`（不是 `audio_url`）。
 4. 开思考会变慢、吃 token；`VISION_MAX_TOKENS` 默认 32768。
 5. SVG 需先转 PNG；复杂音频格式以实测为准。

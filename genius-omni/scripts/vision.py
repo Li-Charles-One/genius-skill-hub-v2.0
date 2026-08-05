@@ -2,10 +2,12 @@
 """
 Genius AV (视听) — Image / video / audio analysis via OpenAI-compatible multimodal API.
 
-Default provider: Xiaomi MiMo (mimo-v2.5, Token Plan).
+Default provider: CPA (gemini-3.6-flash-high).
+Fallback provider: Xiaomi MiMo (mimo-v2.5, Token Plan).
 
 Usage:
-    python vision.py <file_path_or_url> <mode> [--output json|text] [--model MODEL]
+    python vision.py <file_path_or_url> <mode> [--output json|text] [--provider cpa|mimo]
+    python vision.py <file> describe --model gemini-3.6-flash-high
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
@@ -16,9 +18,10 @@ Compare:          python vision.py img1.png compare --compare-with img2.png
 For video/audio, ffprobe duration is injected as ground truth when available.
 
 Environment:
-    MIMO_API_KEY / VISION_API_KEY / ARK_API_KEY — API key (first found wins)
-    VISION_MODEL   — Model name (default: mimo-v2.5)
-    VISION_BASE_URL — API base (default: https://token-plan-cn.xiaomimimo.com/v1)
+    VISION_PROVIDER — cpa (default) | mimo
+    CPA_API_KEY / VISION_CPA_API_KEY / VISION_API_KEY — CPA key
+    MIMO_API_KEY / ARK_API_KEY — MiMo key
+    VISION_MODEL / VISION_BASE_URL — global overrides
 """
 
 import argparse
@@ -526,6 +529,7 @@ def ensure_media_under_limit(
     path: str,
     kind: str,
     force_proxy: bool = False,
+    prefer_h264: bool = False,
 ) -> str:
     """Return path suitable for base64 upload; may create analysis proxy."""
     p = Path(path)
@@ -537,7 +541,10 @@ def ensure_media_under_limit(
     reason = "forced" if force_proxy else f"{size / 1024 / 1024:.1f}MB > trigger"
     if kind == "video":
         print(f"[genius-omni] compressing video ({reason})…", file=sys.stderr)
-        proxy, _ = make_video_proxy(path)
+        if prefer_h264:
+            proxy, _ = _make_video_proxy_h264_only(path)
+        else:
+            proxy, _ = make_video_proxy(path)
         return proxy
     if kind == "audio":
         print(f"[genius-omni] compressing audio ({reason})…", file=sys.stderr)
@@ -552,9 +559,21 @@ def ensure_media_under_limit(
 
 # ── API Call ──────────────────────────────────────────────────────────────
 
-KEY_ENV_NAMES = ("MIMO_API_KEY", "VISION_API_KEY", "ARK_API_KEY")
-DEFAULT_MODEL = "mimo-v2.5"
-DEFAULT_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+PROVIDERS = {
+    "cpa": {
+        "base_url": "https://cpa-jp.charles-ai.space/v1",
+        "model": "gemini-3.6-flash-high",
+        "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
+    },
+    "mimo": {
+        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+        "model": "mimo-v2.5",
+        "key_envs": ("MIMO_API_KEY", "VISION_API_KEY", "ARK_API_KEY"),
+    },
+}
+DEFAULT_PROVIDER = "cpa"
+DEFAULT_MODEL = PROVIDERS[DEFAULT_PROVIDER]["model"]
+DEFAULT_BASE_URL = PROVIDERS[DEFAULT_PROVIDER]["base_url"]
 
 
 def load_dotenv_map() -> dict:
@@ -577,14 +596,66 @@ def load_dotenv_map() -> dict:
     return out
 
 
-def load_api_key() -> str:
-    """Load API key: per-name env then .env (MIMO > VISION > ARK)."""
+def _env_or_file(name: str, file_keys: dict) -> str:
+    return (os.environ.get(name) or file_keys.get(name) or "").strip()
+
+
+def resolve_provider(name: str | None = None) -> str:
+    """Resolve provider id: arg → VISION_PROVIDER → default (cpa)."""
     file_keys = load_dotenv_map()
-    for name in KEY_ENV_NAMES:
-        key = os.environ.get(name) or file_keys.get(name)
+    raw = name or _env_or_file("VISION_PROVIDER", file_keys) or DEFAULT_PROVIDER
+    pid = str(raw).strip().lower()
+    if pid not in PROVIDERS:
+        known = ", ".join(sorted(PROVIDERS))
+        raise ValueError(f"Unknown provider '{pid}'. Known: {known}")
+    return pid
+
+
+def load_api_key(provider: str | None = None) -> str:
+    """Load API key for active provider (env then .env)."""
+    file_keys = load_dotenv_map()
+    pid = resolve_provider(provider)
+    for env_name in PROVIDERS[pid]["key_envs"]:
+        key = _env_or_file(env_name, file_keys)
         if key:
             return key
     return ""
+
+
+def resolve_endpoint(
+    provider: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> tuple[str, str, str, str]:
+    """Return (provider_id, base_url, model, api_key).
+
+    Precedence: CLI → {PROVIDER}_* → VISION_* (only for active provider) → pack defaults.
+    Switching --provider mimo ignores CPA's VISION_MODEL / VISION_BASE_URL.
+    """
+    file_keys = load_dotenv_map()
+    pid = resolve_provider(provider)
+    conf = PROVIDERS[pid]
+    p = pid.upper()
+    active_pid = resolve_provider(None)
+
+    def pick(cli_val: str | None, prov_env: str, global_env: str, default: str) -> str:
+        if cli_val:
+            return cli_val
+        prov = _env_or_file(prov_env, file_keys)
+        if prov:
+            return prov
+        # Global VISION_* only applies to the configured active provider
+        if pid == active_pid:
+            glob = _env_or_file(global_env, file_keys)
+            if glob:
+                return glob
+        return default
+
+    resolved_model = pick(model, f"{p}_MODEL", "VISION_MODEL", conf["model"])
+    resolved_base = pick(base_url, f"{p}_BASE_URL", "VISION_BASE_URL", conf["base_url"])
+    resolved_key = api_key or load_api_key(pid)
+    return pid, resolved_base.rstrip("/"), resolved_model, resolved_key
 
 
 def encode_file(file_path: str) -> tuple[str, str]:
@@ -630,26 +701,29 @@ def analyze_media(
     model: str = None,
     api_key: str = None,
     base_url: str = None,
+    provider: str = None,
     compare_with: str = None,
     force_proxy: bool = False,
 ) -> str:
-    """Analyze image / video / audio via MiMo multimodal API.
+    """Analyze image / video / audio via OpenAI-compatible multimodal API.
 
     Auto-detects kind by extension. Local files → base64 data-URI;
     public URLs pass through. Audio uses input_audio; video uses video_url;
     images use image_url.
     """
-    api_key = api_key or load_api_key()
+    _provider, base_url, model, api_key = resolve_endpoint(
+        provider=provider,
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+    )
     if not api_key:
+        conf = PROVIDERS[_provider]
+        key_hint = " / ".join(conf["key_envs"])
         raise ValueError(
-            "API key not found. Set MIMO_API_KEY (or VISION_API_KEY / ARK_API_KEY) "
-            "or create scripts/.env."
+            f"API key not found for provider '{_provider}'. "
+            f"Set {key_hint} or create scripts/.env."
         )
-
-    model = model or os.environ.get("VISION_MODEL", DEFAULT_MODEL)
-    base_url = (
-        base_url or os.environ.get("VISION_BASE_URL", DEFAULT_BASE_URL)
-    ).rstrip("/")
 
     kind = media_kind(media_input)
     # URL without clear extension: infer from mode
@@ -665,6 +739,8 @@ def analyze_media(
     is_video_input = kind == "video"
     is_audio_input = kind == "audio"
     timeout = 180 if (is_video_input or is_audio_input) else 60
+    # CPA/Gemini: prefer H.264 proxies (HEVC-in-mp4 often fails or is ignored)
+    prefer_h264 = _provider == "cpa" or model.startswith("gemini")
 
     actual_duration = None
     is_local = not media_input.startswith(("http://", "https://"))
@@ -677,6 +753,7 @@ def analyze_media(
                 media_input,
                 kind=kind,
                 force_proxy=bool(force_proxy and is_video_input),
+                prefer_h264=prefer_h264,
             )
         except Exception as e:
             if Path(media_input).stat().st_size > MAX_RAW_BYTES:
@@ -701,12 +778,41 @@ def analyze_media(
 
     def media_part(url: str, part_kind: str) -> dict:
         if part_kind == "audio":
-            # MiMo audio understanding: type input_audio, field data
+            # MiMo: input_audio.data as data-URI or URL.
+            # Gemini OpenAI-compat: raw base64 + format.
+            if _provider == "cpa" or model.startswith("gemini"):
+                data = url
+                fmt = "mp3"
+                if url.startswith("data:") and ";base64," in url:
+                    header, data = url.split(";base64,", 1)
+                    # data:audio/mpeg → mp3; audio/wav → wav; audio/mp4 → m4a
+                    mime = header.split(":", 1)[-1].lower()
+                    if "wav" in mime:
+                        fmt = "wav"
+                    elif "mp4" in mime or "m4a" in mime or "aac" in mime:
+                        fmt = "mp4"
+                    elif "ogg" in mime:
+                        fmt = "ogg"
+                    elif "flac" in mime:
+                        fmt = "flac"
+                    else:
+                        fmt = "mp3"
+                return {
+                    "type": "input_audio",
+                    "input_audio": {"data": data, "format": fmt},
+                }
             return {
                 "type": "input_audio",
                 "input_audio": {"data": url},
             }
         if part_kind == "video":
+            # CPA/Gemini OpenAI-compat silently ignores video_url (invents content).
+            # Working form: image_url with data:video/mp4;base64,... (or public URL).
+            if _provider == "cpa" or model.startswith("gemini"):
+                return {
+                    "type": "image_url",
+                    "image_url": {"url": url},
+                }
             part = {
                 "type": "video_url",
                 "video_url": {"url": url},
@@ -841,7 +947,7 @@ def analyze_media(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Genius AV (视听) — image/video/audio via MiMo mimo-v2.5"
+        description="Genius AV (视听) — image/video/audio (default: CPA gemini-3.6-flash-high)"
     )
     parser.add_argument("file", help="Image/video/audio path or URL")
     parser.add_argument(
@@ -858,9 +964,20 @@ def main():
         help="Output format (default: text)",
     )
     parser.add_argument(
+        "--provider", "-p",
+        default=None,
+        choices=sorted(PROVIDERS.keys()),
+        help="Provider pack (default: cpa)",
+    )
+    parser.add_argument(
         "--model", "-m",
         default=None,
         help="Model override",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="API base URL override",
     )
     parser.add_argument(
         "--api-key", "-k",
@@ -913,6 +1030,8 @@ def main():
             mode=args.mode,
             model=args.model,
             api_key=args.api_key,
+            base_url=args.base_url,
+            provider=args.provider,
             compare_with=args.compare_with,
             force_proxy=args.force_proxy,
         )
