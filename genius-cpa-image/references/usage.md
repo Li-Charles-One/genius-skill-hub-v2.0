@@ -83,7 +83,12 @@ gpt-image-2 CPA-US 1K size matrix (observed 2026-08-05):
 | 1:2 | 896x1792 |
 | auto | auto |
 
-Examples: `--size 3840x2160` → `1672x941`；`--resolution 4K --aspect 16:9` → same. For true 4K use Gemini.
+Coerce examples (both print `[note]`):
+
+- `--resolution 4K --aspect 16:9` → size `1672x941`, resolution field becomes `1K`
+- `--size 3840x2160` → `1672x941` (legacy OpenAI-style sizes remap to same-aspect 1K)
+
+`quality` low|medium|high only changes fidelity/latency, **not** pixels. For true 2K/4K use Gemini.
 
 After save, skill reports `actual_size` from image bytes.
 
@@ -111,7 +116,7 @@ python3 -u scripts/cpa_image.py "minimal blue icon" \
   --model gpt-image-2 --aspect 1:1 --quality low --name demo-gpt \
   --out ./genius_output
 
-# 16:9 → 1672x941；2K/4K resolution aliases still land on 1K
+# 16:9 → 1672x941
 python3 -u scripts/cpa_image.py "wide seascape" \
   --model gpt-image-2 --aspect 16:9 --resolution 1K --quality medium \
   --out ./genius_output
@@ -121,10 +126,14 @@ python3 -u scripts/cpa_image.py "portrait" \
   --model gpt-image-2 --size 1024x1536 --quality medium \
   --out ./genius_output
 
-# legacy 4K size coerces to 1672x941 (not true 4K)
+# Prefer Gemini for real high-res
 python3 -u scripts/cpa_image.py "landscape" \
-  --model gpt-image-2 --size 3840x2160 --quality medium \
+  --aspect 16:9 --resolution 4K --name landscape-4k \
   --out ./genius_output
+
+# legacy only (will [note] coerce — do not use as default example)
+# --model gpt-image-2 --size 3840x2160  → 1672x941
+# --model gpt-image-2 --aspect 16:9 --resolution 4K  → 1672x941 + note
 ```
 
 ## Errors: model_cooldown / 429 / auth_unavailable

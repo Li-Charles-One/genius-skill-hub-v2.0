@@ -1228,7 +1228,9 @@ def parse_aspect_ratio(aspect: str) -> tuple[int, int]:
     return w, h
 
 
-def normalize_gpt_image_resolution(resolution: str | None) -> str:
+def normalize_gpt_image_resolution(
+    resolution: str | None, *, note: bool = True
+) -> str:
     """Normalize resolution; 2K/4K are CPA-US aliases that coerce to 1K."""
     if resolution is None or resolution == "":
         return "1K"
@@ -1245,7 +1247,15 @@ def normalize_gpt_image_resolution(resolution: str | None) -> str:
             f"(only 1K/auto are real; 2K/4K coerce to 1K)"
         )
     if canonical in GPT_IMAGE_RESOLUTION_ALIASES:
-        return GPT_IMAGE_RESOLUTION_ALIASES[canonical]
+        real = GPT_IMAGE_RESOLUTION_ALIASES[canonical]
+        if note:
+            print(
+                f"  [note] gpt-image-2 CPA-US has no {canonical} resolution; "
+                f"coerced to {real} (quality does not raise pixels; "
+                f"use Gemini for true 2K/4K)",
+                flush=True,
+            )
+        return real
     return canonical
 
 

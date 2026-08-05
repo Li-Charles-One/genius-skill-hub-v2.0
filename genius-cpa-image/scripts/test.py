@@ -85,15 +85,35 @@ t = mod.validate_task({
 assert t["size"] == "1536x1024"
 assert t["output_format"] == "jpeg"
 
+# resolution 4K must print a visible coerce note (not silent)
+import io
+import contextlib
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    t = mod.validate_task({
+        "prompt": "note-check",
+        "model": "gpt-image-2",
+        "aspect": "16:9",
+        "resolution": "4K",
+    })
+note_out = buf.getvalue()
+assert t["size"] == "1672x941" and t["resolution"] == "1K"
+assert "coerced to 1K" in note_out, note_out
+assert "no 4K resolution" in note_out, note_out
+
 # legacy 4K request coerces to CPA 1K 16:9
-t = mod.validate_task({
-    "prompt": "direct",
-    "model": "gpt-image-2",
-    "size": "3840x2160",
-})
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    t = mod.validate_task({
+        "prompt": "direct",
+        "model": "gpt-image-2",
+        "size": "3840x2160",
+    })
+size_note = buf.getvalue()
 assert t["size"] == "1672x941"
 assert t["aspect"] == "16:9"
 assert t["resolution"] == "1K"
+assert "coerced to 1K preset 1672x941" in size_note, size_note
 
 # exact CPA preset passes through
 t = mod.validate_task({

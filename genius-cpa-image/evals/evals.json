@@ -42,6 +42,18 @@
       "prompt": "US CPA Codex 生图 gpt-image-2",
       "should_trigger": true,
       "expected": "gpt-image-2 via cpa-us"
+    },
+    {
+      "id": "gpt-image-4k-coerce",
+      "prompt": "用 gpt-image-2 出一张 4K 16:9 风景图",
+      "should_trigger": true,
+      "expected": "Uses gpt-image-2 but CPA-US is 1K-only: aspect 16:9 → 1672x941; do not claim true 4K; mention coerce/note or prefer Gemini for real 4K"
+    },
+    {
+      "id": "true-4k-gemini",
+      "prompt": "我要真 4K 16:9，不要被压成 1K",
+      "should_trigger": true,
+      "expected": "Prefer gemini-3.1-flash-image --resolution 4K (or explain gpt-image channel cannot do true 4K)"
     }
   ]
 }
