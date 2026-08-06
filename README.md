@@ -4,7 +4,7 @@ Personal monorepo of **self-built** Agent Skills (OpenCode / Codex / Claude Code
 
 Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection).
 
-## Skills (12)
+## Skills (13)
 
 ### Workflow
 
@@ -19,8 +19,9 @@ Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in
 | Skill | Purpose |
 |:--|:--|
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
-| [genius-image](./genius-image/) | Image generation via Crun.ai (single / batch / multi-model) |
-| [genius-omni](./genius-omni/) | Image / video / audio analysis via MiMo（视听） |
+| [genius-cpa-image](./genius-cpa-image/) | Multi-provider CPA images: Gemini + gpt-image-2 |
+| [genius-omni](./genius-omni/) | Image / video / audio analysis via multimodal providers（视听） |
+| [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
 | [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
 
@@ -54,10 +55,11 @@ genius-skill-hub-v2.0/
 ├── brainstorming/
 ├── brand-copywriter/
 ├── dreamina-cli/
+├── genius-cpa-image/
 ├── genius-design/
-├── genius-image/
-├── genius-skill-creator/
 ├── genius-omni/
+├── genius-shotlist-director/
+├── genius-skill-creator/
 ├── github-cli/
 ├── lark/
 ├── we-planing/
