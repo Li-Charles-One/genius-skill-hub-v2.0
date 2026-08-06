@@ -1,0 +1,5 @@
+interface:
+  display_name: "Genius Shotlist Director"
+  short_description: "Seedance 2.0 director shotlist → editable HTML"
+  brand_color: "#D4A259"
+  default_prompt: "Use $genius-shotlist-director to turn this script into a Seedance 2.0 director's shotlist HTML with 15s English prompts."
