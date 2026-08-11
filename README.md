@@ -1,10 +1,23 @@
-# Genius Skill Hub
+# Genius Skill Hub v2.0
 
-Personal monorepo of **self-built** Agent Skills (OpenCode / Codex / Claude Code compatible).
+可分享、相对通用的 Agent Skills monorepo。
 
-Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection).
+## 定位
 
-## Skills (13)
+- **给谁用**：任何人可 clone / 适配到自己的 Agent 环境
+- **是什么**：自研、可复用的 skill 包（流程、创意媒体、工具 CLI）
+- **不是什么**：不含 Charles 个人主机路径、私有运维拓扑、生产密钥约定
+
+个人高定制 skill 见 private 仓 [chales_wrokflow_skills](https://github.com/Li-Charles-One/chales_wrokflow_skills)。  
+第三方聚合 skill（Tavily / Firecrawl / Context7 / OfficeCLI 等）见 [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection)。
+
+| | 本仓库 | chales_wrokflow_skills |
+|---|---|---|
+| 受众 | 可分享 / 相对通用 | Charles 个人专用 |
+| 内容 | 环境尽量可配置、无硬绑私人拓扑 | 真实主机、本机路径、发布闸门 |
+| 可见性 | public | private |
+
+## Skills
 
 ### Workflow
 
@@ -24,6 +37,7 @@ Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in
 | [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
 | [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
+| [libtv-cli](./libtv-cli/) | LibTV 画布 / 项目 / 节点 CLI |
 
 ### Tools
 
@@ -36,17 +50,17 @@ Third-party skills (Tavily / Firecrawl / Context7 / OfficeCLI / PPT …) live in
 
 ## Skill pipeline
 
-For complex multi-step work:
+复杂多步工作建议：
 
 ```
 brainstorming  →  writing-plans  →  implementation  →  we-planing
    (WHAT/WHY)       (HOW)            (do the work)      (record state)
 ```
 
-- `brainstorming` — only when approach is ambiguous (or user asks to plan)
-- `writing-plans` — turns the design spec into a step plan
-- `we-planing` — persists durable session state
-- All other skills are leaf tools and do not sit in this pipeline
+- `brainstorming` — 方案不清或用户要求规划时用
+- `writing-plans` — 把设计规格拆成可执行步骤
+- `we-planing` — 持久化项目记忆
+- 其余 skill 为叶子工具，不强制进这条流水线
 
 ## Layout
 
@@ -62,16 +76,17 @@ genius-skill-hub-v2.0/
 ├── genius-skill-creator/
 ├── github-cli/
 ├── lark/
+├── libtv-cli/
 ├── we-planing/
 ├── writing-plans/
 └── x-search-grok/
 ```
 
-Each skill is a folder with `SKILL.md` at its root.
+每个 skill 根目录含 `SKILL.md`。
 
 ## Local use (OpenCode)
 
-Symlink / junction skills into `~/.config/opencode/skills/`, e.g.:
+将 skill 目录 junction / symlink 到 `~/.config/opencode/skills/`，例如：
 
 ```powershell
 New-Item -ItemType Junction `
@@ -79,17 +94,4 @@ New-Item -ItemType Junction `
   -Target "C:\path\to\genius-skill-hub-v2.0\github-cli"
 ```
 
-Restart OpenCode after adding or removing skills.
-
-## Validation
-
-GitHub Actions `validate` checks skill metadata and WePlaning smoke tests.
-
-Locally:
-
-```powershell
-git status --short
-node we-planing/scripts/check-memory.cjs <project-root>
-node we-planing/scripts/check-memory.cjs <project-root> --audit
-node we-planing/tools/smoke-weplaning.cjs
-```
+部分 skill 依赖外部 CLI 或 API Key，请按各 skill 内文档自行配置；**不要**把密钥写进本仓库。
