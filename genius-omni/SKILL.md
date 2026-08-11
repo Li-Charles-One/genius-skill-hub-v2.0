@@ -1,12 +1,12 @@
 ---
 name: genius-omni
-description: "Universal image, video & audio analysis (Genius 视听). Default CPA gemini-3.6-flash-high (native generateContent); also google official Gemini, MiMo, or any custom multimodal provider via env. Supports 6 image / 4 video / 4 audio modes + YouTube. Triggers: analyze image, analyze video, analyze audio, OCR, 看图, 视频分析, 听音频, 转写, 视听, YouTube."
-version: 2.5.0
+description: "Universal image, video, audio & PDF analysis (Genius 视听). Default CPA gemini-3.6-flash-high (native generateContent); also google official Gemini, MiMo, or custom multimodal via env. 6 image / 4 video / 4 audio modes + YouTube + PDF page OCR + long-video segment index. Triggers: analyze image, analyze video, analyze audio, OCR, PDF, 看图, 视频分析, 听音频, 转写, 视听, 长视频, YouTube."
+version: 2.6.0
 ---
 
 # Genius Omni（视听）
 
-Universal multimodal analysis for AI agents — **images, videos, audio, YouTube**.
+Universal multimodal analysis for AI agents — **images, videos, audio, PDF, YouTube**.
 
 **Default:** CPA `gemini-3.6-flash-high` via **native** Gemini `generateContent`.  
 Also built-in: **Google official Gemini**, **Xiaomi MiMo**.  
@@ -26,7 +26,7 @@ Also built-in: **Google official Gemini**, **Xiaomi MiMo**.
 | Mode | Use case | Output |
 |------|----------|--------|
 | `describe` | General image understanding | Detailed description |
-| `ocr` | Text extraction from screenshots/docs | Preserved text structure |
+| `ocr` | Text extraction from screenshots/docs/PDF pages | Verbatim structure-preserving text |
 | `ui-review` | UI mockups, wireframes, design critique | Structured design review |
 | `chart-data` | Charts, graphs, data visualizations | Extracted data points |
 | `object-detect` | Identify objects, people, activities | Listed elements with locations |
@@ -36,23 +36,33 @@ Also built-in: **Google official Gemini**, **Xiaomi MiMo**.
 
 | Mode | Use case | Output |
 |------|----------|--------|
-| `video-summary` | Full video understanding | Timeline + key content + tone |
-| `video-ocr` | Extract text visible in video | Chronological text with timestamps |
-| `video-review` | Video/screen recording production critique | Structured review with suggestions |
-| `video-frame-analysis` | Frame-level / scene-by-scene breakdown | Per-scene storyboard |
+| `video-summary` | Full video understanding | Absolute timeline + key content + tone |
+| `video-ocr` | Extract text visible in video | Chronological `mm:ss \| text` |
+| `video-review` | Video/screen recording production critique | Structured review with timestamps |
+| `video-frame-analysis` | Frame-level / scene-by-scene breakdown | Per-shot storyboard with times |
 
-### Audio Modes (MiMo `input_audio`)
+### Audio Modes
 
 | Mode | Use case | Output |
 |------|----------|--------|
 | `audio-summary` | Full audio understanding | Timeline + speakers + soundscape |
-| `audio-transcribe` | Speech-to-text | Verbatim transcript + speakers |
+| `audio-transcribe` | Speech-to-text | `[mm:ss] Speaker A: …` style transcript |
 | `audio-review` | Production quality critique | Structured review + fixes |
 | `audio-scene` | Acoustic scene analysis | Events, environment, atmosphere |
+
+### PDF
+
+| Input | Modes | Behavior |
+|-------|-------|----------|
+| `*.pdf` | `ocr` (default), `describe`, `chart-data`, `ui-review` | Render pages → per-page analysis → merged report |
 
 **Auto mode remap**: on audio, `describe`→`audio-summary`, `ocr`→`audio-transcribe`, `ui-review`/`video-review`→`audio-review`. On video, `describe`→`video-summary`, `ocr`→`video-ocr`.
 
 **Duration verification**: For video/audio local files, `ffprobe` injects actual duration into the prompt and appends a footer.
+
+**AV accuracy (v2.6)**: prompts enforce absolute timestamps + consistent speaker labels; OCR prefers verbatim structure (no inventing text).
+
+**Long video (v2.6)**: local video ≥ `VISION_LONG_VIDEO_SEC` (default **900s / 15min**) is split into ~`VISION_LONG_SEGMENT_SEC` (default **300s**) segments, indexed under TEMP `genius-omni-index/`, then synthesized into one answer. Disable with `--no-long-video` or `VISION_LONG_VIDEO=0`.
 
 ## Prerequisites
 
@@ -100,10 +110,22 @@ python "<skill_dir>/scripts/vision.py" mix.flac audio-review
 python "<skill_dir>/scripts/vision.py" field.m4a audio-scene
 python "<skill_dir>/scripts/vision.py" clip.mp3 describe
 
+# PDF (page-by-page OCR / describe)
+python "<skill_dir>/scripts/vision.py" report.pdf ocr
+python "<skill_dir>/scripts/vision.py" slides.pdf describe
+
+# Long video: auto segment index when duration >= 15min
+python "<skill_dir>/scripts/vision.py" lecture-2h.mp4 video-summary
+python "<skill_dir>/scripts/vision.py" lecture-2h.mp4 video-summary --no-long-video
+
+# System self-test
+python "<skill_dir>/scripts/vision.py" --check
+
 # Oversize media: only build proxy (no API)
 python "<skill_dir>/scripts/vision.py" big.mp4 --proxy-only
 python "<skill_dir>/scripts/vision.py" huge.wav --proxy-only
 python "<skill_dir>/scripts/vision.py" giant.png --proxy-only
+python "<skill_dir>/scripts/vision.py" report.pdf --proxy-only
 ```
 
 ### Setup（推荐写 `scripts/.env`）
@@ -292,6 +314,12 @@ python scripts/vision.py clip.mp4 video-summary --force-proxy
 | `VISION_PROXY_SCALE` | `1280` | 视频代理宽度 |
 | `VISION_PROXY_AUDIO_K` | `64k` | 音轨/音频代理码率 |
 | `VISION_PROXY_IMAGE_MAX_EDGE` | `2048` | 图片代理长边 px |
+| `VISION_LONG_VIDEO_SEC` | `900` | 超过则启用长视频分段索引 |
+| `VISION_LONG_SEGMENT_SEC` | `300` | 长视频每段秒数 |
+| `VISION_LONG_VIDEO` | `1` | `0` 关闭长视频分段 |
+| `VISION_PDF_MAX_PAGES` | `30` | PDF 最多渲染页数 |
+| `VISION_PDF_DPI` | `180` | PDF 渲染参考 DPI（pdftoppm 路径） |
+| `VISION_CACHE_MAX_AGE_DAYS` | `30` | 代理/长视频索引超过 N 天自动删；`0` 关闭 |
 
 有公网 URL 时优先 URL（视频 ≤300MB），可跳过 base64 与代理。
 
@@ -306,14 +334,18 @@ python scripts/vision.py clip.mp4 video-summary --force-proxy
 4. 开思考会变慢、吃 token；`VISION_MAX_TOKENS` 默认 32768。
 5. SVG 需先转 PNG；复杂音频格式以实测为准。
 6. 分析代理需要本机 `ffmpeg`；无硬件编码器时视频回退 `libx264`。
-7. 代理是分析用，非成片；临时文件在系统 TEMP 的 `genius-omni-proxy/`。
+7. 代理是分析用，非成片；临时文件在系统 TEMP 的 `genius-omni-proxy/`；长视频索引在 `genius-omni-index/`。
 8. OpenCode 技能名固定为 `genius-omni`。
+9. PDF 依赖 ffmpeg 的 pdf 解复用或本机 `pdftoppm`（poppler）；页数受 `VISION_PDF_MAX_PAGES` 限制。
+10. 长视频分段会多次调用 API（每段一次 + 一次汇总）；索引命中则只汇总。
+11. 缓存清理：每次用到 proxy/index 时**最多清一次**；删 `mtime` ≥ `VISION_CACHE_MAX_AGE_DAYS`（默认 30）的文件。手动：`python scripts/vision.py --cleanup-cache`。
 
 ## Verification
 
-- [ ] `MIMO_API_KEY` set (or `scripts/.env`)
+- [ ] `python scripts/vision.py --check`（ffmpeg/ffprobe ok）
 - [ ] Image: `python scripts/vision.py test.jpg describe`
 - [ ] Video: `python scripts/vision.py test.mp4 video-summary`
+- [ ] PDF: `python scripts/vision.py test.pdf ocr`（或 `--proxy-only` 只渲页）
 - [ ] Large video proxy: `python scripts/vision.py big.mp4 --proxy-only`（应见 `hevc_*` 或 `h264_*`）
 - [ ] Large audio proxy: `python scripts/vision.py big.wav --proxy-only`（应见 `.m4a`）
 - [ ] Large image proxy: `python scripts/vision.py big.png --proxy-only`（应见 `.jpg`）

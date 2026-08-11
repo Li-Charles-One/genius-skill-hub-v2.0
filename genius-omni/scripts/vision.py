@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Genius AV (视听) — Image / video / audio analysis.
+Genius AV (视听) — Image / video / audio / PDF analysis.
 
 Built-in providers:
   cpa     (default) — Gemini native generateContent via CPA
@@ -12,16 +12,21 @@ Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
 
 Usage:
     python vision.py --list-providers
+    python vision.py --check
     python vision.py <file_or_url> <mode> [--provider cpa|google|mimo|custom]
     python vision.py https://www.youtube.com/watch?v=... video-summary
+    python vision.py report.pdf ocr
+    python vision.py long.mp4 video-summary   # auto segment when long
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
 Audio modes (4):  audio-summary, audio-transcribe, audio-review, audio-scene
+PDF:              ocr / describe (page-by-page)
 """
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -47,6 +52,30 @@ PROXY_AUDIO_K = os.environ.get("VISION_PROXY_AUDIO_K", "64k")
 # Large still images: max long-edge px for analysis proxy.
 PROXY_IMAGE_MAX_EDGE = int(os.environ.get("VISION_PROXY_IMAGE_MAX_EDGE", "2048"))
 PROXY_DIR = Path(tempfile.gettempdir()) / "genius-omni-proxy"
+# Long-video segment QA (lightweight memory): default 15 min threshold, 5 min chunks
+LONG_VIDEO_SEC = float(os.environ.get("VISION_LONG_VIDEO_SEC", "900"))
+LONG_SEGMENT_SEC = float(os.environ.get("VISION_LONG_SEGMENT_SEC", "300"))
+PDF_MAX_PAGES = int(os.environ.get("VISION_PDF_MAX_PAGES", "30"))
+PDF_DPI = int(os.environ.get("VISION_PDF_DPI", "180"))
+INDEX_DIR = Path(tempfile.gettempdir()) / "genius-omni-index"
+# Auto-purge proxy/index files older than N days (default 30). 0 = disable.
+CACHE_MAX_AGE_DAYS = float(os.environ.get("VISION_CACHE_MAX_AGE_DAYS", "30"))
+_CACHE_CLEANED = False
+
+TIMESTAMP_RULES = (
+    "TIMESTAMP RULES (mandatory):\n"
+    "- Use mm:ss or hh:mm:ss aligned to the verified duration above when given.\n"
+    "- Prefer absolute media time, not 'around the middle'.\n"
+    "- If unsure of exact second, give a tight range (e.g. 02:14–02:20).\n"
+    "- Keep events strictly chronological.\n"
+)
+
+SPEAKER_RULES = (
+    "SPEAKER RULES (mandatory when speech exists):\n"
+    "- Label speakers consistently (Speaker A/B/C or real names if stated).\n"
+    "- Mark speaker changes on new lines.\n"
+    "- If only one speaker, say so once and continue.\n"
+)
 
 
 # ── Prompts ──────────────────────────────────────────────────────────────
@@ -56,11 +85,18 @@ PROMPTS = {
     "describe": (
         "Provide a detailed description of this image. Include: main subject, "
         "setting/background, colors/style, any text visible, notable objects, "
-        "and overall composition."
+        "and overall composition. Read small text and UI labels carefully; "
+        "do not invent text that is not visible."
     ),
     "ocr": (
-        "Extract all text visible in this image verbatim. Preserve structure "
-        "and formatting (headers, lists, columns, tables). If no text is found, say so."
+        "Extract ALL text visible in this image/document page VERBATIM.\n"
+        "Rules:\n"
+        "- Preserve reading order, headers, lists, columns, tables, footnotes.\n"
+        "- Keep line breaks that reflect structure; use markdown tables when helpful.\n"
+        "- Include numbers, units, IDs, watermarks, stamps, and low-contrast text.\n"
+        "- Do NOT translate; do NOT summarize; do NOT invent missing characters.\n"
+        "- If a region is unreadable, write [illegible] for that span.\n"
+        "- If no text is found, say so."
     ),
     "ui-review": (
         "You are a senior UI/UX design reviewer. Analyze this interface mockup or design. "
@@ -68,17 +104,18 @@ PROMPTS = {
         "(1) Strengths — what works well\n"
         "(2) Issues — usability or design problems with severity (high/medium/low)\n"
         "(3) Specific actionable suggestions for improvement\n"
-        "Be constructive and detailed."
+        "Be constructive and detailed. Quote visible labels accurately."
     ),
     "chart-data": (
         "Extract all data from this chart or graph. List: chart type, title, "
         "axis labels, all data points/series with values, and a brief summary "
-        "of the trend or key insight."
+        "of the trend or key insight. Prefer exact numbers shown on the chart."
     ),
     "object-detect": (
         "List all distinct objects, people, animals, and activities in this image. "
-        "For each, describe what it is, its approximate location (top-left, center, "
-        "bottom-right, etc.), and any notable attributes."
+        "For each, describe what it is, its approximate location "
+        "(top-left / top-center / top-right / mid-left / center / mid-right / "
+        "bottom-left / bottom-center / bottom-right), relative size, and notable attributes."
     ),
     "compare": (
         "Compare these two images. List:\n"
@@ -89,26 +126,30 @@ PROMPTS = {
     ),
     # ── Video prompts ──────────────────────────────────────────────
     "video-summary": (
-        "Provide a comprehensive summary of this video. Structure your response as:\n"
+        "Provide a comprehensive summary of this video.\n"
+        f"{TIMESTAMP_RULES}"
+        "Structure your response as:\n"
         "(1) Overall topic / what the video is about\n"
-        "(2) Timeline breakdown — key segments with timestamps\n"
+        "(2) Timeline — bullet list `mm:ss – mm:ss | what happens` covering the whole video\n"
         "(3) Key people, objects, or scenes shown\n"
-        "(4) Any text or captions visible on screen\n"
-        "(5) Audio/speech content if discernible\n"
+        "(4) On-screen text / captions (quote important ones with timestamps)\n"
+        "(5) Speech / audio content with speaker labels when possible\n"
         "(6) Overall tone, style, and production quality\n"
-        "Be detailed and chronological."
+        "Be detailed and chronological. Do not invent events outside the video."
     ),
     "video-ocr": (
         "Extract ALL text visible anywhere in this video, organized chronologically.\n"
-        "For each piece of text, note the approximate timestamp when it appears.\n"
-        "Include: presentation slides, captions, subtitles, signs, UI labels, logos, "
-        "watermarks, and any overlaid graphics text.\n"
+        f"{TIMESTAMP_RULES}"
+        "For each item use: `mm:ss | text` (or `mm:ss–mm:ss | text` if it stays on screen).\n"
+        "Include: slides, captions, subtitles, signs, UI labels, logos, watermarks, "
+        "and overlaid graphics text. Quote verbatim; do not invent text.\n"
         "If no text is found, say so."
     ),
     "video-review": (
         "You are a senior video production reviewer. Analyze this video or screen recording.\n"
+        f"{TIMESTAMP_RULES}"
         "Return a structured review:\n"
-        "(1) Content & clarity — is the message clear and well-paced?\n"
+        "(1) Content & clarity — is the message clear and well-paced? cite timestamps\n"
         "(2) Visual quality — composition, lighting, color, stability\n"
         "(3) Audio quality — clarity, levels, background noise\n"
         "(4) Editing & flow — transitions, pacing, engagement\n"
@@ -118,63 +159,73 @@ PROMPTS = {
     "video-frame-analysis": (
         "You are a professional storyboard analyst. Analyze this video shot-by-shot "
         "and output a structured storyboard in the EXACT format below.\n\n"
+        f"{TIMESTAMP_RULES}"
         "CRITICAL RULES:\n"
         "- Output EVERY shot. Do NOT skip or merge shots. Each camera cut = a new shot.\n"
         "- Number shots sequentially starting from 1.\n"
         "- Duration must be in seconds (e.g. 3.5s). Sum of all shot durations must "
-        "approximately equal the total video duration given above.\n\n"
-        "FOR EACH SHOT, output exactly these 7 fields:\n\n"
+        "approximately equal the total video duration given above.\n"
+        "- Prefer absolute start–end times when known (mm:ss–mm:ss).\n\n"
+        "FOR EACH SHOT, output exactly these fields:\n\n"
         "---\n"
         "## Shot N\n"
         "- **镜号**: N\n"
+        "- **时间**: mm:ss–mm:ss\n"
         "- **时长**: X.Xs\n"
         "- **景别**: 远景/全景/中景/近景/特写/大特写 (pick one)\n"
-        "- **画面内容**: Describe exactly what is visible in this shot — subject, "
+        "- **画面内容**: Describe exactly what is visible — subject, "
         "action, composition, lighting, color palette. Be specific and visual.\n"
         "- **摄影机运动**: Static / Pan left-right / Tilt up-down / Zoom in-out / "
         "Dolly / Handheld / Crane / Drone / etc. Describe direction and speed.\n"
-        "- **场景**: Where does this shot take place? (e.g. 户外街道/客厅/卧室/产品特写棚)\n"
-        "- **对白/旁白**: Transcribe any spoken words verbatim. If none, write '无'.\n"
-        "- **屏显文字**: Any text/graphics/subtitles overlaid on screen. If none, write '无'.\n\n"
-        "After all shots, append a summary:\n"
+        "- **场景**: Where does this shot take place?\n"
+        "- **对白/旁白**: Transcribe spoken words verbatim with speaker labels. If none, '无'.\n"
+        "- **屏显文字**: Any text/graphics/subtitles. If none, '无'.\n\n"
+        "After all shots, append:\n"
         "- **总镜数**: N\n"
         "- **总时长**: X.Xs\n"
         "- **整体风格**: 1-2 sentence style description"
     ),
-    # ── Audio prompts (MiMo input_audio) ───────────────────────────
+    # ── Audio prompts ──────────────────────────────────────────────
     "audio-summary": (
-        "Provide a comprehensive understanding of this audio. Structure as:\n"
-        "(1) Overall content / topic — what is this audio about?\n"
-        "(2) Timeline — key segments with approximate timestamps if possible\n"
-        "(3) Speakers / voices — how many, gender/age impression, roles if clear\n"
+        "Provide a comprehensive understanding of this audio.\n"
+        f"{TIMESTAMP_RULES}{SPEAKER_RULES}"
+        "Structure as:\n"
+        "(1) Overall content / topic\n"
+        "(2) Timeline — `mm:ss – mm:ss | segment summary`\n"
+        "(3) Speakers — count, consistent labels, roles if clear\n"
         "(4) Speech content summary (not full verbatim unless short)\n"
-        "(5) Non-speech sounds — music, SFX, ambient noise, silence\n"
+        "(5) Non-speech sounds — music, SFX, ambient, silence\n"
         "(6) Tone, emotion, and production quality\n"
         "Be detailed and chronological."
     ),
     "audio-transcribe": (
-        "Transcribe ALL speech in this audio verbatim.\n"
+        "Transcribe ALL speech in this audio VERBATIM.\n"
+        f"{TIMESTAMP_RULES}{SPEAKER_RULES}"
+        "Output format preference:\n"
+        "`[mm:ss] Speaker A: ...`\n"
         "Rules:\n"
-        "- Preserve speaker turns if multiple speakers (Speaker A/B or names if known)\n"
         "- Keep original language; do not translate unless asked\n"
         "- Note [music], [noise], [inaudible], [silence] where relevant\n"
-        "- Add approximate timestamps for major segments when possible\n"
+        "- Do not invent words; use [inaudible] when unclear\n"
         "If no speech is present, say so and briefly describe non-speech audio."
     ),
     "audio-review": (
         "You are a senior audio production reviewer. Analyze this recording.\n"
+        f"{TIMESTAMP_RULES}"
         "Return a structured review:\n"
-        "(1) Content clarity — message, structure, pacing\n"
-        "(2) Speech quality — intelligibility, diction, levels\n"
+        "(1) Content clarity — message, structure, pacing (cite timestamps)\n"
+        "(2) Speech quality — intelligibility, diction, levels, speakers\n"
         "(3) Technical quality — noise, clipping, reverb, balance, stereo\n"
         "(4) Music/SFX mix — if present, how well it supports content\n"
         "(5) Specific actionable suggestions for improvement\n"
         "Be constructive and detailed."
     ),
     "audio-scene": (
-        "Analyze this audio as an acoustic scene. List:\n"
+        "Analyze this audio as an acoustic scene.\n"
+        f"{TIMESTAMP_RULES}"
+        "List:\n"
         "(1) Environment / setting inferred from soundscape\n"
-        "(2) Distinct sound events in chronological order with timestamps if possible\n"
+        "(2) Distinct sound events chronologically as `mm:ss | event`\n"
         "(3) Music: genre, mood, instruments if identifiable\n"
         "(4) Human activity: speech, footsteps, machinery, etc.\n"
         "(5) Overall atmosphere and what story the soundscape tells\n"
@@ -186,6 +237,7 @@ PROMPTS = {
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma", ".opus"}
+PDF_EXTENSIONS = {".pdf"}
 
 IMAGE_MODES = {
     "describe", "ocr", "ui-review", "chart-data", "object-detect", "compare",
@@ -195,6 +247,10 @@ VIDEO_MODES = {
 }
 AUDIO_MODES = {
     "audio-summary", "audio-transcribe", "audio-review", "audio-scene",
+}
+# Modes that benefit from long-video segment indexing
+LONG_VIDEO_MODES = {
+    "video-summary", "video-ocr", "video-review", "describe", "ocr",
 }
 
 
@@ -214,7 +270,7 @@ def is_youtube_url(url: str) -> bool:
 
 
 def media_kind(path_or_url: str) -> str:
-    """Return 'video' | 'audio' | 'image' from extension (works for URLs too)."""
+    """Return 'video' | 'audio' | 'image' | 'pdf' from extension (works for URLs too)."""
     if is_youtube_url(path_or_url):
         return "video"
     suffix = _path_suffix(path_or_url)
@@ -222,6 +278,8 @@ def media_kind(path_or_url: str) -> str:
         return "audio"
     if suffix in VIDEO_EXTENSIONS:
         return "video"
+    if suffix in PDF_EXTENSIONS:
+        return "pdf"
     return "image"
 
 
@@ -262,6 +320,12 @@ def resolve_mode(mode: str, kind: str) -> str:
         if mode in AUDIO_MODES:
             raise ValueError(f"Mode '{mode}' is for audio files, got video")
         return mode
+    if kind == "pdf":
+        if mode in ("ocr", "describe", "chart-data", "ui-review"):
+            return mode
+        if mode in VIDEO_MODES or mode in AUDIO_MODES:
+            raise ValueError(f"Mode '{mode}' is not for PDF. Use: ocr, describe")
+        return "ocr" if mode not in IMAGE_MODES else mode
     # image
     if mode in AUDIO_MODES or mode in VIDEO_MODES:
         if mode.startswith("video-") and mode != "video-summary":
@@ -302,6 +366,144 @@ def format_duration(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+def _which(cmd: str) -> str | None:
+    from shutil import which
+    return which(cmd)
+
+
+def check_system() -> dict:
+    """Self-test: ffmpeg/ffprobe/key presence (no secrets printed)."""
+    ff = _which(_ffmpeg_bin()) or _which("ffmpeg")
+    fp = _which("ffprobe")
+    rows = list_providers()
+    providers = [
+        {
+            "id": r["id"],
+            "has_key": r["has_key"],
+            "model": r["model"],
+            "style": r["api_style"],
+        }
+        for r in rows
+    ]
+    active = resolve_provider(None)
+    return {
+        "ffmpeg": ff or "MISSING",
+        "ffprobe": fp or "MISSING",
+        "active_provider": active,
+        "providers": providers,
+        "long_video_sec": LONG_VIDEO_SEC,
+        "long_segment_sec": LONG_SEGMENT_SEC,
+        "pdf_max_pages": PDF_MAX_PAGES,
+        "pdf_dpi": PDF_DPI,
+        "ok": bool(ff and fp),
+    }
+
+
+def _file_fingerprint(path: str) -> str:
+    p = Path(path)
+    st = p.stat()
+    h = hashlib.sha1()
+    h.update(str(p.resolve()).encode("utf-8", errors="replace"))
+    h.update(str(st.st_size).encode())
+    h.update(str(int(st.st_mtime)).encode())
+    return h.hexdigest()[:16]
+
+
+def render_pdf_pages(pdf_path: str, max_pages: int | None = None, dpi: int | None = None) -> list[str]:
+    """Render PDF pages to JPEG via ffmpeg. Returns list of image paths."""
+    max_pages = max_pages or PDF_MAX_PAGES
+    dpi = dpi or PDF_DPI
+    src = Path(pdf_path)
+    if not src.is_file():
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
+    out_dir = _proxy_dir() / f"pdf-{_file_fingerprint(pdf_path)}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # ffmpeg pdf demuxer: one image per page via image2
+    pattern = out_dir / "page-%03d.jpg"
+    existing = sorted(out_dir.glob("page-*.jpg"))
+    if existing:
+        pages = [str(p) for p in existing[:max_pages]]
+        print(f"[genius-omni] pdf cache hit: {len(pages)} page(s) from {out_dir}", file=sys.stderr)
+        return pages
+    cmd = [
+        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(src),
+        "-frames:v", str(max_pages),
+        "-q:v", "2",
+        str(pattern),
+    ]
+    # Some builds need pdftoppm; try ffmpeg first
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    pages = sorted(out_dir.glob("page-*.jpg"))
+    if proc.returncode != 0 or not pages:
+        # fallback: pdftoppm if present
+        pdftoppm = _which("pdftoppm")
+        if not pdftoppm:
+            err = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
+            raise RuntimeError(
+                f"PDF render failed (ffmpeg). Install poppler pdftoppm or a ffmpeg with pdf demuxer. {err[:300]}"
+            )
+        prefix = out_dir / "page"
+        proc2 = subprocess.run(
+            [pdftoppm, "-jpeg", "-r", str(dpi), "-f", "1", "-l", str(max_pages),
+             str(src), str(prefix)],
+            capture_output=True, text=True, timeout=300,
+        )
+        pages = sorted(out_dir.glob("page*.jpg"))
+        if proc2.returncode != 0 or not pages:
+            err = (proc2.stderr or proc2.stdout or f"exit {proc2.returncode}").strip()
+            raise RuntimeError(f"PDF render failed (pdftoppm): {err[:300]}")
+    pages = pages[:max_pages]
+    print(f"[genius-omni] pdf rendered {len(pages)} page(s) dpi~{dpi} → {out_dir}", file=sys.stderr)
+    return [str(p) for p in pages]
+
+
+def cut_video_segment(src: str, start: float, duration: float) -> str:
+    """Extract a short video segment for long-video indexing."""
+    src_path = Path(src)
+    out = _proxy_dir() / (
+        f"{src_path.stem}.{int(start)}s-{int(start + duration)}s."
+        f"{int(time.time() * 1000)}.seg.mp4"
+    )
+    # stream copy first (fast); fallback re-encode
+    cmd_copy = [
+        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", str(max(0.0, start)),
+        "-i", str(src_path),
+        "-t", str(max(1.0, duration)),
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        str(out),
+    ]
+    proc = subprocess.run(cmd_copy, capture_output=True, text=True, timeout=180)
+    if proc.returncode == 0 and out.is_file() and out.stat().st_size > 0:
+        return str(out)
+    if out.exists():
+        out.unlink(missing_ok=True)
+    cmd_re = [
+        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", str(max(0.0, start)),
+        "-i", str(src_path),
+        "-t", str(max(1.0, duration)),
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32",
+        "-c:a", "aac", "-b:a", "64k",
+        str(out),
+    ]
+    proc2 = subprocess.run(cmd_re, capture_output=True, text=True, timeout=300)
+    if proc2.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+        if out.exists():
+            out.unlink(missing_ok=True)
+        err = (proc2.stderr or proc2.stdout or f"exit {proc2.returncode}").strip()
+        raise RuntimeError(f"Segment cut failed: {err[:300]}")
+    return str(out)
+
+
+def _index_path(video_path: str, mode: str) -> Path:
+    INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    maybe_cleanup_cache()
+    return INDEX_DIR / f"{_file_fingerprint(video_path)}-{mode}.json"
+
+
 # ── Analysis proxies (HEVC GPU → H.264 → CPU; audio AAC; image scale) ──
 
 def _ffmpeg_bin() -> str:
@@ -310,7 +512,55 @@ def _ffmpeg_bin() -> str:
 
 def _proxy_dir() -> Path:
     PROXY_DIR.mkdir(parents=True, exist_ok=True)
+    maybe_cleanup_cache()
     return PROXY_DIR
+
+
+def maybe_cleanup_cache(force: bool = False) -> dict:
+    """Delete genius-omni proxy/index files older than CACHE_MAX_AGE_DAYS.
+
+    Runs at most once per process unless force=True.
+    Returns stats: {removed, bytes, skipped, disabled}.
+    """
+    global _CACHE_CLEANED
+    if not force and _CACHE_CLEANED:
+        return {"removed": 0, "bytes": 0, "skipped": True, "disabled": False}
+    _CACHE_CLEANED = True
+    max_days = CACHE_MAX_AGE_DAYS
+    if max_days <= 0:
+        return {"removed": 0, "bytes": 0, "skipped": False, "disabled": True}
+    cutoff = time.time() - max_days * 86400
+    removed = 0
+    freed = 0
+    roots = [PROXY_DIR, INDEX_DIR]
+    for root in roots:
+        if not root.exists():
+            continue
+        # files first, then empty dirs under root (not root itself)
+        for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+            try:
+                if path.is_file():
+                    mtime = path.stat().st_mtime
+                    if mtime < cutoff:
+                        size = path.stat().st_size
+                        path.unlink(missing_ok=True)
+                        removed += 1
+                        freed += size
+                elif path.is_dir():
+                    # drop empty subdirs
+                    try:
+                        next(path.iterdir())
+                    except StopIteration:
+                        path.rmdir()
+            except OSError:
+                continue
+    if removed:
+        print(
+            f"[genius-omni] cache cleanup: removed {removed} file(s) "
+            f">={max_days:g}d old, freed {freed / 1024 / 1024:.1f}MB",
+            file=sys.stderr,
+        )
+    return {"removed": removed, "bytes": freed, "skipped": False, "disabled": False}
 
 
 def _encoder_attempts(scale: int | None = None) -> list[tuple[str, list[str]]]:
@@ -969,6 +1219,203 @@ def _extract_gemini_text(data: dict, show_think: bool = False) -> str:
     raise RuntimeError(f"Empty model response: {json.dumps(data, ensure_ascii=False)[:300]}")
 
 
+def _analyze_pdf(
+    pdf_path: str,
+    mode: str,
+    *,
+    model=None,
+    api_key=None,
+    base_url=None,
+    provider=None,
+    force_proxy: bool = False,
+) -> str:
+    """Page-by-page PDF analysis for better OCR/structure accuracy."""
+    mode = resolve_mode(mode, "pdf")
+    pages = render_pdf_pages(pdf_path)
+    if not pages:
+        raise RuntimeError("PDF produced zero pages")
+    chunks = []
+    total = len(pages)
+    for i, page_path in enumerate(pages, 1):
+        print(f"[genius-omni] pdf page {i}/{total}…", file=sys.stderr)
+        page_prompt_mode = mode if mode in PROMPTS else "ocr"
+        # analyze as image with page context injected via temporary prompt wrap
+        text = analyze_media(
+            page_path,
+            mode=page_prompt_mode,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            provider=provider,
+            force_proxy=force_proxy,
+            _skip_long_video=True,
+            _page_label=f"PDF page {i}/{total}",
+        )
+        chunks.append(f"## Page {i}/{total}\n\n{text}")
+    header = f"# PDF analysis ({mode}) — {total} page(s)\n\nSource: `{pdf_path}`\n"
+    return header + "\n\n---\n\n".join(chunks)
+
+
+def _analyze_long_video(
+    video_path: str,
+    mode: str,
+    duration: float,
+    *,
+    model=None,
+    api_key=None,
+    base_url=None,
+    provider=None,
+    force_proxy: bool = False,
+) -> str:
+    """Lightweight long-video memory: segment → index → synthesize."""
+    mode = resolve_mode(mode, "video")
+    if mode not in LONG_VIDEO_MODES and mode not in VIDEO_MODES:
+        mode = "video-summary"
+    seg_len = max(60.0, LONG_SEGMENT_SEC)
+    idx_file = _index_path(video_path, mode)
+    segments = []
+    if idx_file.is_file():
+        try:
+            cached = json.loads(idx_file.read_text(encoding="utf-8"))
+            if (
+                cached.get("duration") == round(duration, 1)
+                and cached.get("mode") == mode
+                and cached.get("segments")
+            ):
+                segments = cached["segments"]
+                print(
+                    f"[genius-omni] long-video index hit: {len(segments)} segment(s)",
+                    file=sys.stderr,
+                )
+        except Exception:
+            segments = []
+
+    if not segments:
+        starts = []
+        t = 0.0
+        while t < duration:
+            starts.append(t)
+            t += seg_len
+        for i, start in enumerate(starts, 1):
+            dur = min(seg_len, max(1.0, duration - start))
+            end = start + dur
+            print(
+                f"[genius-omni] long-video segment {i}/{len(starts)} "
+                f"{format_duration(start)}–{format_duration(end)}…",
+                file=sys.stderr,
+            )
+            seg_path = cut_video_segment(video_path, start, dur)
+            try:
+                seg_mode = mode if mode in VIDEO_MODES else "video-summary"
+                # Prefer compact segment notes for indexing
+                if mode in ("video-summary", "describe"):
+                    seg_mode = "video-summary"
+                note = analyze_media(
+                    seg_path,
+                    mode=seg_mode,
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url,
+                    provider=provider,
+                    force_proxy=force_proxy,
+                    _skip_long_video=True,
+                    _segment_label=(
+                        f"SEGMENT {i}/{len(starts)} absolute time "
+                        f"{format_duration(start)}–{format_duration(end)} "
+                        f"(offset +{format_duration(start)} from media start). "
+                        f"Report timestamps as ABSOLUTE media time, not segment-local."
+                    ),
+                )
+            finally:
+                try:
+                    Path(seg_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            segments.append({
+                "index": i,
+                "start": round(start, 2),
+                "end": round(end, 2),
+                "start_label": format_duration(start),
+                "end_label": format_duration(end),
+                "note": note,
+            })
+        idx_file.write_text(
+            json.dumps({
+                "file": str(Path(video_path).resolve()),
+                "mode": mode,
+                "duration": round(duration, 1),
+                "segment_sec": seg_len,
+                "segments": segments,
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"[genius-omni] long-video index saved → {idx_file}", file=sys.stderr)
+
+    # Synthesize final answer from segment notes (text-only, no media reupload)
+    index_blob = "\n\n".join(
+        f"### Segment {s['index']}: {s['start_label']} – {s['end_label']}\n{s['note']}"
+        for s in segments
+    )
+    synth_prompt = (
+        f"[VIDEO GROUND TRUTH — total duration {format_duration(duration)} "
+        f"({duration:.1f}s). Segment notes below cover the full timeline.]\n\n"
+        f"{PROMPTS.get(mode, PROMPTS['video-summary'])}\n\n"
+        "You are given chronological segment notes already extracted from the video. "
+        "Synthesize ONE coherent answer for the whole video. "
+        "Merge duplicates, keep absolute timestamps, do not invent content "
+        "not supported by the notes.\n\n"
+        f"--- SEGMENT NOTES ---\n{index_blob}"
+    )
+    _provider, base_url, model, api_key = resolve_endpoint(
+        provider=provider, model=model, api_key=api_key, base_url=base_url,
+    )
+    conf = provider_conf(_provider)
+    use_gemini = conf["api_style"] == "gemini"
+    max_out = int(os.environ.get("VISION_MAX_TOKENS", "32768"))
+    proxy = _http_proxy()
+    if use_gemini:
+        root = _gemini_api_root(base_url)
+        endpoint = f"{root}/v1beta/models/{model}:generateContent"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": synth_prompt}]}],
+            "generationConfig": {"maxOutputTokens": max_out},
+        }
+        with httpx.Client(timeout=180, proxy=proxy) as client:
+            resp = client.post(endpoint, headers=headers, json=body)
+            if resp.status_code != 200:
+                raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+            result = _extract_gemini_text(resp.json(), show_think=False)
+    else:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": synth_prompt}],
+            "max_completion_tokens": max_out,
+            "max_tokens": max_out,
+        }
+        with httpx.Client(timeout=180, proxy=proxy) as client:
+            resp = client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
+            if resp.status_code != 200:
+                raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+            message = resp.json()["choices"][0]["message"]
+            result = message.get("content") or message.get("reasoning_content") or ""
+    result += (
+        f"\n\n---\n⏱ **时长校验** — ffprobe 实测: **{format_duration(duration)}** "
+        f"| segments: {len(segments)} × ~{int(seg_len)}s "
+        f"| index: `{idx_file}`"
+    )
+    return result
+
+
 def analyze_media(
     media_input: str,
     mode: str = "describe",
@@ -978,8 +1425,11 @@ def analyze_media(
     provider: str = None,
     compare_with: str = None,
     force_proxy: bool = False,
+    _skip_long_video: bool = False,
+    _page_label: str | None = None,
+    _segment_label: str | None = None,
 ) -> str:
-    """Analyze image / video / audio.
+    """Analyze image / video / audio / PDF.
 
     CPA/Gemini: native /v1beta/models/{model}:generateContent
       - local → inline_data base64
@@ -993,8 +1443,8 @@ def analyze_media(
         base_url=base_url,
     )
     if not api_key:
-        conf = PROVIDERS[_provider]
-        key_hint = " / ".join(conf["key_envs"])
+        conf = PROVIDERS.get(_provider) or provider_conf(_provider)
+        key_hint = " / ".join(conf.get("key_envs") or ("API key",))
         raise ValueError(
             f"API key not found for provider '{_provider}'. "
             f"Set {key_hint} or create scripts/.env."
@@ -1017,8 +1467,24 @@ def analyze_media(
         elif mode in VIDEO_MODES or mode.startswith("video-"):
             kind = "video"
 
+    # PDF: page-by-page path (before generic image pipeline)
+    if kind == "pdf" and not media_input.startswith(("http://", "https://")):
+        return _analyze_pdf(
+            media_input,
+            mode,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            provider=_provider,
+            force_proxy=force_proxy,
+        )
+
     mode = resolve_mode(mode, kind)
     prompt = PROMPTS.get(mode, PROMPTS["describe"])
+    if _page_label:
+        prompt = f"[{_page_label} — treat this as one document page.]\n\n" + prompt
+    if _segment_label:
+        prompt = f"[{_segment_label}]\n\n" + prompt
 
     is_video_input = kind == "video"
     is_audio_input = kind == "audio"
@@ -1031,12 +1497,43 @@ def analyze_media(
     is_yt = is_youtube_url(media_input)
     upload_path = media_input
 
+    if is_local and (is_video_input or is_audio_input):
+        actual_duration = get_media_duration(media_input)
+
+    # Long local video → segment index (lightweight memory)
+    if (
+        not _skip_long_video
+        and is_local
+        and is_video_input
+        and not is_yt
+        and actual_duration is not None
+        and actual_duration >= LONG_VIDEO_SEC
+        and mode in LONG_VIDEO_MODES
+        and os.environ.get("VISION_LONG_VIDEO", "1").strip().lower()
+        not in ("0", "false", "no", "off")
+    ):
+        print(
+            f"[genius-omni] long video detected ({format_duration(actual_duration)} "
+            f">= {format_duration(LONG_VIDEO_SEC)}); using segment index…",
+            file=sys.stderr,
+        )
+        return _analyze_long_video(
+            media_input,
+            mode,
+            actual_duration,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            provider=_provider,
+            force_proxy=force_proxy,
+        )
+
     if is_local:
         try:
             # --force-proxy is video-oriented; audio/image still size-trigger
             upload_path = ensure_media_under_limit(
                 media_input,
-                kind=kind,
+                kind=kind if kind != "pdf" else "image",
                 force_proxy=bool(force_proxy and is_video_input),
                 prefer_h264=prefer_h264,
             )
@@ -1048,7 +1545,8 @@ def analyze_media(
 
     if is_local and (is_video_input or is_audio_input):
         # Duration from original when possible (proxy may re-mux)
-        actual_duration = get_media_duration(media_input)
+        if actual_duration is None:
+            actual_duration = get_media_duration(media_input)
         if actual_duration is not None:
             label = "AUDIO" if is_audio_input else "VIDEO"
             dur_str = format_duration(actual_duration)
@@ -1330,9 +1828,44 @@ def main():
         action="store_true",
         help="List configured providers and exit",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Self-test ffmpeg/ffprobe/providers (no media API call)",
+    )
+    parser.add_argument(
+        "--cleanup-cache",
+        action="store_true",
+        help="Purge proxy/index files older than VISION_CACHE_MAX_AGE_DAYS (default 30) and exit",
+    )
+    parser.add_argument(
+        "--no-long-video",
+        action="store_true",
+        help="Disable long-video segment indexing even if duration exceeds threshold",
+    )
     args = parser.parse_args()
 
     try:
+        if args.cleanup_cache:
+            stats = maybe_cleanup_cache(force=True)
+            if args.output == "json":
+                print(json.dumps({
+                    **stats,
+                    "max_age_days": CACHE_MAX_AGE_DAYS,
+                    "proxy_dir": str(PROXY_DIR),
+                    "index_dir": str(INDEX_DIR),
+                }, ensure_ascii=False, indent=2))
+            else:
+                if stats.get("disabled"):
+                    print("cache cleanup disabled (VISION_CACHE_MAX_AGE_DAYS<=0)")
+                else:
+                    print(
+                        f"removed={stats['removed']} bytes={stats['bytes']} "
+                        f"max_age_days={CACHE_MAX_AGE_DAYS:g}\n"
+                        f"proxy_dir={PROXY_DIR}\nindex_dir={INDEX_DIR}"
+                    )
+            return
+
         if args.list_providers:
             rows = list_providers()
             if args.output == "json":
@@ -1351,8 +1884,34 @@ def main():
                     )
             return
 
+        if args.check:
+            info = check_system()
+            if args.output == "json":
+                print(json.dumps(info, ensure_ascii=False, indent=2))
+            else:
+                print(f"ffmpeg:  {info['ffmpeg']}")
+                print(f"ffprobe: {info['ffprobe']}")
+                print(f"active:  {info['active_provider']}")
+                print(
+                    f"long-video: threshold={info['long_video_sec']}s "
+                    f"segment={info['long_segment_sec']}s"
+                )
+                print(f"pdf: max_pages={info['pdf_max_pages']} dpi={info['pdf_dpi']}")
+                for p in info["providers"]:
+                    print(
+                        f"  - {p['id']}: key={'yes' if p['has_key'] else 'no'} "
+                        f"model={p['model']} style={p['style']}"
+                    )
+                print("ok" if info["ok"] else "MISSING system tools")
+            if not info["ok"]:
+                sys.exit(2)
+            return
+
         if not args.file:
-            parser.error("file is required (unless --list-providers)")
+            parser.error("file is required (unless --list-providers / --check)")
+
+        if args.no_long_video:
+            os.environ["VISION_LONG_VIDEO"] = "0"
 
         if args.proxy_only:
             kind = media_kind(args.file)
@@ -1360,6 +1919,18 @@ def main():
                 proxy, enc = make_video_proxy(args.file)
             elif kind == "audio":
                 proxy, enc = make_audio_proxy(args.file)
+            elif kind == "pdf":
+                pages = render_pdf_pages(args.file)
+                if args.output == "json":
+                    print(json.dumps({
+                        "file": args.file,
+                        "kind": "pdf",
+                        "pages": pages,
+                        "count": len(pages),
+                    }, ensure_ascii=False, indent=2))
+                else:
+                    print(f"kind=pdf\npages={len(pages)}\n" + "\n".join(pages))
+                return
             else:
                 proxy, enc = make_image_proxy(args.file)
             if args.output == "json":
