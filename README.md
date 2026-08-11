@@ -37,7 +37,6 @@
 | [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
 | [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
-| [libtv-cli](./libtv-cli/) | LibTV 画布 / 项目 / 节点 CLI |
 
 ### Tools
 
@@ -76,7 +75,6 @@ genius-skill-hub-v2.0/
 ├── genius-skill-creator/
 ├── github-cli/
 ├── lark/
-├── libtv-cli/
 ├── we-planing/
 ├── writing-plans/
 └── x-search-grok/
