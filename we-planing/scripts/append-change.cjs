@@ -25,8 +25,12 @@ Usage:
 Options:
   --agent <name>          Defaults to session Agent field
   --role <role>           Defaults to session Role field
-  --based-on <id>         Defaults to session Parent session field
+  --based-on <id>         Defaults to the current THREADS.md mainline, then the
+                          session Parent. On a branch merge those differ, so pass
+                          it explicitly when the lineage matters.
   --change-id <id>        Defaults to "<now> <short>"
+  --short <text>          Suffix used in the generated change id. Default: "change"
+  --time <iso>            Entry timestamp. Default: now
   --changed <text>        Repeat or separate with ";;"
   --file <path>           Repeat or separate with ";;"
   --verification <text>   Repeat or separate with ";;"

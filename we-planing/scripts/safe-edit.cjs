@@ -4,8 +4,10 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
+  BACKUP_DIR_NAME,
   emitResult,
   extractField,
+  LOCK_DIR_NAME,
   parseArgs,
   parseCurrentMd,
   parseSessionMd,
@@ -56,6 +58,7 @@ Common options:
   --verification <text> Required. Repeatable or ";;" separated.
   --note <text>         Notes for append-change / session Work Notes.
   --no-sync             Do not auto-update CURRENT.md prose.
+  --replace-state       Allow --changed to overwrite a curated Current State.
   --goal / --state / --next-step / --blockers / --understanding
 `;
 
@@ -80,6 +83,11 @@ if (mode === "close") {
   if (args["no-sync"] && hasSyncFlags) {
     usage(false, "Conflicting flags: --no-sync cannot be combined with CURRENT.md sync flags", help);
   }
+  if (args["replace-state"] && (args.state || args["no-sync"])) {
+    usage(false, "Conflicting flags: --replace-state cannot be combined with --state or --no-sync", help);
+  }
+} else if (args["replace-state"]) {
+  usage(false, "--replace-state requires --close", help);
 } else if (mode === "lite") {
   required(args, "changed", help);
   if (args.goal || args.state || args.blockers || args.understanding) {
@@ -111,6 +119,9 @@ function listFiles(dir) {
   if (!fs.existsSync(dir)) return [];
   const result = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    // Backups and the lock are transient, not state: snapshotting them makes
+    // rollback rewrite every .bak file, which spawns nested .backups/ trees.
+    if (entry.name === BACKUP_DIR_NAME || entry.name === LOCK_DIR_NAME) continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) result.push(...listFiles(fullPath));
     else result.push(fullPath);
@@ -182,6 +193,39 @@ function ensureFreshMainline() {
       `  .agent-memory/sessions/${sessionId}.md to ${threads.mainline}, then rerun.`,
     );
   }
+}
+
+// Bullets written by init-memory carry no project knowledge, so overwriting them is not a loss.
+const INIT_STATE_BULLETS = new Set([
+  "WePlaning v2.3 memory is active.",
+  "Required memory files exist.",
+]);
+
+function curatedStateBullets(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+    .filter(Boolean)
+    .filter((line) => !INIT_STATE_BULLETS.has(line) && !/^unknown$/i.test(line));
+}
+
+/**
+ * Without --state, close replaces the whole Current State with the --changed text.
+ * That silently discards accumulated project truth, so require explicit intent.
+ */
+function ensureStateNotClobbered() {
+  if (mode !== "close") return;
+  if (args.state || args["no-sync"] || args["replace-state"]) return;
+  const state = parseCurrentMd(readMemory(root, "CURRENT.md"));
+  const curated = curatedStateBullets(state.currentState);
+  if (curated.length < 2) return;
+  throw new Error(
+    `Refusing to overwrite curated CURRENT.md Current State (${curated.length} bullets) with the --changed text.\n` +
+    `  Fix: pick one —\n` +
+    `    --state "<full accepted state>"   write the complete state (preferred, ";;" separates bullets)\n` +
+    `    --replace-state                   accept replacing it with --changed\n` +
+    `    --no-sync                         leave CURRENT.md prose untouched`,
+  );
 }
 
 function bulletList(value, fallback) {
@@ -291,6 +335,7 @@ withMemoryLock(root, () => {
 
   try {
     ensureFreshMainline();
+    ensureStateNotClobbered();
   } catch (error) {
     abort(error.message);
   }

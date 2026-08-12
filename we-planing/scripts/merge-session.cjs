@@ -26,6 +26,7 @@ Usage:
 
 Options:
   --agent <name>              Defaults to session Agent field
+  --time <iso>                Merge timestamp. Default: now
   --allow-branch              Allow merge when parent is not current mainline
   --no-current-update         Do not update CURRENT.md metadata
   --no-check                  Internal use only; external callers must run consistency checks

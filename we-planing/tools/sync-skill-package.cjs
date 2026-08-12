@@ -24,15 +24,24 @@ const keep = toList(args.keep).map((item) => item.replace(/\\/g, "/").replace(/^
 
 function listFiles(root) {
   const output = [];
+  const links = [];
   function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.name === ".git") continue;
-      if (entry.isDirectory()) walk(full);
+      // isDirectory()/isFile() are both false for a link, so an unreported link
+      // would silently vanish from the copy and from the verification pass.
+      if (entry.isSymbolicLink()) links.push(full);
+      else if (entry.isDirectory()) walk(full);
       else if (entry.isFile()) output.push(full);
     }
   }
   walk(root);
+  if (links.length) {
+    console.error(`Refusing to sync: ${links.length} symlink(s) inside ${root}`);
+    for (const link of links) console.error(`- ${link}`);
+    process.exit(1);
+  }
   return output;
 }
 
@@ -50,6 +59,16 @@ if (!fs.existsSync(path.join(source, "SKILL.md"))) {
 }
 if (!fs.existsSync(target)) {
   fs.mkdirSync(target, { recursive: true });
+}
+// Skills are commonly installed as a junction back to the hub, in which case
+// source and target are the same files and every copy would overwrite its own input.
+if (fs.realpathSync(source) === fs.realpathSync(target)) {
+  console.error(
+    `Refusing to sync: source and target resolve to the same directory.\n` +
+    `  source ${source}\n  target ${target}\n  both -> ${fs.realpathSync(source)}\n` +
+    `  The target is probably a junction/symlink to the source; it is already in sync.`,
+  );
+  process.exit(1);
 }
 
 const sourceFiles = listFiles(source);

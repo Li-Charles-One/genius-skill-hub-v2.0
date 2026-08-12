@@ -3,9 +3,11 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  allowNoCheck,
   emitResult,
   parseArgs,
   readMemory,
+  runCheck,
   usage,
   utcNow,
   withMemoryLock,
@@ -18,14 +20,19 @@ Usage:
 
 Moves older CHANGES.md blocks into .agent-memory/archive/, keeping the newest N.
 
+Archived blocks stay readable in the archive file, and CHANGES.md keeps an
+"Archived:" breadcrumb so later sessions can still find the older history.
+
 Options:
   --keep <N>     Number of newest complete change blocks to keep (default: 30)
   --dry-run      Print plan without writing
   --json         Machine-readable JSON on stdout
+  --no-check     Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "archive-changes.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const keep = Math.max(1, Number(args.keep || 30) || 30);
@@ -48,6 +55,12 @@ let archivePath = null;
 withMemoryLock(root, () => {
   const changes = readMemory(root, "CHANGES.md");
   const { header, blocks } = splitBlocks(changes);
+  // Rewriting CHANGES.md without its schema header would silently produce a file
+  // that fails every later consistency check, so refuse instead of guessing one.
+  if (!/^Schema version:\s*2\.(2|3)$/m.test(header)) {
+    console.error("CHANGES.md has no recognizable schema header; refusing to rewrite it.");
+    process.exit(1);
+  }
   kept = Math.min(keep, blocks.length);
   archived = Math.max(0, blocks.length - keep);
   if (archived === 0) return;
@@ -70,9 +83,12 @@ ${toArchive.join("\n").replace(/\s*$/, "")}
 `;
   fs.writeFileSync(archivePath, archiveBody.replace(/\r?\n/g, "\n"), "utf8");
 
-  const nextChanges = `${header}\n\n${toKeep.join("\n").replace(/\s*$/, "")}\n`;
+  const breadcrumb = `Archived: archive/${path.basename(archivePath)} (${toArchive.length} blocks)`;
+  const nextChanges = `${header}\n${breadcrumb}\n\n${toKeep.join("\n").replace(/\s*$/, "")}\n`;
   writeMemory(root, "CHANGES.md", nextChanges);
 });
+
+if (!args["dry-run"] && archived > 0 && !args["no-check"]) runCheck(root, __dirname);
 
 if (args["dry-run"]) {
   emitResult(args, archived ? `Would archive ${archived} block(s), keep ${kept}` : "Nothing to archive", {

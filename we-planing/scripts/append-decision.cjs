@@ -3,12 +3,15 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  allowNoCheck,
   emitResult,
   parseArgs,
   required,
+  runCheck,
   usage,
   utcNow,
   withMemoryLock,
+  writeMemory,
 } = require("./weplaning-utils.cjs");
 
 const help = `
@@ -21,11 +24,14 @@ Options:
   --rationale <text>   Why this decision was made
   --session <id>       Related session id
   --agent <name>       Agent name
+  --time <iso>         Entry timestamp. Default: now
   --json               Machine-readable JSON on stdout
+  --no-check           Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "append-decision.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const decision = required(args, "decision", help);
@@ -53,9 +59,10 @@ withMemoryLock(root, () => {
 - Decision: ${decision}
 - Rationale: ${rationale}
 `;
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${text}\n${entry}`.replace(/\r?\n/g, "\n"), "utf8");
+  writeMemory(root, "DECISIONS.md", `${text}\n${entry}`);
 });
+
+if (!args["no-check"]) runCheck(root, __dirname);
 
 emitResult(args, `decision recorded`, {
   decision,

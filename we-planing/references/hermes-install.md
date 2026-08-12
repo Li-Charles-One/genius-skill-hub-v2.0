@@ -16,5 +16,8 @@ If WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you wa
 **Junction target disappears → broken link.**
 If the hub repo is moved or deleted, the junction in `hermes/skills/` becomes a dangling empty directory. Hermes won't auto-clean it. If you delete the hub, `rmdir` the junction on the Hermes side too.
 
+**"Copying" the skill can silently write through the link.**
+Tooling that duplicates the skill directory to experiment on it — most commonly a script that reverts a fix in a "throwaway copy" to check that a test really catches the bug — must dereference the link first. `fs.cpSync(src, dest, { recursive: true })` in Node defaults to `dereference: false`, so copying a junction/symlink produces **another link to the same files**, and every patch lands in the hub. Resolve the target first (`fs.realpathSync`) or pass `dereference: true`, then assert `fs.lstatSync(copy).isSymbolicLink() === false` before patching. Hash the real files before and after such a run and verify they are unchanged; the failure is otherwise invisible until a later test breaks.
+
 **Junction is a live mirror — git operations on the hub affect Hermes instantly.**
 A Windows directory junction (`mklink /J`) is a filesystem-level mirror, not a snapshot. Any operation that rewrites files inside the hub repo's working tree — `git checkout -- <file>`, `git stash`, `git reset --hard`, `git restore`, even `git pull` with conflicts — propagates to `hermes/skills/<category>/<skill>` **immediately**, with no reload and no warning. To archive hub working-tree edits without losing them from the live install, **commit** them (local or remote) — not stash.

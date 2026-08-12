@@ -32,6 +32,7 @@ Options:
   --parent <id>        Parent session. Default: current THREADS.md mainline
   --id <id>            Explicit session id
   --short-id <id>      Short suffix when generating an id
+  --started <iso>      Session start timestamp. Default: now
   --context <text>     Context-read item. Repeat or separate with ";;"
   --note <text>        Work-note item. Repeat or separate with ";;"
   --json               Print machine-readable JSON result on stdout
@@ -83,7 +84,9 @@ withMemoryLock(root, () => {
     process.exit(1);
   }
 
-  const before = { threads, sessionExists: fs.existsSync(target) };
+  // Deep copy: rows get mutated below, so keeping the live object would make the
+  // rollback write the very state it is supposed to undo.
+  const before = { threads: { ...threads, rows: threads.rows.map((row) => ({ ...row })) } };
 
   try {
     writeSession(
@@ -122,7 +125,7 @@ withMemoryLock(root, () => {
     writeThreads(root, threads, started);
   } catch (err) {
     writeThreads(root, before.threads, started);
-    if (!before.sessionExists && fs.existsSync(target)) fs.rmSync(target, { force: true });
+    if (fs.existsSync(target)) fs.rmSync(target, { force: true });
     console.error(`Could not create session: ${err.message}`);
     process.exit(1);
   }

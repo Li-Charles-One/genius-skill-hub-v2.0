@@ -30,6 +30,8 @@ Repairs common WePlaning drift:
   - marks mainline thread row and session file as merged
   - aligns Last merged session with mainline
   - rebuilds missing mainline THREADS row or session file with minimal data
+  - rebuilds any other session file listed in THREADS.md but missing on disk,
+    carrying over the row's summary as the session goal and result
 
 When CURRENT.md and THREADS.md mainline disagree, repair refuses to guess.
 Pass --prefer current|threads to choose the authority.
@@ -54,6 +56,37 @@ const root = path.resolve(args._[0] || process.cwd());
 const now = args.time || utcNow();
 let repairs = [];
 let targetMainline = null;
+
+const SESSION_STATUSES = new Set(["active", "merged", "paused", "abandoned", "closed"]);
+
+/** A THREADS row keeps the summary, so a lost session file can be rebuilt without inventing content. */
+function reconstructFromRow(row, forcedStatus) {
+  const stamp = row.id.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+  const started = stamp ? `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:00Z` : "unknown";
+  const summary = row.summary && row.summary !== "unknown"
+    ? row.summary
+    : "No summary was recorded in THREADS.md.";
+  const status = forcedStatus || (SESSION_STATUSES.has(row.status) ? row.status : "closed");
+  const open = status === "active" || status === "paused";
+  return renderSessionMd({
+    sessionId: row.id,
+    agent: row.agent || "unknown",
+    adapter: "unknown",
+    os: row.os || "unknown",
+    role: row.role || "unknown",
+    parentSession: row.parent || "unknown",
+    status,
+    started,
+    closed: open ? "unknown" : started,
+    goal: summary,
+    contextRead: "- Reconstructed by repair-memory.cjs from the THREADS.md row; the original session file was lost.",
+    workNotes: `- ${summary}`,
+    filesTouched: "- unknown (original session file was lost)",
+    decisions: "- none recorded",
+    result: summary,
+    exactNextStep: "See CURRENT.md Accepted Next Steps.",
+  });
+}
 
 withMemoryLock(root, () => {
   const current = readMemory(root, "CURRENT.md");
@@ -122,24 +155,7 @@ withMemoryLock(root, () => {
   const mainlineSessionPath = sessionPath(root, targetMainline);
   if (!fs.existsSync(mainlineSessionPath)) {
     repairs.push(`session ${targetMainline} rebuild missing mainline session file`);
-    sessionText = renderSessionMd({
-      sessionId: targetMainline,
-      agent: row.agent || "unknown",
-      adapter: "unknown",
-      os: row.os || "unknown",
-      role: row.role || "unknown",
-      parentSession: row.parent || "unknown",
-      status: "merged",
-      started: "unknown",
-      closed: now,
-      goal: "Reconstructed missing mainline session file.",
-      contextRead: "- CURRENT.md\n- THREADS.md",
-      workNotes: "- Rebuilt by repair-memory.cjs because the mainline session file was missing.",
-      filesTouched: `- .agent-memory/sessions/${targetMainline}.md`,
-      decisions: "- Preserve chosen mainline authority.",
-      result: "Reconstructed missing mainline session file from CURRENT.md and THREADS.md.",
-      exactNextStep: "Review the reconstructed session if original session details are needed.",
-    });
+    sessionText = reconstructFromRow(row, "merged");
   } else {
     sessionText = readSession(root, targetMainline);
   }
@@ -171,11 +187,21 @@ withMemoryLock(root, () => {
     }
   }
 
+  const orphanedRows = threads.rows.filter(
+    (item) => item.id !== targetMainline && !fs.existsSync(sessionPath(root, item.id)),
+  );
+  for (const item of orphanedRows) {
+    repairs.push(`session ${item.id} rebuild missing session file (${item.status || "unknown"})`);
+  }
+
   if (args["dry-run"]) return;
 
   if (repairs.length > 0) {
     writeThreads(root, threads, now);
     writeSession(root, targetMainline, sessionText);
+    for (const item of orphanedRows) {
+      writeSession(root, item.id, reconstructFromRow(item));
+    }
   }
 });
 

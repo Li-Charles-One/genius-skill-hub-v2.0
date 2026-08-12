@@ -65,6 +65,17 @@ function readFile(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
+const BACKUP_DIR_NAME = ".backups";
+const LOCK_DIR_NAME = ".weplaning.lock";
+
+/** Files that are themselves backups must never be backed up again — that is how .backups/.backups/ grows. */
+function isTransientPath(filePath) {
+  return path
+    .resolve(filePath)
+    .split(path.sep)
+    .some((segment) => segment === BACKUP_DIR_NAME || segment === LOCK_DIR_NAME);
+}
+
 function writeFile(filePath, text) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const normalized = normalizeNewlines(text);
@@ -73,7 +84,7 @@ function writeFile(filePath, text) {
   const stamp = uniqueStamp();
   const tempPath = path.join(dir, `.${base}.${stamp}.tmp`);
 
-  if (fs.existsSync(filePath)) {
+  if (fs.existsSync(filePath) && !isTransientPath(filePath)) {
     const backupDir = path.join(dir, ".backups");
     fs.mkdirSync(backupDir, { recursive: true });
     fs.copyFileSync(filePath, path.join(backupDir, `${base}.${stamp}.bak`));
@@ -158,7 +169,7 @@ function randomShortId() {
   return Math.random().toString(36).slice(2, 6);
 }
 
-function generateSessionId({ iso, agent, os, role, shortId }) {
+function generateSessionId({ iso, agent, shortId }) {
   const timestamp = compactTimestamp(iso).replace(/(\d{8}T\d{4}).*/, "$1");
   return [timestamp, slug(agent) || "agent", slug(shortId) || randomShortId()].join("-");
 }
@@ -321,6 +332,22 @@ function validateKnownMarkdown(relativePath, text) {
       for (const key of ["lastUpdated", "mainlineSession", "activeGoal"]) {
         if (before[key] !== after[key]) throw new Error(`CURRENT.md round-trip changed ${key}`);
       }
+    } else if (relativePath === "THREADS.md") {
+      const before = parseThreads(text);
+      const after = parseThreads(renderThreads({ ...before, updated: "round-trip" }));
+      if (before.mainline !== after.mainline) throw new Error("THREADS.md round-trip changed mainline");
+      if (before.lastMerged !== after.lastMerged) throw new Error("THREADS.md round-trip changed lastMerged");
+      if (before.rows.length !== after.rows.length) {
+        throw new Error(`THREADS.md round-trip changed row count ${before.rows.length} -> ${after.rows.length}`);
+      }
+      for (let index = 0; index < before.rows.length; index += 1) {
+        if (before.rows[index].id !== after.rows[index].id) {
+          throw new Error(`THREADS.md round-trip changed row ${index} id`);
+        }
+        if (before.rows[index].status !== after.rows[index].status) {
+          throw new Error(`THREADS.md round-trip changed status of ${before.rows[index].id}`);
+        }
+      }
     } else if (relativePath.replace(/\\/g, "/").startsWith("sessions/")) {
       const before = parseSessionMd(text);
       const after = parseSessionMd(renderSessionMd(before));
@@ -342,6 +369,17 @@ function allowNoCheck(args, scriptName) {
 
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isProcessAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists but belongs to another user.
+    return error.code === "EPERM";
+  }
 }
 
 function readJsonIfExists(filePath) {
@@ -380,11 +418,13 @@ function withMemoryLock(root, callback, options = {}) {
       } catch {
         age = staleMs + 1;
       }
-      if (age > staleMs) {
-        const staleOwner = readJsonIfExists(ownerPath);
+      const staleOwner = age > staleMs ? readJsonIfExists(ownerPath) : null;
+      // Age alone is not enough: a slow but healthy pipeline would have its lock
+      // stolen mid-write. Only reclaim when the recorded owner is really gone.
+      if (age > staleMs && !isProcessAlive(staleOwner?.pid)) {
         try {
           fs.rmSync(dir, { recursive: true, force: true });
-          console.error(`Removed stale WePlaning lock${staleOwner?.pid ? ` from pid ${staleOwner.pid}` : ""}.`);
+          console.error(`Removed stale WePlaning lock${staleOwner?.pid ? ` from dead pid ${staleOwner.pid}` : ""}.`);
           continue;
         } catch {
           // Another process may have removed it. Retry until timeout.
@@ -479,6 +519,7 @@ function replaceOrAppendTableRow(text, heading, keyValue, rowCells) {
 function parseThreads(text) {
   const mainline = extractField(text, "Mainline session");
   const lastMerged = extractField(text, "Last merged session");
+  const archived = extractField(text, "Archived rows");
   const rows = text
     .split(/\r?\n/)
     .filter((line) => line.startsWith("| ") && !line.includes(":--"))
@@ -491,12 +532,14 @@ function parseThreads(text) {
       os: cells[3],
       role: cells[4],
       status: cells[5],
-      summary: cells[6],
+      // A hand-edited or externally merged row may carry an unescaped "|", which splits
+      // the summary into extra cells. Rejoin them so the tail is not dropped on re-render.
+      summary: cells.slice(6).join(" | "),
     }));
-  return { mainline, lastMerged, rows };
+  return { mainline, lastMerged, archived, rows };
 }
 
-function renderThreads({ updated, mainline, lastMerged, rows }) {
+function renderThreads({ updated, mainline, lastMerged, archived, rows }) {
   const lines = [
     "# Threads",
     "Schema version: 2.3",
@@ -504,6 +547,7 @@ function renderThreads({ updated, mainline, lastMerged, rows }) {
     "",
     `Mainline session: ${mainline}`,
     `Last merged session: ${lastMerged}`,
+    ...(archived ? [`Archived rows: ${archived}`] : []),
     "",
     "## Session Tree",
     "",
@@ -570,11 +614,14 @@ module.exports = {
   activeCount,
   appendTableRow,
   allowNoCheck,
+  BACKUP_DIR_NAME,
   compactTimestamp,
   defaultAgent,
   detectProjectConfig,
   emitResult,
   extractField,
+  isTransientPath,
+  LOCK_DIR_NAME,
   generateSessionId,
   memoryPath,
   normalizeNewlines,

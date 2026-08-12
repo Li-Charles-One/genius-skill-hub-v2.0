@@ -64,8 +64,41 @@ function hasRealBlocker(text) {
   return lines.some((line) => !/^-?\s*(none|unknown|unavailable|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞)\s*[。.]?$/i.test(line));
 }
 
+// Syncthing writes "<name>.sync-conflict-<date>-<time>-<device>.<ext>" when two devices
+// edit the same file. Inside .agent-memory that means the mainline silently forked.
+const CONFLICT_PATTERN = /\.sync-conflict-\d{8}-\d{6}/i;
+
+function collectConflictCopies(dir, found) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of entries) {
+    if (entry.name === ".backups" || entry.name === ".weplaning.lock") continue;
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) collectConflictCopies(fullPath, found);
+    else if (CONFLICT_PATTERN.test(entry.name)) {
+      found.push(path.relative(memoryDir, fullPath).replace(/\\/g, "/"));
+    }
+  }
+  return found;
+}
+
 if (!fs.existsSync(memoryDir) || !fs.statSync(memoryDir).isDirectory()) {
   fail("Missing required directory: .agent-memory");
+} else {
+  const conflicts = collectConflictCopies(memoryDir, []).sort();
+  if (conflicts.length > 0) {
+    const shown = conflicts.slice(0, 10).map((name) => `    .agent-memory/${name}`);
+    if (conflicts.length > shown.length) shown.push(`    ... and ${conflicts.length - shown.length} more`);
+    fail(
+      `Sync conflict copies found in .agent-memory (${conflicts.length}). Memory diverged across devices.\n` +
+      `${shown.join("\n")}\n` +
+      `  Fix: compare each copy against the live file, merge anything worth keeping, then delete the copies.`,
+    );
+  }
 }
 
 for (const required of ["CURRENT.md", "THREADS.md", "CHANGES.md"]) {
@@ -96,6 +129,20 @@ if (errors.length === 0) {
   const lastMerged = parsedThreads.lastMerged;
   const mainlineRow = parsedThreads.rows.find((row) => row.id === threadsMainline);
   const rowIds = new Set(parsedThreads.rows.map((row) => row.id));
+  // Rows moved out by archive-threads stay valid ancestors of the rows still live.
+  const archivedIds = new Set();
+  const archiveDir = path.join(memoryDir, "archive");
+  if (fs.existsSync(archiveDir)) {
+    for (const name of fs.readdirSync(archiveDir)) {
+      if (!name.startsWith("THREADS-") || !name.endsWith(".md")) continue;
+      const text = fs.readFileSync(path.join(archiveDir, name), "utf8");
+      for (const line of text.split(/\r?\n/)) {
+        if (!line.startsWith("| ") || line.includes(":--")) continue;
+        const id = line.split("|")[1].trim();
+        if (id && id !== "Session ID") archivedIds.add(id);
+      }
+    }
+  }
 
   if (!currentMainline) fail("CURRENT.md missing Mainline session");
   if (!threadsMainline) fail("THREADS.md missing Mainline session");
@@ -121,7 +168,7 @@ if (errors.length === 0) {
     const sessionText = fs.readFileSync(sessionFile, "utf8");
     hasConflictMarkers(sessionText, `sessions/${row.id}.md`);
     const parent = extractField(sessionText, "Parent session") || row.parent || "unknown";
-    if (parent && !["root", "unknown"].includes(parent) && !rowIds.has(parent)) {
+    if (parent && !["root", "unknown"].includes(parent) && !rowIds.has(parent) && !archivedIds.has(parent)) {
       fail(`Session ${row.id} has unknown parent: ${parent}`);
     }
   }

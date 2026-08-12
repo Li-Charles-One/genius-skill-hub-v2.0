@@ -2,6 +2,7 @@
 
 const path = require("path");
 const {
+  allowNoCheck,
   emitResult,
   parseArgs,
   parseSessionMd,
@@ -28,12 +29,14 @@ Transitions (refuses merged mainline sessions):
 
 Options:
   --reason <text>   Appended to Work Notes
+  --time <iso>      Transition timestamp. Default: now
   --json            Machine-readable JSON on stdout
-  --no-check        Internal use only
+  --no-check        Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
+allowNoCheck(args, "session-status.cjs");
 
 const actionCount = [args.pause, args.resume, args.abandon].filter(Boolean).length;
 usage(actionCount === 1, "Choose exactly one of: --pause, --resume, --abandon", help);
@@ -57,6 +60,15 @@ withMemoryLock(root, () => {
   const session = parseSessionMd(sessionText);
   if (session.status === "merged") {
     console.error(`Refusing to ${action} merged session ${sessionId}.`);
+    process.exit(1);
+  }
+
+  // Resolve the THREADS row up front: bailing out after the session file is
+  // already written would leave the two files disagreeing about the status.
+  const threads = readThreads(root);
+  const row = threads.rows.find((item) => item.id === sessionId);
+  if (!row) {
+    console.error(`Session is not listed in THREADS.md: ${sessionId}`);
     process.exit(1);
   }
 
@@ -85,13 +97,6 @@ withMemoryLock(root, () => {
     session.workNotes = base ? `${base}\n- ${note}` : `- ${note}`;
   }
   writeSession(root, sessionId, renderSessionMd(session));
-
-  const threads = readThreads(root);
-  const row = threads.rows.find((item) => item.id === sessionId);
-  if (!row) {
-    console.error(`Session is not listed in THREADS.md: ${sessionId}`);
-    process.exit(1);
-  }
   row.status = nextStatus;
   writeThreads(root, threads, now);
 });

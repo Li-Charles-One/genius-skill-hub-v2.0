@@ -119,7 +119,7 @@ withMemoryLock(root, () => {
 // Step 4: optional decision ledger
 if (args.decision) {
   run(
-    "append-decision",
+    "append-decision-step",
     path.join(scriptDir, "append-decision.cjs"),
     [
       root,
@@ -134,6 +134,10 @@ if (args.decision) {
     ],
   );
 }
+
+// The auto-close in step 3 writes THREADS.md and the session after safe-edit's
+// own gate has already run, so verify the state we actually leave behind.
+run("check-memory (final)", path.join(scriptDir, "check-memory.cjs"), [root]);
 
 emitResult(args, sessionId, {
   sessionId,

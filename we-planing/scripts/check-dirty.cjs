@@ -10,11 +10,14 @@ Usage:
   node check-dirty.cjs <project-root> [options]
 
 Reports workspace paths that look changed outside .agent-memory.
-Uses git when available; otherwise exits cleanly with mode=none.
+Uses git when available. Without git (ops-doc projects) it falls back to
+comparing file mtimes against CURRENT.md "Last updated", which is exactly the
+handoff reminder those projects would otherwise never get.
 
 Options:
   --json      Machine-readable JSON on stdout
   --strict    Exit 1 when dirty paths are found
+  --limit <N> Maximum paths to list in mtime mode (default: 50)
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -48,6 +51,41 @@ if (fs.existsSync(path.join(root, ".git"))) {
   } else {
     mode = "git-error";
   }
+} else {
+  const currentPath = path.join(root, ".agent-memory", "CURRENT.md");
+  if (fs.existsSync(currentPath)) {
+    mode = "mtime";
+    const marker = (fs.readFileSync(currentPath, "utf8").match(/^Last updated:\s*(.+)$/m) || [])[1];
+    const since = marker ? Date.parse(marker.trim()) : NaN;
+    if (Number.isNaN(since)) {
+      mode = "none";
+    } else {
+      const limit = Math.max(1, Number(args.limit || 50) || 50);
+      const skip = new Set([".agent-memory", ".git", "node_modules", ".stversions", "dist", "build", "__pycache__"]);
+      (function walk(dir, depth) {
+        if (depth > 6 || dirty.length >= limit) return;
+        let entries;
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const entry of entries) {
+          if (dirty.length >= limit) return;
+          if (skip.has(entry.name)) continue;
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full, depth + 1);
+          else if (entry.isFile()) {
+            try {
+              if (fs.statSync(full).mtimeMs > since) dirty.push(path.relative(root, full).replace(/\\/g, "/"));
+            } catch {
+              // Unreadable file: nothing useful to report.
+            }
+          }
+        }
+      })(root, 0);
+    }
+  }
 }
 
 const payload = {
@@ -58,9 +96,9 @@ const payload = {
   message:
     dirty.length === 0
       ? mode === "none"
-        ? "No git repo; dirty check skipped."
+        ? "No git repo and no CURRENT.md timestamp; dirty check skipped."
         : "Workspace clean (outside .agent-memory)."
-      : `Workspace dirty (${dirty.length} path(s) outside .agent-memory). Consider weplaning-note before handoff.`,
+      : `Workspace dirty (${dirty.length} path(s) changed since the last memory update). Consider weplaning-note before handoff.`,
 };
 
 if (args.json) {

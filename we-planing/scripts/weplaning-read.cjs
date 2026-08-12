@@ -25,6 +25,8 @@ Usage:
 
 Options:
   --handoff     Handoff briefing: highlight next step #1 and truth hierarchy
+  --brief       Goal, state, next steps and blockers only (cheap session opener)
+  --all         Also list abandoned sessions (hidden by default)
   --json        Machine-readable JSON on stdout
   --next <N>    Focus Accepted Next Steps item N (1-based)
   --limit <K>   Number of recent complete change blocks (default: 5)
@@ -87,6 +89,22 @@ if (fs.existsSync(changesPath)) {
   recentChanges = parseChangeBlocks(fs.readFileSync(changesPath, "utf8")).slice(-limit).reverse();
 }
 
+// Archived blocks leave CHANGES.md, so surface the archive files or that history
+// becomes invisible to every later session.
+const archiveDir = path.join(memDir, "archive");
+const archives = fs.existsSync(archiveDir)
+  ? fs
+      .readdirSync(archiveDir)
+      .filter((name) => /^(CHANGES|THREADS)-.*\.md$/.test(name))
+      .sort()
+      .reverse()
+      .map((name) => {
+        const text = fs.readFileSync(path.join(archiveDir, name), "utf8");
+        const count = Number((text.match(/^(?:Blocks|Rows):\s*(\d+)$/m) || [])[1] || 0);
+        return { file: `archive/${name}`, kind: name.startsWith("CHANGES") ? "changes" : "threads", count };
+      })
+  : [];
+
 const closedNotes = threads.rows
   .filter((r) => r.status === "closed")
   .slice(-8)
@@ -147,6 +165,7 @@ const payload = {
     session: c.session,
     changed: c.changed,
   })),
+  archives,
   truth,
 };
 
@@ -171,8 +190,20 @@ if (payload.focusNextStep) {
 
 out += `\n✅ Accepted Next Steps:\n${current.acceptedNextSteps}\n`;
 
-if (payload.blockers && String(payload.blockers).toLowerCase() !== "none") {
+// "- none" is the schema's own placeholder, so a plain !== "none" test always printed it.
+const hasBlockers = String(payload.blockers || "")
+  .split(/\r?\n/)
+  .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+  .filter(Boolean)
+  .some((line) => !/^(none|unknown|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞)\s*[。.]?$/i.test(line));
+if (hasBlockers) {
   out += `\n🚧 Blockers:\n${payload.blockers}\n`;
+}
+
+if (args.brief) {
+  out += `\n⚖ Truth order: mainline CURRENT > closed notes > active sessions.\n${D}\n`;
+  process.stdout.write(out);
+  process.exit(0);
 }
 
 if (closedNotes.length > 0) {
@@ -190,9 +221,14 @@ if (activeSessions.length > 0) {
 }
 
 if (otherUnmerged.length > 0) {
-  out += `\n⚠ Other non-merged sessions:\n`;
-  for (const row of otherUnmerged) {
-    out += `  · ${row.id}  [${row.status}]  ${row.summary}\n`;
+  if (args.all) {
+    out += `\n⚠ Other non-merged sessions:\n`;
+    for (const row of otherUnmerged) {
+      out += `  · ${row.id}  [${row.status}]  ${row.summary}\n`;
+    }
+  } else {
+    // Abandoned work is not truth and never becomes truth; keep it one line.
+    out += `\n⚠ ${otherUnmerged.length} abandoned session(s) hidden — pass --all to list them.\n`;
   }
 }
 
@@ -210,6 +246,14 @@ if (recentChanges.length === 0) {
       out += `${change.body}\n`;
     }
     out += `\n`;
+  }
+}
+
+if (archives.length > 0) {
+  out += `\n🗄 Older history moved to archive/ (read these files directly if needed):\n`;
+  for (const item of archives) {
+    const unit = item.kind === "changes" ? "change blocks" : "session rows";
+    out += `  · ${item.file}${item.count ? `  (${item.count} ${unit})` : ""}\n`;
   }
 }
 

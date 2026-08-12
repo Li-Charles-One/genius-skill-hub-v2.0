@@ -1,11 +1,11 @@
 ---
 name: we-planing
-version: 1.5.3
+version: 1.8.0
 description: "Maintain WePlaning v2.3 project memory. Use for: init, resume, persist, hand off, close out, repair .agent-memory. 读取项目记忆 / 持久化到项目记忆 / 记一笔 / 查看项目进度."
 ---
 
 # WePlaning
-_(Skill package v1.5.3; implements WePlaning protocol v2.3)_
+_(Skill package v1.8.0; implements WePlaning protocol v2.3)_
 
 ## Use When
 
@@ -43,6 +43,8 @@ When the user says any of these, **read the project memory** — don't ask "what
 ├── archive/         rolled-off CHANGES blocks
 └── sessions/<id>.md one working record per Agent session
 ```
+
+`.backups/` and `.weplaning.lock` also appear under `.agent-memory/`. Both are device-local scratch, not project state: never sync them and never treat them as recoverable history.
 
 Optional files such as `TOOLS.md`, `PROJECT.md`, and `notes/` may exist, but they are not required for the base consistency gate.
 
@@ -83,11 +85,19 @@ Use `--role` and `--goal` to override defaults (`ops` and the note text respecti
 ```bash
 node <skill_dir>/scripts/weplaning-read.cjs <project-root>
 node <skill_dir>/scripts/weplaning-read.cjs <project-root> --handoff
+node <skill_dir>/scripts/weplaning-read.cjs <project-root> --brief    # goal/state/next/blockers only
 node <skill_dir>/scripts/weplaning-read.cjs <project-root> --next 1
+node <skill_dir>/scripts/weplaning-read.cjs <project-root> --all      # also list abandoned sessions
 node <skill_dir>/scripts/weplaning-read.cjs <project-root> --json
 ```
 
-Outputs goal + mainline state + next steps + closed notes + active sessions + complete recent change blocks. Truth order: **mainline CURRENT > closed notes > active sessions**.
+To answer "when did we decide X" or "when was Y retired", search instead of scrolling — this is the only reader that also covers `archive/`:
+
+```bash
+node <skill_dir>/scripts/weplaning-find.cjs <project-root> "<query>" [--regex] [--case] [--scope changes|sessions|archive|...] [--json]
+```
+
+Outputs goal + mainline state + next steps + closed notes + active sessions + complete recent change blocks. Truth order: **mainline CURRENT > closed notes > active sessions**. When older history has been rolled into `archive/`, the briefing lists those files so it can still be found.
 
 Do not create a session for read-only inspection.
 
@@ -139,6 +149,8 @@ node <skill_dir>/scripts/safe-edit.cjs <project-root> --close --session <id> \
 
 `--state`/`--next-step`/`--blockers` replace their whole section (repeat the flag or use `;;` for multiple items); `--goal` and `--understanding` replace their sections as plain text. Use `--no-sync` only when you intentionally keep CURRENT prose unchanged.
 
+**Curated state is protected.** When `CURRENT.md` Current State holds 2 or more curated bullets, a close without `--state` is refused before anything is written, because the auto-sync would replace the whole section with the `--changed` text. Pick one: `--state "<full accepted state>"` (preferred), `--no-sync` to leave the prose alone, or `--replace-state` to accept the overwrite.
+
 **CLI output:** primary results (session id / success) are the last stdout line. Pass `--json` on `init-memory`, `new-session`, `safe-edit`, `weplaning-note`, and `repair-memory` for machine-readable output. Consistency check chatter goes to stderr.
 
 ## Maintenance
@@ -146,6 +158,7 @@ node <skill_dir>/scripts/safe-edit.cjs <project-root> --close --session <id> \
 ```bash
 node <skill_dir>/scripts/init-memory.cjs <project-root> --agent <agent-name> --project "<name>" --goal "<goal>"
 # optional overrides: --type code|ops-doc --code-vcs git --sync "<note>"
+# on an existing .agent-memory: --force fills in only missing files; --reinit destroys and rebuilds
 node <skill_dir>/scripts/check-memory.cjs <project-root>
 node <skill_dir>/scripts/check-memory.cjs <project-root> --audit
 node <skill_dir>/scripts/check-memory.cjs <project-root> --audit --strict
@@ -153,15 +166,18 @@ node <skill_dir>/scripts/check-dirty.cjs <project-root> [--strict] [--json]
 node <skill_dir>/scripts/session-status.cjs <project-root> --session <id> --pause|--resume|--abandon [--reason "<text>"]
 node <skill_dir>/scripts/append-decision.cjs <project-root> --decision "<text>" [--rationale "<why>"] [--session <id>]
 node <skill_dir>/scripts/archive-changes.cjs <project-root> [--keep 30] [--dry-run]
+node <skill_dir>/scripts/archive-threads.cjs <project-root> [--keep 40] [--dry-run]
 node <skill_dir>/scripts/repair-memory.cjs <project-root>
 # mainline mismatch only:
 node <skill_dir>/scripts/repair-memory.cjs <project-root> --prefer current
 node <skill_dir>/scripts/repair-memory.cjs <project-root> --prefer threads
 ```
 
-`check-memory` hard-fails on structure errors (mainline mismatch, missing session files, unknown parents, conflict markers). `--audit` adds warnings (orphans, placeholders); warnings exit 0 unless `--strict`.
+`check-memory` hard-fails on structure errors (mainline mismatch, missing session files, unknown parents, conflict markers, and file-sync conflict copies). `--audit` adds warnings (orphans, placeholders); warnings exit 0 unless `--strict`.
 
-`check-dirty` reports git-changed paths outside `.agent-memory` (handoff reminder). `archive-changes` rolls old ledger blocks into `.agent-memory/archive/`.
+`archive-threads` bounds `THREADS.md`: it moves finished rows and their session files into `archive/`, never touching the mainline or anything active/paused. Archived ids stay valid as parents because `check-memory` also reads `archive/THREADS-*.md`.
+
+`check-dirty` reports changed paths outside `.agent-memory` (handoff reminder) — via git when the project is a repo, otherwise by comparing mtimes against `CURRENT.md` `Last updated`, so ops-doc projects get the reminder too. `archive-changes` rolls old ledger blocks into `.agent-memory/archive/`, records an `Archived:` breadcrumb in `CHANGES.md`, and refuses to rewrite a `CHANGES.md` with no schema header.
 
 ## Verification
 
@@ -182,6 +198,7 @@ Scripts default the agent name to `$WEPLANING_AGENT` (or `Agent` if unset). Set 
 - After writing `.agent-memory/`, run `check-memory.cjs` and do not report success until it passes.
 - Do not store secrets, tokens, passwords, cookies, or private credentials.
 - Keep memory concise: facts, decisions, files, verification, blockers, and exact next step.
+- `THREADS.md` summaries are table cells: a literal `|` is normalized to `/` on write. Hand-edited rows keep their text, but do not rely on pipes surviving verbatim.
 - If check fails: stop, inspect the error, repair or correct the files, then rerun check.
 - For exact schema details, read `references/weplaning-v2.3-protocol.md`.
 
@@ -201,8 +218,8 @@ A broken init cascade is harder to recover from than a smoke-test failure caught
 **2. Don't run `closeout` for "just a quick note"** — use Quick Note (`weplaning-note.cjs`) or the Lite flow.
 The Closeout flow appends `CHANGES.md` and merges the session; running it for transient state pollutes the mainline ledger.
 
-**3. Junction pitfalls (dangling links, live-mirror git propagation).**
-See `references/hermes-install.md`.
+**3. Junction pitfalls (dangling links, live-mirror git propagation, copies that write through).**
+The installed skill path is often a junction to a hub repo, so "isolated copies" made with `fs.cpSync` without `dereference: true` are still the hub. See `references/hermes-install.md`.
 
 **4. Cross-platform paths in scripts.**
 The skill scripts use forward slashes; on Windows they work via Node's path normalization. Don't edit them to use `\\` — they'll break on Linux/macOS usage.
@@ -214,7 +231,13 @@ Before offering choices on a destructive command, verify the consequence against
 Otherwise it fails with "Stale write blocked" — the error message includes the fix (close the active predecessor first, or repoint `Parent session:` at the true mainline). Lock cleanup on failure is automatic; if a lock ever lingers after a crash, remove `<project>/.agent-memory/.weplaning.lock`.
 
 **7. Prefer explicit `CURRENT.md` sync flags on closeout.**
-Without `--no-sync`, close auto-sets Current State from `--changed`. Still pass `--state`/`--next-step`/`--blockers`/`--goal` when the full mainline prose should change; otherwise next sessions may miss next-steps/blockers updates.
+Without `--no-sync`, close auto-sets Current State from `--changed`, so a one-line change description would become the entire accepted state. Closes that would discard 2 or more curated bullets are now refused up front, but the guard only protects Current State — still pass `--next-step`/`--blockers`/`--goal` when the full mainline prose should change, otherwise next sessions inherit stale next-steps and blockers.
+
+**9. Running memory inside a file-sync folder (Syncthing, Dropbox, iCloud).**
+Two devices writing `.agent-memory` concurrently produce sync conflict copies; the lock is process-local and cannot prevent this. `check-memory.cjs` hard-fails when it finds `*.sync-conflict-*` copies so the fork cannot go unnoticed — merge anything worth keeping, then delete the copies. Exclude `.backups/` and `.weplaning.lock` from the sync rules: both are device-local churn and syncing the lock can make one machine look permanently busy to another.
+
+**10. `init-memory --reinit` is a total wipe, `--force` is not.**
+`--force` only creates files that are missing and adopts the surviving mainline, so it is safe on a live project. `--reinit` rebuilds `CURRENT.md`, `THREADS.md`, `CHANGES.md` and `DECISIONS.md` from scratch and prints how many session rows and change blocks it is discarding. Never reach for `--reinit` to "fix" a failing check — run `check-memory` and `repair-memory` first.
 
 **8. `repair-memory.cjs` will not guess on mainline mismatch.**
 If CURRENT and THREADS disagree, it exits until you pass `--prefer current` or `--prefer threads`. Do not use repair as a silent authority rewrite.

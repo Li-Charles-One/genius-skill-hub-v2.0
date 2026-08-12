@@ -7,6 +7,7 @@ const {
   defaultAgent,
   detectProjectConfig,
   emitResult,
+  extractField,
   generateSessionId,
   parseArgs,
   renderCurrentMd,
@@ -30,7 +31,8 @@ Options:
   --type <code|ops-doc> Project type (default: auto-detect)
   --code-vcs <text>    Code versioning tool (default: auto-detect)
   --sync <text>        Sync strategy note (default: auto-detect)
-  --force              Allow initializing when .agent-memory already exists
+  --force              Create only the files that are missing; never touch existing ones
+  --reinit             Discard the existing memory and bootstrap from scratch (destructive)
   --json               Print machine-readable JSON result on stdout
   --no-check           Internal use only; external callers must run consistency checks
 `;
@@ -46,22 +48,56 @@ usage(project, "Missing required argument: --project", help);
 usage(goal, "Missing required argument: --goal", help);
 
 const memoryDir = path.join(root, ".agent-memory");
-if (fs.existsSync(memoryDir) && !args.force) {
-  console.error(".agent-memory already exists. Use --force only if you intend to create missing files.");
+const memoryExists = fs.existsSync(memoryDir);
+
+usage(!(args.force && args.reinit), "Conflicting flags: --force fills gaps, --reinit rewrites everything", help);
+if (memoryExists && !args.force && !args.reinit) {
+  console.error(
+    ".agent-memory already exists. Pick the intent explicitly:\n" +
+    "  --force   create only the files that are missing, leaving existing ones untouched\n" +
+    "  --reinit  discard the existing memory and bootstrap from scratch (destroys history)",
+  );
   process.exit(1);
+}
+
+function existingField(file, label) {
+  const filePath = path.join(memoryDir, file);
+  if (!fs.existsSync(filePath)) return null;
+  return extractField(fs.readFileSync(filePath, "utf8"), label);
 }
 
 const agent = args.agent || defaultAgent();
 const adapter = args.adapter || "unknown";
 const os = args.os || process.platform;
 const now = args.started || utcNow();
-const sessionId = generateSessionId({
-  iso: now,
-  agent,
-  os,
-  role: "creator",
-  shortId: args["short-id"] || "root",
-});
+// Filling a gap must adopt the surviving mainline; inventing a second root session
+// would leave CURRENT.md and THREADS.md pointing at different sessions.
+const inheritedMainline = args.reinit
+  ? null
+  : existingField("CURRENT.md", "Mainline session") || existingField("THREADS.md", "Mainline session");
+const sessionId =
+  inheritedMainline ||
+  generateSessionId({
+    iso: now,
+    agent,
+    os,
+    role: "creator",
+    shortId: args["short-id"] || "root",
+  });
+
+if (args.reinit && memoryExists) {
+  const threadsText = fs.existsSync(path.join(memoryDir, "THREADS.md"))
+    ? fs.readFileSync(path.join(memoryDir, "THREADS.md"), "utf8")
+    : "";
+  const changesText = fs.existsSync(path.join(memoryDir, "CHANGES.md"))
+    ? fs.readFileSync(path.join(memoryDir, "CHANGES.md"), "utf8")
+    : "";
+  console.error(
+    `--reinit discards ${(threadsText.match(/^\| \S+ \|/gm) || []).length} session row(s) and ` +
+    `${(changesText.match(/^## /gm) || []).length} change block(s). ` +
+    `Previous versions remain in .agent-memory/.backups until rotated out.`,
+  );
+}
 
 fs.mkdirSync(path.join(memoryDir, "sessions"), { recursive: true });
 
@@ -71,10 +107,26 @@ const projectConfig = detectProjectConfig(root, {
   sync: args.sync,
 });
 
-writeSession(
-  root,
-  sessionId,
-  renderSessionMd({
+const created = [];
+const kept = [];
+
+/** --force must fill gaps only; overwriting here is what silently destroyed whole memories. */
+function put(relativePath, text) {
+  if (!args.reinit && fs.existsSync(path.join(memoryDir, relativePath))) {
+    kept.push(relativePath);
+    return;
+  }
+  writeMemory(root, relativePath, text);
+  created.push(relativePath);
+}
+
+const sessionRelativePath = `sessions/${sessionId}.md`;
+if (args.reinit || !fs.existsSync(path.join(memoryDir, "sessions", `${sessionId}.md`))) {
+  created.push(sessionRelativePath);
+  writeSession(
+    root,
+    sessionId,
+    renderSessionMd({
     sessionId,
     agent,
     adapter,
@@ -94,11 +146,13 @@ writeSession(
     decisions: "- Use WePlaning v2.3 memory.",
     result: "Memory initialized.",
     exactNextStep: goal,
-  }),
-);
+    }),
+  );
+} else {
+  kept.push(sessionRelativePath);
+}
 
-writeMemory(
-  root,
+put(
   "CURRENT.md",
   renderCurrentMd({
     lastUpdated: now,
@@ -113,8 +167,7 @@ writeMemory(
   }),
 );
 
-writeMemory(
-  root,
+put(
   "DECISIONS.md",
   `# Decisions
 Schema version: 2.3
@@ -126,8 +179,7 @@ Schema version: 2.3
 `,
 );
 
-writeMemory(
-  root,
+put(
   "THREADS.md",
   `# Threads
 Schema version: 2.3
@@ -144,8 +196,7 @@ Last merged session: ${sessionId}
 `,
 );
 
-writeMemory(
-  root,
+put(
   "CHANGES.md",
   `# Changes
 Schema version: 2.3
@@ -170,10 +221,16 @@ Schema version: 2.3
 `,
 );
 
+if (kept.length) {
+  console.error(`Left ${kept.length} existing file(s) untouched: ${kept.join(", ")}`);
+}
 if (!args["no-check"]) runCheck(root, __dirname);
 emitResult(args, sessionId, {
   sessionId,
   project,
   goal,
+  created,
+  kept,
+  mode: args.reinit ? "reinit" : memoryExists ? "fill-gaps" : "init",
   projectConfig: { type: projectConfig.type, codeVcs: projectConfig.codeVcs, sync: projectConfig.sync },
 });
