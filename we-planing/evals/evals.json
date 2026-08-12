@@ -1,0 +1,125 @@
+{
+  "skill_name": "we-planing",
+  "evals": [
+    {
+      "id": "read-memory",
+      "prompt": "查看项目记忆",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs without creating a session. Reports goal, current state, and next steps.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-read"}
+      ]
+    },
+    {
+      "id": "read-progress-brief",
+      "prompt": "查看项目进度",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs --brief, not a full briefing and not Active Goal only.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--brief"}
+      ]
+    },
+    {
+      "id": "handoff",
+      "prompt": "读取记忆接力",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs --handoff and reports Focus Next Step #1.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--handoff"}
+      ]
+    },
+    {
+      "id": "quick-note",
+      "prompt": "记一笔：us-one Hy2 已恢复",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-note.cjs, not closeout.",
+      "files": ["scripts/weplaning-note.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-note"}
+      ]
+    },
+    {
+      "id": "done-is-note",
+      "prompt": "完成了",
+      "trigger_expected": true,
+      "expected_output": "Oral 完成了/done/搞定 is weplaning-note, not weplaning-close or safe-edit --close.",
+      "files": ["scripts/weplaning-note.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-note"}
+      ]
+    },
+    {
+      "id": "submit-mainline",
+      "prompt": "提交主线",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-close.cjs with --changed --file --verification. Defaults --no-sync unless --state is passed.",
+      "files": ["scripts/weplaning-close.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-close"}
+      ]
+    },
+    {
+      "id": "repair",
+      "prompt": "修一下记忆",
+      "trigger_expected": true,
+      "expected_output": "Runs check-memory.cjs first, then repair-memory.cjs only if the cause is known.",
+      "files": ["scripts/check-memory.cjs", "scripts/repair-memory.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "check-memory"}
+      ]
+    },
+    {
+      "id": "continue-next",
+      "prompt": "继续干 #1",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs --next 1, reports Focus Next Step #1, then starts that work.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--next"}
+      ]
+    },
+    {
+      "id": "ordinary-summary",
+      "prompt": "把刚才那段解释再缩成三句话",
+      "trigger_expected": false,
+      "expected_output": "Does not invoke WePlaning. Ordinary summary, no .agent-memory write.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "weplaning-note"}
+      ]
+    },
+    {
+      "id": "one-off-typo",
+      "prompt": "把这个函数名拼写改一下就行",
+      "trigger_expected": false,
+      "expected_output": "Does not invoke WePlaning. One-off code edit is not durable memory.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": ".agent-memory"}
+      ]
+    },
+    {
+      "id": "unrelated-math",
+      "prompt": "1+1等于几",
+      "trigger_expected": false,
+      "expected_output": "Does not invoke WePlaning.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "weplaning-read"}
+      ]
+    },
+    {
+      "id": "commit-message-only",
+      "prompt": "帮我写一句 git commit message",
+      "trigger_expected": false,
+      "expected_output": "Does not invoke WePlaning unless the user also asks to persist project memory.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "weplaning-close"}
+      ]
+    }
+  ]
+}

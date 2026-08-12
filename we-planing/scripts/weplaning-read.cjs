@@ -15,6 +15,7 @@ const {
   parseCurrentMd,
   parseThreads,
   readMemory,
+  truncateSummary,
   usage,
   utcNow,
 } = require("./weplaning-utils.cjs");
@@ -209,14 +210,14 @@ if (args.brief) {
 if (closedNotes.length > 0) {
   out += `\n📝 Closed quick notes (supplemental, not mainline):\n`;
   for (const row of closedNotes) {
-    out += `  · ${row.id}  ${row.summary}\n`;
+    out += `  · ${row.id}  ${truncateSummary(row.summary)}\n`;
   }
 }
 
 if (activeSessions.length > 0) {
   out += `\n🔧 Active/paused sessions (in progress — not accepted truth):\n`;
   for (const row of activeSessions) {
-    out += `  · ${row.id}  [${row.status}]  ${row.summary}\n`;
+    out += `  · ${row.id}  [${row.status}]  ${truncateSummary(row.summary)}\n`;
   }
 }
 
@@ -224,7 +225,7 @@ if (otherUnmerged.length > 0) {
   if (args.all) {
     out += `\n⚠ Other non-merged sessions:\n`;
     for (const row of otherUnmerged) {
-      out += `  · ${row.id}  [${row.status}]  ${row.summary}\n`;
+      out += `  · ${row.id}  [${row.status}]  ${truncateSummary(row.summary)}\n`;
     }
   } else {
     // Abandoned work is not truth and never becomes truth; keep it one line.

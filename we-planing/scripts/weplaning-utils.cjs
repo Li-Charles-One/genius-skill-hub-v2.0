@@ -145,8 +145,20 @@ function uniqueStamp() {
   return `${compactTimestamp(utcNow())}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const SUMMARY_MAX_CHARS = 120;
+
+function truncateSummary(text, max = SUMMARY_MAX_CHARS) {
+  const oneLine = String(text || "").replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  if (max <= 1) return "…";
+  return `${oneLine.slice(0, max - 1).trimEnd()}…`;
+}
+
 function defaultAgent() {
-  return process.env.WEPLANING_AGENT || "Agent";
+  if (process.env.WEPLANING_AGENT) return process.env.WEPLANING_AGENT;
+  if (process.env.CODEX_HOME || process.env.CODEX_CI) return "Codex";
+  if (process.env.CLAUDE_CODE || process.env.CLAUDECODE) return "Claude";
+  return "Agent";
 }
 
 function osToken(value) {
@@ -556,7 +568,7 @@ function renderThreads({ updated, mainline, lastMerged, archived, rows }) {
   ];
   for (const row of rows) {
     lines.push(
-      `| ${sanitizeCell(row.id)} | ${sanitizeCell(row.parent)} | ${sanitizeCell(row.agent)} | ${sanitizeCell(row.os)} | ${sanitizeCell(row.role)} | ${sanitizeCell(row.status)} | ${sanitizeCell(row.summary)} |`,
+      `| ${sanitizeCell(row.id)} | ${sanitizeCell(row.parent)} | ${sanitizeCell(row.agent)} | ${sanitizeCell(row.os)} | ${sanitizeCell(row.role)} | ${sanitizeCell(row.status)} | ${sanitizeCell(truncateSummary(row.summary))} |`,
     );
   }
   return `${lines.join("\n")}\n`;
@@ -641,7 +653,9 @@ module.exports = {
   sessionPath,
   parseCurrentMd,
   parseSessionMd,
+  SUMMARY_MAX_CHARS,
   toList,
+  truncateSummary,
   usage,
   utcNow,
   uniqueStamp,

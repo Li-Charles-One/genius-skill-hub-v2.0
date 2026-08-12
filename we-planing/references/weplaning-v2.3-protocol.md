@@ -123,6 +123,8 @@ Parent session: <id>
 Status: active|merged|paused|abandoned|closed
 
 `closed` is a terminal status for Lite/Quick-Note sessions that are finished but were never merged into the mainline (used by `weplaning-note.cjs` auto-close). It is valid for non-mainline rows; the consistency gate still requires the mainline session to be `merged`.
+
+THREADS.md Summary cells are truncated to 120 characters on write. Full text stays in the session file. `weplaning-close.cjs` is the one-command closeout (creates a session if needed; defaults to leaving CURRENT.md prose unchanged).
 Started: <iso-time>
 Closed: <iso-time|unknown>
 

@@ -911,6 +911,80 @@ function testCheckDirtyMtimeFallback() {
   run([script("check-dirty.cjs"), root, "--strict"], { expectFail: true });
 }
 
+function testSummaryTruncation() {
+  const root = tempRoot("truncate");
+  init(root);
+  const longNote = `Durable note ${"x".repeat(200)} UNIQUE_TAIL_SHOULD_NOT_LEAK`;
+  const sessionId = run([
+    script("weplaning-note.cjs"), root, longNote, "--agent", "CI",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  const threads = read(root, "THREADS.md");
+  const row = threads.split("\n").find((line) => line.startsWith(`| ${sessionId} |`));
+  assert(row, "note session missing from THREADS");
+  const summary = row.split("|").slice(1, -1).map((cell) => cell.trim())[6];
+  assert(summary.length <= 120, `THREADS summary too long: ${summary.length}`);
+  assert(summary.endsWith("…"), "truncated summary should end with an ellipsis");
+  assert(!summary.includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "THREADS kept the full note");
+  const sessionText = read(root, path.join("sessions", `${sessionId}.md`));
+  assert(sessionText.includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "session file lost the full note");
+  const briefing = run([script("weplaning-read.cjs"), root]).stdout;
+  assert(!briefing.includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "read briefing dumped the full closed note");
+}
+
+function testWeplaningCloseDefaultsNoSync() {
+  const root = tempRoot("closewrap");
+  init(root);
+  const first = newSession(root, "st1", "Seed state", "2026-06-06T14:00:00Z");
+  run([
+    script("safe-edit.cjs"), root, "--close", "--session", first,
+    "--changed", "seed", "--file", "x", "--verification", "smoke",
+    "--state", "Fact A;;Fact B;;Fact C",
+  ]);
+  const before = read(root, "CURRENT.md");
+  assert(before.includes("Fact A") && before.includes("Fact C"), "seeded state missing");
+
+  const closed = run([
+    script("weplaning-close.cjs"), root,
+    "--changed", "later work", "--file", "y", "--verification", "smoke",
+    "--agent", "CI",
+  ]).stdout.trim().split(/\r?\n/).at(-1);
+  const after = read(root, "CURRENT.md");
+  assert(after.includes("Fact A") && after.includes("Fact C"), "weplaning-close clobbered curated state");
+  assert(!after.includes("later work") || after.includes("Fact A"), "changed text replaced Current State");
+  const threads = read(root, "THREADS.md");
+  assert(threads.includes(`| ${closed} |`) && threads.includes("| merged |"), "close wrapper did not merge");
+  run([script("check-memory.cjs"), root]);
+}
+
+function testWeplaningCloseWithState() {
+  const root = tempRoot("closestate");
+  init(root);
+  run([
+    script("weplaning-close.cjs"), root,
+    "--changed", "shipped A", "--file", "a.ts", "--verification", "smoke",
+    "--state", "A done;;B next",
+    "--next-step", "Ship B",
+    "--agent", "CI",
+  ]);
+  const current = read(root, "CURRENT.md");
+  assert(current.includes("A done"), "close --state did not write Current State");
+  assert(current.includes("Ship B"), "close --next-step did not write next steps");
+  run([script("check-memory.cjs"), root]);
+}
+
+function testDefaultAgentInference() {
+  const root = tempRoot("agentenv");
+  init(root);
+  const env = { ...process.env, CODEX_HOME: path.join(root, "codex") };
+  delete env.WEPLANING_AGENT;
+  const session = run([
+    script("new-session.cjs"), root,
+    "--role", "ops", "--summary", "infer", "--goal", "infer",
+    "--short-id", "inf", "--started", "2026-06-06T15:00:00Z",
+  ], { env }).stdout.trim().split(/\r?\n/).at(-1);
+  assert(session.includes("-codex-"), `expected Codex inference in session id, got ${session}`);
+}
+
 for (const test of [
   testLifecycle,
   testMismatchFails,
@@ -943,6 +1017,10 @@ for (const test of [
   testReadBriefAndAbandonedFold,
   testStatusValidatesBeforeWriting,
   testCheckDirtyMtimeFallback,
+  testSummaryTruncation,
+  testWeplaningCloseDefaultsNoSync,
+  testWeplaningCloseWithState,
+  testDefaultAgentInference,
 ]) {
   test();
   console.log(`[ok] ${test.name}`);
