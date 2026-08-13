@@ -50,7 +50,7 @@ withMemoryLock(root, () => {
   if (fs.existsSync(filePath)) {
     text = fs.readFileSync(filePath, "utf8").replace(/\s*$/, "");
   } else {
-    text = `# Decisions\nSchema version: 2.3`;
+    text = `# Decisions\nSchema version: 3.0`;
   }
   const entry = `
 ## ${now} decision

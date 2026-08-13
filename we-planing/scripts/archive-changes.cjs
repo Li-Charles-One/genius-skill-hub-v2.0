@@ -41,7 +41,7 @@ const now = utcNow();
 function splitBlocks(text) {
   const normalized = text.replace(/\r?\n/g, "\n");
   const headerMatch = normalized.match(/^([\s\S]*?)(?=\n## |$)/);
-  const header = (headerMatch ? headerMatch[1] : "# Changes\nSchema version: 2.3\n").replace(/\s*$/, "");
+  const header = (headerMatch ? headerMatch[1] : "# Changes\nSchema version: 3.0\n").replace(/\s*$/, "");
   const rest = normalized.slice(header.length).replace(/^\n+/, "");
   if (!rest.trim()) return { header, blocks: [] };
   const parts = rest.split(/\n(?=## )/).filter((part) => part.trim());
@@ -57,7 +57,7 @@ withMemoryLock(root, () => {
   const { header, blocks } = splitBlocks(changes);
   // Rewriting CHANGES.md without its schema header would silently produce a file
   // that fails every later consistency check, so refuse instead of guessing one.
-  if (!/^Schema version:\s*2\.(2|3)$/m.test(header)) {
+  if (!/^Schema version:\s*(2\.(2|3)|3\.0)$/m.test(header)) {
     console.error("CHANGES.md has no recognizable schema header; refusing to rewrite it.");
     process.exit(1);
   }

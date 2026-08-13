@@ -37,81 +37,34 @@ function initProject(name) {
     "--project", name,
     "--goal", "Concurrency smoke test",
     "--agent", "Codex",
-    "--adapter", "codex",
-    "--os", "win",
   ]);
   return root;
 }
 
-function concurrentAppendTest() {
-  const root = initProject("weplaning-append");
-  const sessionId = run([
-    path.join(scriptDir, "new-session.cjs"),
-    root,
-    "--role", "implementer",
-    "--summary", "Append stress session",
-    "--goal", "Stress CHANGES append",
-    "--agent", "Codex",
-    "--adapter", "codex",
-    "--os", "win",
-    "--context", "concurrency test",
-  ]).split(/\r?\n/).pop().trim();
-
+function concurrentWriteTest() {
+  const root = initProject("weplaning-write");
   const workers = [];
   for (let index = 0; index < 5; index += 1) {
     workers.push(spawnNode([
-      path.join(scriptDir, "append-change.cjs"),
+      path.join(scriptDir, "weplaning-write.cjs"),
       root,
-      "--session", sessionId,
-      "--changed", `Concurrent append ${index}`,
+      "--agent", "CI",
+      "--changed", `Concurrent write ${index}`,
       "--file", `file-${index}.txt`,
       "--verification", `verification-${index}`,
-      "--change-id", `concurrent-append-${index}`,
     ]));
   }
 
   for (const worker of workers) {
-    assert(worker.status === 0, `append worker failed\n${worker.stdout || ""}${worker.stderr || ""}`);
+    assert(worker.status === 0, `write worker failed\n${worker.stdout || ""}${worker.stderr || ""}`);
   }
   const changes = fs.readFileSync(path.join(root, ".agent-memory", "CHANGES.md"), "utf8");
   for (let index = 0; index < 5; index += 1) {
-    assert(changes.includes(`## concurrent-append-${index}`), `missing CHANGES entry ${index}`);
+    assert(changes.includes(`Concurrent write ${index}`), `missing CHANGES entry ${index}`);
   }
   run([path.join(scriptDir, "check-memory.cjs"), root]);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-function concurrentNewSessionTest() {
-  const root = initProject("weplaning-new-session");
-  const ids = Array.from({ length: 5 }, (_, index) => `concurrent-session-${index}`);
-  const workers = ids.map((id, index) =>
-    spawnNode([
-      path.join(scriptDir, "new-session.cjs"),
-      root,
-      "--role", "implementer",
-      "--summary", `Concurrent session ${index}`,
-      "--goal", `Open concurrent session ${index}`,
-      "--agent", "Codex",
-      "--adapter", "codex",
-      "--os", "win",
-      "--id", id,
-      "--context", "concurrency test",
-    ]),
-  );
-
-  for (const worker of workers) {
-    assert(worker.status === 0, `new-session worker failed\n${worker.stdout || ""}${worker.stderr || ""}`);
-  }
-  const threads = fs.readFileSync(path.join(root, ".agent-memory", "THREADS.md"), "utf8");
-  for (const id of ids) {
-    assert(fs.existsSync(path.join(root, ".agent-memory", "sessions", `${id}.md`)), `missing session file ${id}`);
-    assert(threads.includes(`| ${id} |`), `missing THREADS row ${id}`);
-  }
-  run([path.join(scriptDir, "check-memory.cjs"), root]);
-  fs.rmSync(root, { recursive: true, force: true });
-}
-
-concurrentAppendTest();
-console.log("append concurrency passed");
-concurrentNewSessionTest();
-console.log("new-session concurrency passed");
+concurrentWriteTest();
+console.log("write concurrency passed");

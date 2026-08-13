@@ -5,7 +5,7 @@
       "id": "read-memory",
       "prompt": "查看项目记忆",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs without creating a session. Reports goal, current state, and next steps.",
+      "expected_output": "Runs weplaning-read.cjs without writing. Reports goal, current state, and next steps.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-read"}
@@ -15,7 +15,7 @@
       "id": "read-progress-brief",
       "prompt": "查看项目进度",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs --brief, not a full briefing and not Active Goal only.",
+      "expected_output": "Runs weplaning-read.cjs --brief.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
         {"type": "contains", "value": "--brief"}
@@ -35,30 +35,30 @@
       "id": "quick-note",
       "prompt": "记一笔：us-one Hy2 已恢复",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-note.cjs, not closeout.",
-      "files": ["scripts/weplaning-note.cjs"],
+      "expected_output": "Runs weplaning-write.cjs (or weplaning-note wrapper) with --changed. Does not create a session.",
+      "files": ["scripts/weplaning-write.cjs"],
       "assertions": [
-        {"type": "contains", "value": "weplaning-note"}
+        {"type": "contains", "value": "weplaning-write"}
       ]
     },
     {
-      "id": "done-is-note",
+      "id": "done-is-noop",
       "prompt": "完成了",
       "trigger_expected": true,
-      "expected_output": "Oral 完成了/done/搞定 is weplaning-note, not weplaning-close or safe-edit --close.",
-      "files": ["scripts/weplaning-note.cjs"],
+      "expected_output": "Oral 完成了/done/搞定 with no new fact is a no-op (weplaning-write nothing-to-persist). Does not create a session.",
+      "files": ["scripts/weplaning-write.cjs"],
       "assertions": [
-        {"type": "contains", "value": "weplaning-note"}
+        {"type": "contains", "value": "weplaning-write"}
       ]
     },
     {
       "id": "submit-mainline",
       "prompt": "提交主线",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-close.cjs with --changed --file --verification. Defaults --no-sync unless --state is passed.",
-      "files": ["scripts/weplaning-close.cjs"],
+      "expected_output": "Runs weplaning-write.cjs with --changed. Pass --state only if Current State should change.",
+      "files": ["scripts/weplaning-write.cjs"],
       "assertions": [
-        {"type": "contains", "value": "weplaning-close"}
+        {"type": "contains", "value": "weplaning-write"}
       ]
     },
     {
@@ -88,7 +88,7 @@
       "expected_output": "Does not invoke WePlaning. Ordinary summary, no .agent-memory write.",
       "files": [],
       "assertions": [
-        {"type": "not_contains", "value": "weplaning-note"}
+        {"type": "not_contains", "value": "weplaning-write"}
       ]
     },
     {
@@ -112,13 +112,13 @@
       ]
     },
     {
-      "id": "commit-message-only",
-      "prompt": "帮我写一句 git commit message",
+      "id": "skill-self-upgrade",
+      "prompt": "WePlaning skill 升到 3.0 了，记到这个 VPS 项目记忆里",
       "trigger_expected": false,
-      "expected_output": "Does not invoke WePlaning unless the user also asks to persist project memory.",
+      "expected_output": "Does not write skill maintenance into a business project's .agent-memory.",
       "files": [],
       "assertions": [
-        {"type": "not_contains", "value": "weplaning-close"}
+        {"type": "not_contains", "value": "weplaning-write"}
       ]
     }
   ]

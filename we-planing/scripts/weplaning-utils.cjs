@@ -192,17 +192,53 @@ function section(text, heading) {
   return match ? match[1].trimEnd() : "";
 }
 
+const SCHEMA_VERSION = "3.0";
+const SCHEMA_PATTERN = /^(2\.(2|3)|3\.0)$/;
+
+function schemaVersionOf(text) {
+  return extractField(text, "Schema version") || "";
+}
+
+function hasSupportedSchema(text) {
+  return SCHEMA_PATTERN.test(schemaVersionOf(text));
+}
+
+function isTrivialNote(text) {
+  return /^(完成了|done|搞定|ok|okay|finished|complete)$/i.test(String(text || "").trim());
+}
+
+function memoryExists(root, relativePath) {
+  return fs.existsSync(memoryPath(root, relativePath));
+}
+
+function formatSectionItems(value, { numbered = false, fallback = "- none" } = {}) {
+  const items = toList(value);
+  if (!items.length) return fallback;
+  return items
+    .map((item, index) => {
+      const trimmed = String(item).trim();
+      if (numbered) {
+        if (/^\d+\.\s/.test(trimmed)) return trimmed;
+        return `${index + 1}. ${trimmed.replace(/^[-*]\s+/, "")}`;
+      }
+      if (trimmed.startsWith("- ") || /^\d+\.\s/.test(trimmed)) return trimmed;
+      return `- ${trimmed}`;
+    })
+    .join("\n");
+}
+
 function parseCurrentMd(text) {
   return {
+    schemaVersion: schemaVersionOf(text) || SCHEMA_VERSION,
     lastUpdated: extractField(text, "Last updated") || "unknown",
-    mainlineSession: extractField(text, "Mainline session") || "unknown",
+    mainlineSession: extractField(text, "Mainline session") || "",
     activeGoal: section(text, "Active Goal") || "unknown",
     currentUnderstanding: section(text, "Current Understanding") || "unknown",
     currentState: section(text, "Current State") || "- unknown",
     acceptedNextSteps: section(text, "Accepted Next Steps") || "1. unknown",
     openBlockers: section(text, "Open Blockers") || "unknown",
     projectConfig: section(text, "Project Config") || "",
-    basedOn: section(text, "Based On") || "- Session: unknown",
+    basedOn: section(text, "Based On") || "- Last change: unknown",
   };
 }
 
@@ -211,9 +247,8 @@ function renderCurrentMd(state) {
     ? `\n## Project Config\n${state.projectConfig}\n`
     : "";
   return `# Current Mainline
-Schema version: 2.3
+Schema version: ${SCHEMA_VERSION}
 Last updated: ${state.lastUpdated}
-Mainline session: ${state.mainlineSession}
 
 ## Active Goal
 ${state.activeGoal}
@@ -341,7 +376,7 @@ function validateKnownMarkdown(relativePath, text) {
     if (relativePath === "CURRENT.md") {
       const before = parseCurrentMd(text);
       const after = parseCurrentMd(renderCurrentMd(before));
-      for (const key of ["lastUpdated", "mainlineSession", "activeGoal"]) {
+      for (const key of ["lastUpdated", "activeGoal", "currentState", "acceptedNextSteps", "openBlockers"]) {
         if (before[key] !== after[key]) throw new Error(`CURRENT.md round-trip changed ${key}`);
       }
     } else if (relativePath === "THREADS.md") {
@@ -632,9 +667,13 @@ module.exports = {
   detectProjectConfig,
   emitResult,
   extractField,
+  formatSectionItems,
+  hasSupportedSchema,
   isTransientPath,
+  isTrivialNote,
   LOCK_DIR_NAME,
   generateSessionId,
+  memoryExists,
   memoryPath,
   normalizeNewlines,
   osToken,
@@ -649,6 +688,9 @@ module.exports = {
   replaceOrAppendTableRow,
   required,
   runCheck,
+  SCHEMA_PATTERN,
+  SCHEMA_VERSION,
+  schemaVersionOf,
   section,
   sessionPath,
   parseCurrentMd,

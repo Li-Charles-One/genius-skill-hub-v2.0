@@ -1,6 +1,6 @@
 runtime: "reasonix"
 display_name: "WePlaning"
-description: "Reasonix adapter for WePlaning v2.3 project memory. Run bundled Node scripts; do not hand-edit .agent-memory."
+description: "Reasonix adapter for WePlaning 3.0 project memory. Run bundled Node scripts; do not hand-edit .agent-memory."
 run_as: "subagent"
 model: "deepseek-v4-pro" # default; override per project when the Reasonix runtime supports it
 allowed_tools:
@@ -10,10 +10,10 @@ allowed_tools:
   - list_directory
   - run_command
 usage:
-  default_prompt: "Use we-planing for .agent-memory init, read, note, closeout, or repair."
+  default_prompt: "Use we-planing for .agent-memory init, read, write, or repair. CURRENT.md is truth."
   shared_instructions:
     - "../SKILL.md"
-    - "../references/weplaning-v2.3-protocol.md"
+    - "../references/weplaning-v3.0-protocol.md"
     - "../references/cli.md"
     - "../references/pitfalls.md"
-  output_contract: "Report session id, check-memory result, and the exact next step. Never hand-edit .agent-memory files; always run the bundled scripts."
+  output_contract: "Report whether anything persisted, check-memory result, and the exact next step. Never hand-edit .agent-memory files; always run the bundled scripts."

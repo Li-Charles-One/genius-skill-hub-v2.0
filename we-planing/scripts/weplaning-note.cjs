@@ -1,53 +1,26 @@
 #!/usr/bin/env node
 /**
- * weplaning-note.cjs — Quick Lite-flow one-liner
- *
- * Usage:
- *   node weplaning-note.cjs <project-root> "<note>" [options]
- *
- * Replaces the two-step Lite flow (new-session + safe-edit --lite) with a
- * single command. Also auto-closes the session after writing, so sessions
- * don't accumulate as "active" forever.
- *
- * Options:
- *   --agent <name>   Agent name. Default: $WEPLANING_AGENT or "Agent"
- *   --role <role>    Session role. Default: ops
- *   --goal <text>    Session goal. Default: same as <note>
+ * weplaning-note.cjs — compatibility wrapper around weplaning-write.cjs
  */
 
 "use strict";
 
 const path = require("path");
 const { spawnSync } = require("child_process");
-const {
-  defaultAgent,
-  emitResult,
-  parseArgs,
-  parseSessionMd,
-  renderSessionMd,
-  readSession,
-  writeSession,
-  readThreads,
-  writeThreads,
-  usage,
-  utcNow,
-  withMemoryLock,
-} = require("./weplaning-utils.cjs");
+const { defaultAgent, parseArgs, usage } = require("./weplaning-utils.cjs");
 
 const help = `
 Usage:
   node weplaning-note.cjs <project-root> "<note>" [options]
 
-Options:
-  --agent <name>       Agent name (default: $WEPLANING_AGENT or "Agent")
-  --role <role>        Session role (default: ops)
-  --goal <text>        Session goal (default: same as <note>)
-  --decision <text>    Also append to DECISIONS.md
-  --rationale <text>   Rationale for --decision
-  --json               Print machine-readable JSON result on stdout
+Writes a durable fact to the change ledger. Trivial oral notes
+(完成了 / done / 搞定) with no --decision are a no-op.
 
-Example:
-  node weplaning-note.cjs . "genius-vision SKILL.md optimized: 9 fixes, commit abc1234" --agent ZCode
+Options:
+  --agent <name>
+  --decision <text>
+  --rationale <text>
+  --json
 `;
 
 const args = parseArgs(process.argv.slice(2));
@@ -58,90 +31,12 @@ const note = args._[1];
 usage(!!note, "Missing required positional argument: <note>", help);
 
 const agent = args.agent || defaultAgent();
-const role = args.role || "ops";
-const goal = args.goal || note;
-const scriptDir = __dirname;
+const argv = [path.join(__dirname, "weplaning-write.cjs"), root, "--changed", String(note), "--agent", agent];
+if (args.decision) argv.push("--decision", String(args.decision));
+if (args.rationale) argv.push("--rationale", String(args.rationale));
+if (args.json) argv.push("--json");
 
-function run(label, script, argv, internalNoCheck = false) {
-  const env = internalNoCheck
-    ? { ...process.env, WEPLANING_INTERNAL_NO_CHECK: "1" }
-    : process.env;
-  const result = spawnSync(process.execPath, [script, ...argv], {
-    cwd: root,
-    env,
-    encoding: "utf8",
-    timeout: 30_000,
-  });
-  // Child chatter stays on stderr so this command can emit one clean result line.
-  if (result.stdout) process.stderr.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
-  if (result.status !== 0) {
-    console.error(`\n[weplaning-note] FAILED at step: ${label}`);
-    process.exit(result.status || 1);
-  }
-  return result.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) || "";
-}
-
-// Step 1: create session — skip check via internal env flag; safe-edit runs pre+post check
-const sessionId = run(
-  "new-session",
-  path.join(scriptDir, "new-session.cjs"),
-  [root, "--agent", agent, "--role", role, "--summary", note, "--goal", goal, "--no-check"],
-  true // WEPLANING_INTERNAL_NO_CHECK=1
-);
-
-// Step 2: write note + run pre/post consistency check
-run(
-  "safe-edit --lite",
-  path.join(scriptDir, "safe-edit.cjs"),
-  [root, "--lite", "--session", sessionId, "--changed", note]
-);
-
-// Step 3: auto-close session — prevents active session accumulation
-withMemoryLock(root, () => {
-  const sessionText = readSession(root, sessionId);
-  const session = parseSessionMd(sessionText);
-  session.status = "closed";
-  session.closed = utcNow();
-  if (args.decision) {
-    const base = String(session.decisions || "").replace(/\s*$/, "");
-    const line = `- ${args.decision}`;
-    session.decisions = base && base !== "- none yet" ? `${base}\n${line}` : line;
-  }
-  writeSession(root, sessionId, renderSessionMd(session));
-
-  const threads = readThreads(root);
-  const row = threads.rows.find((r) => r.id === sessionId);
-  if (row) row.status = "closed";
-  writeThreads(root, threads, utcNow());
-});
-
-// Step 4: optional decision ledger
-if (args.decision) {
-  run(
-    "append-decision-step",
-    path.join(scriptDir, "append-decision.cjs"),
-    [
-      root,
-      "--decision",
-      String(args.decision),
-      "--rationale",
-      String(args.rationale || note),
-      "--session",
-      sessionId,
-      "--agent",
-      agent,
-    ],
-  );
-}
-
-// The auto-close in step 3 writes THREADS.md and the session after safe-edit's
-// own gate has already run, so verify the state we actually leave behind.
-run("check-memory (final)", path.join(scriptDir, "check-memory.cjs"), [root]);
-
-emitResult(args, sessionId, {
-  sessionId,
-  note,
-  decision: args.decision || null,
-  message: `weplaning-note done: ${sessionId}`,
-});
+const result = spawnSync(process.execPath, argv, { cwd: root, encoding: "utf8" });
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
+process.exit(result.status || 0);
