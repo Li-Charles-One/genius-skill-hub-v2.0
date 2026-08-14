@@ -31,9 +31,9 @@ Built-in slot:
 
 | id | priority | role | key env |
 |---|---|---|---|
-| `cpa` | 1 | `cpa-jp.charles-ai.space` Grok relay | `CHANNEL_CPA_KEY` / `CPA_API_KEY` / `GROK_API_KEY` |
+| `cpa` | 1 | `cpa.artistic-genius.vip` Grok relay | `CHANNEL_CPA_KEY` / `CPA_API_KEY` / `GROK_API_KEY` |
 
-Default model: `grok-3-mini-fast` (via `cpa-jp.charles-ai.space`; fallback `grok-3-mini`).
+Default model: `grok-3-mini-fast` (via `cpa.artistic-genius.vip`; fallback `grok-3-mini`).
 
 **Swap / extend without code changes:**
 

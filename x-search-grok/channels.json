@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "comment": "Primary: cpa-jp.charles-ai.space Grok-compatible relay for x_search.",
+  "comment": "Primary: cpa.artistic-genius.vip Grok-compatible relay for x_search.",
   "channels": [
     {
       "id": "cpa",
       "priority": 1,
       "enabled": true,
-      "base": "https://cpa-jp.charles-ai.space/v1",
+      "base": "https://cpa.artistic-genius.vip/v1",
       "models": ["grok-3-mini-fast", "grok-3-mini"],
       "key_env": ["CHANNEL_CPA_KEY", "CPA_API_KEY", "GROK_API_KEY"]
     }
