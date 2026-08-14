@@ -64,39 +64,3 @@ jobs:
           set -euo pipefail
           node we-planing/tools/smoke-weplaning.cjs
 
-      - name: Smoke test WePlaning repair
-        run: |
-          set -euo pipefail
-          root="$(mktemp -d)"
-          scripts="we-planing/scripts"
-
-          session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Repair" --goal "Validate repair" --agent CI --adapter GitHubActions --os linux | tail -n1)"
-          rm "$root/.agent-memory/sessions/$session.md"
-          node "$scripts/repair-memory.cjs" "$root" --dry-run
-          node "$scripts/repair-memory.cjs" "$root"
-          node "$scripts/check-memory.cjs" "$root"
-
-      - name: Smoke test WePlaning semantic audit
-        run: |
-          set -euo pipefail
-          root="$(mktemp -d)"
-          scripts="we-planing/scripts"
-
-          session="$(node "$scripts/init-memory.cjs" "$root" --project "CI Audit" --goal "Validate semantic audit" --agent CI --adapter GitHubActions --os linux | tail -n1)"
-          node "$scripts/check-memory.cjs" "$root" --audit
-
-          python - "$root" <<'PY'
-          import sys
-          from pathlib import Path
-
-          root = Path(sys.argv[1])
-          current = root / ".agent-memory" / "CURRENT.md"
-          text = current.read_text(encoding="utf-8")
-          text = text.replace("## Open Blockers\nnone\n\n## Based On", "## Open Blockers\n- none\n- Needs manual browser authorization.\n\n## Based On")
-          current.write_text(text, encoding="utf-8")
-          PY
-
-          if node "$scripts/check-memory.cjs" "$root" --audit; then
-            echo "Expected semantic audit to fail on blocker drift"
-            exit 1
-          fi
