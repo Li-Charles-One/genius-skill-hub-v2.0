@@ -1,6 +1,6 @@
 ---
 name: dreamina-cli
-description: Use when an agent needs Dreamina（即梦） login, sessions, task history, or image/video generation through the dreamina CLI.
+description: Use when an agent needs Dreamina（即梦） login, sessions, task history, or image/video generation through the dreamina CLI. Do not use for CPA/gpt-image generation or Seedance shotlists.
 ---
 
 # Dreamina CLI

@@ -117,3 +117,8 @@ If the user did not supply a custom prefix, use the default in `references/promp
 - Scene index (number + one-line description; note a/b splits)
 - Style Prefix source (default vs user custom)
 - Any continuity assumptions that need user confirmation
+
+## Gotchas
+
+- This skill writes a shotlist HTML file. It does not generate video.
+- Each prompt is 15s Seedance English. Longer scenes split as 3a/3b/3c.

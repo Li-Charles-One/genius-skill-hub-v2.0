@@ -47,3 +47,8 @@ For completed Lark work, report:
 - The relevant Lark/Feishu URL, token, file name, chat name, calendar event, record count, or task count.
 - Any confirmation that was required and obtained.
 - Any failed or skipped step, with the actionable error message.
+
+## Gotchas
+
+- Auth and install changes need an explicit ask. Do not reconfigure `lark-cli` on your own.
+- Prefer `lark-cli` over raw HTTP. Use `lark-cli api` only after schema/help.

@@ -1,4 +1,4 @@
-﻿# Copywriting Frameworks Reference
+# Copywriting Frameworks Reference
 
 ## 框架选择矩阵
 

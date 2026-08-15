@@ -74,6 +74,8 @@ def validate_resources_are_discoverable(skill_path, content):
         for resource_file in sorted(resource_dir.rglob("*")):
             if "__pycache__" in resource_file.parts or resource_file.suffix in {".pyc", ".pyo"}:
                 continue
+            if resource_file.name == ".env" or resource_file.name.startswith(".env."):
+                continue
             if resource_file.is_file():
                 rel = resource_file.relative_to(skill_path).as_posix()
                 if rel not in discoverable_text and rel.replace("/", "\\") not in discoverable_text:

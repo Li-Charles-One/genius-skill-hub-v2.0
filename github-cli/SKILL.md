@@ -1,6 +1,6 @@
 ---
 name: github-cli
-description: "Use when a task needs GitHub CLI (`gh`) on this machine: install or verify `gh`, check or repair authentication, search GitHub with `gh search`, or run GitHub CLI commands for repositories, pull requests, issues, releases, Actions, secrets, variables, projects, organizations, keys, browsing, status, or API requests."
+description: "Use when a task needs GitHub CLI (`gh`) on this machine: install or verify `gh`, check or repair authentication, search GitHub with `gh search`, or run GitHub CLI commands for repositories, pull requests, issues, releases, Actions, secrets, variables, projects, organizations, keys, browsing, status, or API requests. Do not use for non-GitHub remotes or local-only git work that never touches GitHub."
 ---
 
 # GitHub CLI

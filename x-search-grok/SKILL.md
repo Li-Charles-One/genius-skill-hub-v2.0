@@ -209,3 +209,8 @@ If no useful posts are found, say so explicitly.
 - `scripts/x_search.py` — deterministic relay caller
 - `channels.json` — channel registry (default: cpa)
 - `.env.example` — secrets template
+
+## Gotchas
+
+- One search at a time. Do not run more than 3 parallel X searches.
+- This skill does not post, like, follow, or DM.

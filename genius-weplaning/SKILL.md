@@ -106,3 +106,8 @@ Full CLI: `references/cli.md`.
 - Read: goal, current state, next steps, blockers (if real), last few ledger lines. Do not dump leftover session notes.
 - Write: whether anything persisted, whether check passed, exact next step.
 - Trivial done: say nothing was persisted.
+
+## Gotchas
+
+- CURRENT.md is truth. Do not hand-edit `.agent-memory` files; run the bundled scripts.
+- Do not write this skill's own changelog into a project's memory.

@@ -1,4 +1,4 @@
-﻿# Writing Styles & Voice Reference
+# Writing Styles & Voice Reference
 
 ## 核心原则
 

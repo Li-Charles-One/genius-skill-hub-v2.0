@@ -1,6 +1,6 @@
 ---
 name: brand-copywriter
-description: "Use when user needs advertising copy, landing pages, email sequences, social media posts, or brand marketing content in English or Chinese. 品牌营销文案生成器：14种框架双版本对比，覆盖14个中外平台，严格AI禁用词过滤。"
+description: "Use when user needs advertising copy, landing pages, email sequences, social media posts, or brand marketing content in English or Chinese. 品牌营销文案生成器：14种框架双版本对比，覆盖14个中外平台，严格AI禁用词过滤。Do not use for product UI DESIGN.md work, image generation, or ordinary non-marketing writing."
 license: MIT
 metadata:
   version: 2.0.0
@@ -11,6 +11,10 @@ metadata:
 ---
 
 # Brand Copywriter
+
+## Gotchas
+
+- This skill writes marketing copy. It does not produce DESIGN.md or generate images.
 
 **来源**：适配自 [ognjengt/founder-skills](https://github.com/ognjengt/founder-skills)（170 stars, MIT），v2.0 增强中文平台、中文文案方法论、4A/本土机构、AI 净化流水线。
 

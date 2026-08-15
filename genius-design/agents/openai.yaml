@@ -1,4 +1,4 @@
 interface:
-  display_name: "DESIGN.md"
-  short_description: "Apply brand design systems to projects"
-  default_prompt: "Use $design-md to fetch or apply a brand DESIGN.md file for this project, then follow the design system while updating the UI."
+  display_name: "Genius Design"
+  short_description: "Generate production DESIGN.md brand systems"
+  default_prompt: "Use $genius-design to produce a DESIGN.md brand system for this project, then follow it while updating the UI."
