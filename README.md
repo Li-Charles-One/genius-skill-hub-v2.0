@@ -36,13 +36,12 @@
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
 | [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
-| [brand-copywriter](./brand-copywriter/) | Ad / landing / email / social brand copy |
 
 ### Tools
 
 | Skill | Purpose |
 |:--|:--|
-| [github-cli](./github-cli/) | GitHub CLI: auth, repos, PRs, issues, Actions, API |
+| [genius-github-usage](./genius-github-usage/) | Genius GitHub usage via `gh` |
 | [lark](./lark/) | Lark/Feishu CLI: docs, wiki, IM, calendar, mail… |
 | [x-search-grok](./x-search-grok/) | Real-time X/Twitter search via Grok-compatible relay |
 | [genius-skill-creator](./genius-skill-creator/) | Create, repair, validate, evaluate, port skills |
@@ -66,7 +65,6 @@ genius-brief-thing  →  writing-plans  →  implementation  →  genius-weplani
 ```
 genius-skill-hub-v2.0/
 ├── genius-brief-thing/
-├── brand-copywriter/
 ├── dreamina-cli/
 ├── genius-cpa-image/
 ├── genius-design/
@@ -74,7 +72,7 @@ genius-skill-hub-v2.0/
 ├── genius-shotlist-director/
 ├── genius-skill-creator/
 ├── genius-weplaning/
-├── github-cli/
+├── genius-github-usage/
 ├── lark/
 ├── writing-plans/
 └── x-search-grok/
@@ -88,8 +86,8 @@ genius-skill-hub-v2.0/
 
 ```powershell
 New-Item -ItemType Junction `
-  -Path "$env:USERPROFILE\.config\opencode\skills\github-cli" `
-  -Target "C:\path\to\genius-skill-hub-v2.0\github-cli"
+  -Path "$env:USERPROFILE\.config\opencode\skills\genius-github-usage" `
+  -Target "C:\path\to\genius-skill-hub-v2.0\genius-github-usage"
 ```
 
 部分 skill 依赖外部 CLI 或 API Key，请按各 skill 内文档自行配置；**不要**把密钥写进本仓库。

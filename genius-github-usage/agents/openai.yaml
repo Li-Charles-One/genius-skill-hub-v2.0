@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius GitHub Usage"
+  short_description: "Genius GitHub usage via gh"
+  default_prompt: "Use $genius-github-usage to verify `gh` is installed and authenticated, then run the requested GitHub CLI task."

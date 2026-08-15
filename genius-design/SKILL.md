@@ -55,7 +55,7 @@ Tell the user: key decisions (color, type, vibe, dials), save path `./DESIGN.md`
 
 - One official design system per project. Do not mix Fluent with Carbon.
 - Do not invent DESIGN.md tokens that recreate a system you should have installed.
-- Marketing copy is `brand-copywriter`. Images are `genius-cpa-image` or `dreamina-cli`.
+- This skill writes DESIGN.md. It does not write marketing copy or generate images.
 
 ## Resource Map
 

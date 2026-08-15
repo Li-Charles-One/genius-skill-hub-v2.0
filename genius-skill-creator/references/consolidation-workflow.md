@@ -56,7 +56,7 @@ Choose a structure:
 - Clear section headers for navigation
 - References to deep-dive docs in `references/`
 
-**Option C: Class + sub-skills** (like github-cli + sub-skills)
+**Option C: Class + sub-skills** (like genius-github-usage + sub-skills)
 
 - Main skill covers common cases
 - Sub-skills for niche scenarios (but consider if they are needed)
@@ -94,7 +94,7 @@ rm -rf "$SKILL_ROOT/$DEPRECATED_SKILL"
 
 ## Naming Convention
 
-- **Class-level**: `document`, `github-cli`, `remotion`, `project-plan`
+- **Class-level**: `document`, `genius-github-usage`, `remotion`, `project-plan`
 - **NOT session-level**: `fix-pdf-bug`, `debug-video-pipeline`
 - **NOT library-level**: `pymupdf`, `reportlab`
 
@@ -106,7 +106,7 @@ The name should describe the domain, not the tool.
 |---|---|---|
 | design-plan + design-md + frontend-design + ui-ux-pro-max | design-plan (router) + specialists | Orchestration |
 | hyperframes + hyperframes-cli + hyperframes-media | hyperframes (unified) | Single skill |
-| github-cli + github-auth + github-issues + github-pr-workflow | github-cli | Keep best, delete rest |
+| genius-github-usage + github-auth + github-issues + github-pr-workflow | genius-github-usage | Keep best, delete rest |
 
 ## Removing an Orchestrator
 
