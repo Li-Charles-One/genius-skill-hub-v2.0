@@ -1,17 +1,17 @@
 ---
-name: genius-brief-thing
-description: Explore intent and produce a design brief before implementing complex features. Use for genius-brief-thing, brainstorm, plan, or ambiguous multi-approach tasks. Outputs a brief/spec, then hands off to writing-plans. Do not use for clear-scope work such as renames, bugfixes, or one obvious approach.
+name: genius-brief-thinking
+description: Explore intent and produce a design brief before implementing complex features. Use for genius-brief-thinking, brainstorm, plan, or ambiguous multi-approach tasks. Outputs a brief/spec, then hands off to genius-impl-plans. Do not use for clear-scope work such as renames, bugfixes, or one obvious approach.
 license: MIT
 metadata:
   version: "2.0.0"
   hermes:
     tags: [planning, design, spec, brief, brainstorming, architecture, requirements]
-    related_skills: [writing-plans]
+    related_skills: [genius-impl-plans]
 ---
 
-# Genius Brief Thing
+# Genius Brief Thinking
 
-This skill produces a **brief**: what to build and why. `writing-plans` defines how. They are sequential. If the user already knows what they want, skip this skill and go to `writing-plans`. Do not write implementation details here.
+This skill produces a **brief**: what to build and why. `genius-impl-plans` defines how. They are sequential. If the user already knows what they want, skip this skill and go to `genius-impl-plans`. Do not write implementation details here.
 
 `brainstorm` and `plan` are trigger words only. Speak in briefs, not brainstorming ritual.
 
@@ -47,7 +47,7 @@ Use when the question is "which of 2-3 approaches?" not "what are we building?"
 1. State 2-3 approaches — one sentence each plus trade-off
 2. Recommend one — one-line reason
 3. Get the user's pick
-4. Stop. Write a short brief if they want it on disk. If they want an implementation plan, invoke `writing-plans`. Do not start coding.
+4. Stop. Write a short brief if they want it on disk. If they want an implementation plan, invoke `genius-impl-plans`. Do not start coding.
 
 No spec review loop. No visual companion. One message if possible.
 
@@ -62,11 +62,11 @@ Use only when the user says to plan it out, or the work is architectural (new se
 5. Present the design in sections; get approval as you go
 6. Write `specs/YYYY-MM-DD-<topic>-design.md` (or the user's preferred path). Do not commit unless asked
 7. Review the spec with `spec-document-reviewer-prompt.md` (max 5 loops), then ask the user to read the file
-8. After they approve, invoke `writing-plans` only
+8. After they approve, invoke `genius-impl-plans` only
 
 **Default to Lite.**
 
-The terminal state is `writing-plans`. Do not start implementation from this skill.
+The terminal state is `genius-impl-plans`. Do not start implementation from this skill.
 
 ## Process
 
@@ -92,8 +92,8 @@ The terminal state is `writing-plans`. Do not start implementation from this ski
 
 - Save the approved brief to `specs/YYYY-MM-DD-<topic>-design.md` unless the user names another path
 - Do not `git commit` unless the user asks
-- Ask them to review the file before `writing-plans`
-- If they request changes, edit and re-review. Only then invoke `writing-plans`
+- Ask them to review the file before `genius-impl-plans`
+- If they request changes, edit and re-review. Only then invoke `genius-impl-plans`
 
 ## Key Principles
 
@@ -112,7 +112,7 @@ Optional, Full tier only. Use when seeing beats reading (mockups, layouts, diagr
 
 - Lite stops at a brief. Picking an approach is not permission to code.
 - Clear-scope work should skip this skill entirely.
-- `writing-plans` is the only next skill. Do not jump to implementation skills.
+- `genius-impl-plans` is the only next skill. Do not jump to implementation skills.
 
 ## Module Layout
 
@@ -122,7 +122,7 @@ Optional, Full tier only. Use when seeing beats reading (mockups, layouts, diagr
 - `scripts/start-server.sh`, `scripts/stop-server.sh` — Unix launchers
 
 ```
-genius-brief-thing/
+genius-brief-thinking/
 ├── SKILL.md
 ├── agents/
 ├── visual-companion.md

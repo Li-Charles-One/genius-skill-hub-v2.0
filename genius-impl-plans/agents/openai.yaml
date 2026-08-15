@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Impl Plans"
+  short_description: "Turn a brief into an implementation plan"
+  default_prompt: "Use $genius-impl-plans to turn this approved brief or spec into a task-by-task implementation plan. Do not start coding unless asked."

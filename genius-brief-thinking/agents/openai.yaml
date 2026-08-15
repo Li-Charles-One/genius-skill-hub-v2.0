@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Brief Thinking"
+  short_description: "Turn an idea into a design brief"
+  default_prompt: "Use $genius-brief-thinking to explore what to build and why. For complex features touching 3+ files with ambiguous approaches, walk through clarifying questions, propose alternatives, and produce a design spec before coding."

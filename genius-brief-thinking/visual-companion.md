@@ -91,7 +91,7 @@ New-Item -ItemType Directory -Force -Path "$session\content","$session\state" | 
 $env:BRAINSTORM_DIR = $session
 $env:BRAINSTORM_HOST = '127.0.0.1'
 $env:BRAINSTORM_URL_HOST = 'localhost'
-node 'C:\path\to\skills\genius-brief-thing\scripts\server.cjs'
+node 'C:\path\to\skills\genius-brief-thinking\scripts\server.cjs'
 # server.cjs prints {"type":"server-started","port":...,"url":...} on the first line
 ```
 

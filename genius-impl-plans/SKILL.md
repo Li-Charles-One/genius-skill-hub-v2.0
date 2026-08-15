@@ -1,9 +1,9 @@
 ---
-name: writing-plans
-description: Turn an approved brief or spec into a task-by-task implementation plan before coding. Use after genius-brief-thing, or when the user already has a spec and asks for a plan. Do not use while already writing code, and do not use when what to build is still unclear — that is genius-brief-thing.
+name: genius-impl-plans
+description: "Turn an approved brief or spec into a task-by-task implementation plan before coding. Use after genius-brief-thinking, or when the user already has a spec and asks for a plan. Triggers: genius-impl-plans, writing-plans, implementation plan. Do not use while already writing code, and do not use when what to build is still unclear — that is genius-brief-thinking."
 ---
 
-# Writing Plans
+# Genius Impl Plans
 
 Write an implementation plan an engineer can follow without extra context. Exact files, complete code for code steps, exact commands, expected results. DRY. YAGNI.
 
@@ -13,7 +13,7 @@ This skill stops at the plan. Do not start implementation unless the user asks.
 
 ## Before You Write
 
-- If there is no brief/spec and the approach is still ambiguous, send them to `genius-brief-thing`.
+- If there is no brief/spec and the approach is still ambiguous, send them to `genius-brief-thinking`.
 - If one spec covers independent subsystems, suggest one plan per subsystem.
 - Map files first: what is created, modified, or tested, and what each file is for. Follow existing repo patterns. Do not plan unrelated refactors.
 
@@ -124,6 +124,6 @@ If they ask to execute: follow the plan in this session, one task at a time, and
 
 ## Gotchas
 
-- No brief and the approach is still fuzzy → `genius-brief-thing`, not this skill.
+- No brief and the approach is still fuzzy → `genius-brief-thinking`, not this skill.
 - Writing the plan is not permission to code or commit.
 - Do not force pytest, TDD, worktrees, or per-step commits onto a repo that does not use them.

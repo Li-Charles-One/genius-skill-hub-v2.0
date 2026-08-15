@@ -23,8 +23,8 @@
 
 | Skill | Purpose |
 |:--|:--|
-| [genius-brief-thing](./genius-brief-thing/) | Turn an unclear idea into a design brief (formerly brainstorming) |
-| [writing-plans](./writing-plans/) | Turn a brief/spec into an implementation plan |
+| [genius-brief-thinking](./genius-brief-thinking/) | Turn an unclear idea into a design brief (formerly brainstorming) |
+| [genius-impl-plans](./genius-impl-plans/) | Turn a brief/spec into an implementation plan |
 | [genius-weplaning](./genius-weplaning/) | Project memory lifecycle (`.agent-memory/`) |
 
 ### Creative / media
@@ -51,12 +51,12 @@
 复杂多步工作建议：
 
 ```
-genius-brief-thing  →  writing-plans  →  implementation  →  genius-weplaning
+genius-brief-thinking  →  genius-impl-plans  →  implementation  →  genius-weplaning
    (WHAT/WHY)            (HOW)            (do the work)      (record state)
 ```
 
-- `genius-brief-thing` — 方案不清时先收成 brief（旧名 brainstorming）
-- `writing-plans` — 有 brief/spec 之后，拆成可执行步骤；未叫执行就停
+- `genius-brief-thinking` — 方案不清时先收成 brief（旧名 brainstorming）
+- `genius-impl-plans` — 有 brief/spec 之后，拆成可执行步骤；未叫执行就停
 - `genius-weplaning` — 持久化项目记忆
 - 其余 skill 为叶子工具，不强制进这条流水线
 
@@ -64,7 +64,7 @@ genius-brief-thing  →  writing-plans  →  implementation  →  genius-weplani
 
 ```
 genius-skill-hub-v2.0/
-├── genius-brief-thing/
+├── genius-brief-thinking/
 ├── dreamina-cli/
 ├── genius-cpa-image/
 ├── genius-design/
@@ -74,7 +74,7 @@ genius-skill-hub-v2.0/
 ├── genius-weplaning/
 ├── genius-github-usage/
 ├── lark/
-├── writing-plans/
+├── genius-impl-plans/
 └── x-search-grok/
 ```
 
