@@ -52,11 +52,22 @@ Before delivering, run the two-altitude reflex check:
 
 If either check fails, redo the color selection or aesthetic direction. This is not optional.
 
-### Enrichment Step 5: Deliver
+### Enrichment Step 5: Lint, then Deliver
+
+```powershell
+python scripts/lint_design_md.py ./DESIGN.md
+```
+
+```bash
+python3 scripts/lint_design_md.py ./DESIGN.md
+```
+
+Fix every `FAIL` before delivering. Review `WARN` lines.
 
 Tell the user:
 - The key design decisions (primary color, font stack, vibe, dial values)
 - Where the file was saved (`./DESIGN.md`)
 - If any values were inferred (mark them clearly)
 - Any decisions the user may want to override
+- Lint result (clean, or which warnings remain)
 

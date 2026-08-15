@@ -59,5 +59,5 @@ Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alter
 
 ## Fallback Strategy
 
-Primary: fetch from Li-Charles-One/awesome-design-md. Fallback: VoltAgent/awesome-design-md. Once a DESIGN.md is placed in the project root, it has zero external dependencies -- it's a standalone Markdown file any AI agent can read.
+Source: `python scripts/fetch_design_md.py <brand> ./DESIGN.md` pulls from `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md`. `fetch_design_md.py --list` is the slug source of truth (73). Aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Once a DESIGN.md is in the project root, it has zero external dependencies.
 

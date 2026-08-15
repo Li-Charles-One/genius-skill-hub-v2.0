@@ -1,0 +1,206 @@
+{
+  "skill_name": "genius-design",
+  "evals": [
+    {
+      "id": "trigger-design-md",
+      "prompt": "给这个 SaaS 出一份 DESIGN.md",
+      "trigger_expected": true,
+      "expected_output": "Loads genius-design, asks A/B/C only if the path forks, writes DESIGN.md.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "DESIGN.md"}
+      ]
+    },
+    {
+      "id": "trigger-reverse-url",
+      "prompt": "逆向 https://stripe.com 的设计规范",
+      "trigger_expected": true,
+      "expected_output": "Workflow B: scrape the URL, run extract_design_signals.py, write DESIGN.md.",
+      "files": ["scripts/extract_design_signals.py", "reference/workflows.md"],
+      "assertions": [
+        {"type": "contains", "value": "extract_design_signals"}
+      ]
+    },
+    {
+      "id": "trigger-linear-style",
+      "prompt": "按 Linear 风格做品牌设计系统",
+      "trigger_expected": true,
+      "expected_output": "Workflow A: fetch linear via fetch_design_md.py then enrich.",
+      "files": ["scripts/fetch_design_md.py"],
+      "assertions": [
+        {"type": "contains", "value": "fetch_design_md"}
+      ]
+    },
+    {
+      "id": "trigger-ui-spec",
+      "prompt": "我们要一套 UI 设计规范",
+      "trigger_expected": true,
+      "expected_output": "Treat as DESIGN.md request; ask A/B/C if no URL or brand is given.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "DESIGN.md"}
+      ]
+    },
+    {
+      "id": "trigger-reverse-english",
+      "prompt": "reverse engineer this landing page into DESIGN.md",
+      "trigger_expected": true,
+      "expected_output": "Workflow B without asking A/B/C if a URL is already present.",
+      "files": ["reference/workflows.md"],
+      "assertions": [
+        {"type": "contains", "value": "Workflow B"}
+      ]
+    },
+    {
+      "id": "trigger-catalog-pick",
+      "prompt": "从 73 个品牌里推荐一个",
+      "trigger_expected": true,
+      "expected_output": "Read catalog.md, recommend 2-3 brands from the Design Read, then fetch.",
+      "files": ["reference/catalog.md"],
+      "assertions": [
+        {"type": "contains", "value": "catalog"}
+      ]
+    },
+    {
+      "id": "trigger-product-direction",
+      "prompt": "这个医疗后台产品该用什么设计方向",
+      "trigger_expected": true,
+      "expected_output": "Workflow C: register, vibe, dials, honesty map, then DESIGN.md.",
+      "files": ["reference/dials-and-stack.md"],
+      "assertions": [
+        {"type": "contains", "value": "Honesty"}
+      ]
+    },
+    {
+      "id": "trigger-brand-not-copy",
+      "prompt": "品牌视觉系统，不要写文案",
+      "trigger_expected": true,
+      "expected_output": "Writes DESIGN.md only; does not draft marketing copy.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "DESIGN.md"}
+      ]
+    },
+    {
+      "id": "no-trigger-landing-copy",
+      "prompt": "写一段落地页文案，强调我们很seamless",
+      "trigger_expected": false,
+      "expected_output": "Near miss: marketing copy, not DESIGN.md. Do not load genius-design.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "fetch_design_md"}
+      ]
+    },
+    {
+      "id": "no-trigger-poster",
+      "prompt": "生成一张品牌海报",
+      "trigger_expected": false,
+      "expected_output": "Image generation. Use genius-cpa-image or dreamina-cli.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "DESIGN.md"}
+      ]
+    },
+    {
+      "id": "no-trigger-button-color",
+      "prompt": "把这个按钮改成蓝色",
+      "trigger_expected": false,
+      "expected_output": "One-off UI tweak, not a brand system.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "fetch_design_md"}
+      ]
+    },
+    {
+      "id": "no-trigger-omni-screenshot",
+      "prompt": "分析这张 UI 截图里有什么",
+      "trigger_expected": false,
+      "expected_output": "Use genius-omni, not genius-design.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "omni"}
+      ]
+    },
+    {
+      "id": "no-trigger-dreamina",
+      "prompt": "用即梦生成产品图",
+      "trigger_expected": false,
+      "expected_output": "Use dreamina-cli.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "dreamina"}
+      ]
+    },
+    {
+      "id": "no-trigger-shotlist",
+      "prompt": "把这段剧本写成 Seedance 分镜",
+      "trigger_expected": false,
+      "expected_output": "Use genius-shotlist-director.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "shotlist"}
+      ]
+    },
+    {
+      "id": "no-trigger-github",
+      "prompt": "查一下我的 GitHub 仓库",
+      "trigger_expected": false,
+      "expected_output": "Use genius-github-usage.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "github"}
+      ]
+    },
+    {
+      "id": "no-trigger-impl-plan",
+      "prompt": "把 brief 拆成实施计划",
+      "trigger_expected": false,
+      "expected_output": "Use genius-impl-plans.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "impl"}
+      ]
+    },
+    {
+      "id": "fetch-uses-script",
+      "prompt": "按 Warp 拉一份品牌 DESIGN.md",
+      "trigger_expected": true,
+      "expected_output": "Runs fetch_design_md.py warp ./DESIGN.md. Does not curl by hand.",
+      "files": ["scripts/fetch_design_md.py"],
+      "assertions": [
+        {"type": "contains", "value": "fetch_design_md.py"}
+      ]
+    },
+    {
+      "id": "lint-before-deliver",
+      "prompt": "DESIGN.md 写好了，可以直接用了吗",
+      "trigger_expected": true,
+      "expected_output": "Runs lint_design_md.py and fixes FAIL lines before saying it is done.",
+      "files": ["scripts/lint_design_md.py"],
+      "assertions": [
+        {"type": "contains", "value": "lint_design_md"}
+      ]
+    },
+    {
+      "id": "no-grep-p",
+      "prompt": "从 scrape 结果里抽出主色和圆角",
+      "trigger_expected": true,
+      "expected_output": "Uses extract_design_signals.py, not grep -P.",
+      "files": ["scripts/extract_design_signals.py"],
+      "assertions": [
+        {"type": "contains", "value": "extract_design_signals"},
+        {"type": "not_contains", "value": "grep -P"}
+      ]
+    },
+    {
+      "id": "overwrite-backup",
+      "prompt": "覆盖现有 DESIGN.md，换成 Notion 风",
+      "trigger_expected": true,
+      "expected_output": "Warns about existing DESIGN.md; fetch script writes DESIGN.md.bak.",
+      "files": ["scripts/fetch_design_md.py", "reference/workflows.md"],
+      "assertions": [
+        {"type": "contains", "value": ".bak"}
+      ]
+    }
+  ]
+}
