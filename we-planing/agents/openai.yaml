@@ -1,4 +1,0 @@
-interface:
-  display_name: "WePlaning"
-  short_description: "Maintain lightweight 3.0 project memory (CURRENT.md + ledger)."
-  default_prompt: "Use $we-planing only when project memory in .agent-memory needs initialization, a durable CURRENT.md patch, repair, or verification. Do not log skill self-upgrades into a business project."

@@ -25,7 +25,7 @@
 |:--|:--|
 | [brainstorming](./brainstorming/) | Explore intent & design before complex multi-file work |
 | [writing-plans](./writing-plans/) | Turn a spec into an implementation plan |
-| [we-planing](./we-planing/) | Project memory lifecycle (`.agent-memory/`) |
+| [genius-weplaning](./genius-weplaning/) | Project memory lifecycle (`.agent-memory/`) |
 
 ### Creative / media
 
@@ -52,13 +52,13 @@
 复杂多步工作建议：
 
 ```
-brainstorming  →  writing-plans  →  implementation  →  we-planing
+brainstorming  →  writing-plans  →  implementation  →  genius-weplaning
    (WHAT/WHY)       (HOW)            (do the work)      (record state)
 ```
 
 - `brainstorming` — 方案不清或用户要求规划时用
 - `writing-plans` — 把设计规格拆成可执行步骤
-- `we-planing` — 持久化项目记忆
+- `genius-weplaning` — 持久化项目记忆
 - 其余 skill 为叶子工具，不强制进这条流水线
 
 ## Layout
@@ -73,9 +73,9 @@ genius-skill-hub-v2.0/
 ├── genius-omni/
 ├── genius-shotlist-director/
 ├── genius-skill-creator/
+├── genius-weplaning/
 ├── github-cli/
 ├── lark/
-├── we-planing/
 ├── writing-plans/
 └── x-search-grok/
 ```

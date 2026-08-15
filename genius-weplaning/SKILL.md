@@ -1,11 +1,11 @@
 ---
-name: we-planing
+name: genius-weplaning
 metadata:
   version: "3.0.0"
 description: "Maintain WePlaning 3.0 project memory in .agent-memory. Use for: 查看项目记忆 / 记一笔 / 提交主线 / 查看项目进度 / 修一下记忆 / init. Write patches CURRENT.md. Do not use for ordinary summaries, one-off code edits, or skill self-upgrades."
 ---
 
-# WePlaning
+# Genius-WePlaning
 _(Skill package v3.0.0; protocol 3.0)_
 
 ## Use When

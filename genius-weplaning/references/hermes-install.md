@@ -1,12 +1,12 @@
-# Installing WePlaning into Hermes (shipping from a hub repo)
+# Installing Genius-WePlaning into Hermes (shipping from a hub repo)
 
-If WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you want to make it available to Hermes:
+If Genius-WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and you want to make it available to Hermes:
 
-1. **Smoke-test first** — run `node <hub>/we-planing/tools/smoke-weplaning.cjs` from the hub path. If it doesn't print all `[ok]` lines and exit 0, don't install.
+1. **Smoke-test first** — run `node <hub>/genius-weplaning/tools/smoke-weplaning.cjs` from the hub path. If it doesn't print all `[ok]` lines and exit 0, don't install.
 2. **Pick the right category** in `hermes/skills/`. There's no `project-management` category by default in some Hermes installs — `mkdir -p` it if missing. `software-development` is a wrong fit (WePlaning is about project memory, not code).
 3. **Link, don't copy** — use a Windows directory junction (`mklink /J`, no admin needed) so changes in the hub flow to Hermes automatically:
    ```bash
-   cmd //c "mklink /J C:\Users\<user>\AppData\Local\hermes\skills\project-management\we-planing <hub>\we-planing"
+   cmd //c "mklink /J C:\Users\<user>\AppData\Local\hermes\skills\project-management\genius-weplaning <hub>\genius-weplaning"
    ```
    `mklink /D` (symbolic link) requires admin or Developer Mode — junction is the right tool for standard users.
 4. **Set the agent name** — pass `--agent <persona>` on write commands, or set `$WEPLANING_AGENT`. If both are unset, scripts may infer Codex/Claude from known env vars, otherwise `Agent`.

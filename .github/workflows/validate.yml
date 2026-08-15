@@ -56,11 +56,11 @@ jobs:
 
       - name: Check WePlaning scripts syntax
         run: |
-          find we-planing/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
-          find we-planing/tools -name '*.cjs' -print0 | xargs -0 -n1 node --check
+          find genius-weplaning/scripts -name '*.cjs' -print0 | xargs -0 -n1 node --check
+          find genius-weplaning/tools -name '*.cjs' -print0 | xargs -0 -n1 node --check
 
       - name: Smoke test WePlaning lifecycle
         run: |
           set -euo pipefail
-          node we-planing/tools/smoke-weplaning.cjs
+          node genius-weplaning/tools/smoke-weplaning.cjs
 
