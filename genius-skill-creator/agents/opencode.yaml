@@ -1,0 +1,24 @@
+runtime: "opencode"
+display_name: "Genius Skill Creator"
+description: "OpenCode adapter for creating, repairing, auditing, evaluating, and optimizing skill packages."
+allowed_tools:
+  - Read
+  - Write
+  - Edit
+  - Grep
+  - Glob
+  - Bash
+  - Skill
+  - Task
+capability_status:
+  verified_tools: "Read, Write, Edit, Grep, Glob, Bash, Skill, Task verified in an OpenCode session"
+  install_path: "~/.config/opencode/skills/<name>/ or project .opencode/skills/<name>/"
+usage:
+  default_prompt: "Use genius-skill-creator to create, repair, audit, evaluate, optimize, port, or merge a skill package."
+  shared_instructions:
+    - "../SKILL.md"
+    - "../references/skill-optimization-template.md"
+    - "../references/runtime-mapping.md"
+    - "../references/agent-adapter-standard.md"
+    - "../references/eval-workflow.md"
+  output_contract: "Report requirement summary, files changed, adapter status, validation results, and remaining risks."

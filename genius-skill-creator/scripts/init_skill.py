@@ -32,41 +32,44 @@ DEFAULT_ADAPTERS = ["openai"]
 
 SKILL_TEMPLATE = """---
 name: {skill_name}
-description: "TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it."
+description: "Use whenever the user needs {skill_name} work. Trigger on create, repair, or run requests for {skill_name}. Do not use for unrelated coding or documentation."
 ---
 
 # {skill_title}
 
 ## Overview
 
-[TODO: 1-2 sentences explaining what this skill enables.]
+(fill: 1-2 sentences on what this skill enables.)
 
 ## Start Here
 
 Classify the request this skill handles:
 
-- [TODO: Mode 1]
-- [TODO: Mode 2]
+- (fill: mode 1)
+- (fill: mode 2)
 
 Then inspect the smallest useful evidence:
 
-- [TODO: files/context needed]
+- (fill: files or context this skill must read first)
 
 ## Non-Negotiables
 
-- [TODO: hard rule 1]
-- [TODO: hard rule 2]
+- (fill: hard rule 1)
+- (fill: hard rule 2)
 
 ## Workflow
 
-1. [TODO: first action]
-2. [TODO: second action]
+1. Classify the request using the modes above.
+2. (fill: first domain action)
 3. Validate the result with the smallest reliable check.
+
+## Gotchas
+
+None known.
 
 ## Resource Map
 
 {agent_resource_map}
-- [TODO: list references/scripts/assets/evals that actually exist.]
 
 ## Final Response
 
@@ -162,8 +165,12 @@ EXAMPLE_EVALS = """{{
     {{
       "id": "basic-trigger",
       "prompt": "Concrete user request that should trigger this skill.",
+      "trigger_expected": true,
       "expected_output": "What good behavior looks like.",
-      "files": []
+      "files": [],
+      "assertions": [
+        {{"type": "contains", "value": "{skill_name}"}}
+      ]
     }}
   ]
 }}
@@ -175,14 +182,19 @@ description: "Reasonix adapter for using {skill_name}."
 run_as: "subagent"
 model: "deepseek-v4-pro" # default; override per project when the Reasonix runtime supports it
 allowed_tools:
+  - run_skill
+  - bash
   - read_file
-  - search_content
-  - search_files
-  - directory_tree
-  - get_file_info
-  - glob
   - write_file
-  - run_command
+  - edit_file
+  - grep
+  - glob
+  - ls
+  - task
+capability_status:
+  verified_tools: "run_skill and Bash(...) from local reasonix.toml"
+  unverified_tools: "read_file, write_file, edit_file, grep, glob, ls, task follow the hub fingerprint"
+  do_not_copy: "Codex names such as search_content, directory_tree, run_command"
 usage:
   default_prompt: "Use {skill_name} for the concrete task."
   shared_instructions:
@@ -301,8 +313,21 @@ def parse_adapters(raw_adapters):
     return deduped
 
 
-def format_agent_resource_map(adapters):
-    return "\n".join(f"- {AGENT_RESOURCE_MAP[adapter]}" for adapter in adapters)
+RESOURCE_MAP_LINES = {
+    "scripts": "`scripts/`: deterministic helpers.",
+    "references": "`references/`: detailed guidance loaded on demand.",
+    "assets": "`assets/`: files used in generated output.",
+    "evals": "`evals/evals.json`: trigger and behavior prompts.",
+}
+
+
+def format_agent_resource_map(adapters, resources=None):
+    lines = [f"- {AGENT_RESOURCE_MAP[adapter]}" for adapter in adapters]
+    for resource in resources or []:
+        lines.append(f"- {RESOURCE_MAP_LINES[resource]}")
+    if not lines:
+        return "- (fill: list references/scripts/assets/evals that actually exist.)"
+    return "\n".join(lines)
 
 
 def create_adapter_files(skill_dir, skill_name, skill_title, adapters, interface_overrides):
@@ -401,7 +426,7 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
     skill_content = SKILL_TEMPLATE.format(
         skill_name=skill_name,
         skill_title=skill_title,
-        agent_resource_map=format_agent_resource_map(adapters),
+            agent_resource_map=format_agent_resource_map(adapters, resources),
     )
 
     skill_md_path = skill_dir / "SKILL.md"
@@ -431,7 +456,7 @@ def init_skill(skill_name, path, resources, include_examples, interface_override
     # Print next steps
     print(f"\n[OK] Skill '{skill_name}' initialized successfully at {skill_dir}")
     print("\nNext steps:")
-    print("1. Edit SKILL.md to complete the TODO items and update the description")
+    print("1. Edit SKILL.md to replace (fill: ...) markers and tighten the description")
     if resources:
         resource_labels = ", ".join(f"{resource}/" for resource in resources)
         if include_examples:

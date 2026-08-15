@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 MAX_SKILL_NAME_LENGTH = 64
+MAX_ENTRYPOINT_LINES = 250
 ALLOWED_FRONTMATTER_PROPERTIES = {"name", "description", "license", "allowed-tools", "metadata"}
 PLACEHOLDER_PATTERNS = (
     "TODO:",
@@ -18,6 +19,7 @@ PLACEHOLDER_PATTERNS = (
     "Complete and informative explanation",
     "Replace with actual",
 )
+NONGOAL_CUES = (re.compile(r"do not", re.I), re.compile(r"not for", re.I), re.compile(r"不要"))
 
 
 def parse_skill_frontmatter(skill_md):
@@ -91,17 +93,30 @@ def validate_no_unfinished_placeholders(content):
     return True, None
 
 
+def has_nongoal_cue(description):
+    return any(pattern.search(description or "") for pattern in NONGOAL_CUES)
+
+
+def find_junk_paths(skill_path):
+    junk = []
+    for path in sorted(skill_path.rglob("*")):
+        if path.name in {".DS_Store", "__pycache__"}:
+            junk.append(path.relative_to(skill_path).as_posix())
+    return junk
+
+
 def validate_skill(skill_path, hub_path=None):
-    """Basic validation of a skill"""
+    """Basic validation of a skill. Returns (valid, message, warnings)."""
     skill_path = Path(skill_path)
+    warnings = []
 
     skill_md = skill_path / "SKILL.md"
     if not skill_md.exists():
-        return False, "SKILL.md not found"
+        return False, "SKILL.md not found", warnings
 
     frontmatter, content, error = parse_skill_frontmatter(skill_md)
     if error:
-        return False, error
+        return False, error, warnings
 
     unexpected_keys = set(frontmatter.keys()) - ALLOWED_FRONTMATTER_PROPERTIES
     if unexpected_keys:
@@ -110,60 +125,65 @@ def validate_skill(skill_path, hub_path=None):
         return (
             False,
             f"Unexpected key(s) in SKILL.md frontmatter: {unexpected}. Allowed properties are: {allowed}",
+            warnings,
         )
 
     if "name" not in frontmatter:
-        return False, "Missing 'name' in frontmatter"
+        return False, "Missing 'name' in frontmatter", warnings
     if "description" not in frontmatter:
-        return False, "Missing 'description' in frontmatter"
+        return False, "Missing 'description' in frontmatter", warnings
 
     name = frontmatter.get("name", "")
     if not isinstance(name, str):
-        return False, f"Name must be a string, got {type(name).__name__}"
+        return False, f"Name must be a string, got {type(name).__name__}", warnings
     name = name.strip()
     if name:
         if not re.match(r"^[a-z0-9-]+$", name):
             return (
                 False,
                 f"Name '{name}' should be hyphen-case (lowercase letters, digits, and hyphens only)",
+                warnings,
             )
         if name.startswith("-") or name.endswith("-") or "--" in name:
             return (
                 False,
                 f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens",
+                warnings,
             )
         if len(name) > MAX_SKILL_NAME_LENGTH:
             return (
                 False,
                 f"Name is too long ({len(name)} characters). "
                 f"Maximum is {MAX_SKILL_NAME_LENGTH} characters.",
+                warnings,
             )
     description = frontmatter.get("description", "")
     if not isinstance(description, str):
-        return False, f"Description must be a string, got {type(description).__name__}"
+        return False, f"Description must be a string, got {type(description).__name__}", warnings
     description = description.strip()
     if description:
         if "<" in description or ">" in description:
-            return False, "Description cannot contain angle brackets (< or >)"
+            return False, "Description cannot contain angle brackets (< or >)", warnings
         if len(description) > 1024:
             return (
                 False,
                 f"Description is too long ({len(description)} characters). Maximum is 1024 characters.",
+                warnings,
             )
 
     if hub_path:
         names, error = list_skill_frontmatter_names(hub_path)
         if error:
-            return False, error
+            return False, error, warnings
         matches = names.get(name, []) if names else []
         current_dir = skill_path.resolve()
         duplicates = [item for item in matches if item.resolve() != current_dir]
         if duplicates:
             paths = ", ".join(str(item) for item in duplicates)
-            return False, f"Duplicate skill name '{name}' found in hub: {paths}"
+            return False, f"Duplicate skill name '{name}' found in hub: {paths}", warnings
 
     if name and name != skill_path.name:
-        return False, f"Frontmatter name '{name}' must match folder name '{skill_path.name}'"
+        return False, f"Frontmatter name '{name}' must match folder name '{skill_path.name}'", warnings
 
     agents_dir = skill_path / "agents"
     if agents_dir.exists():
@@ -171,35 +191,49 @@ def validate_skill(skill_path, hub_path=None):
             try:
                 data = yaml.safe_load(agent_file.read_text(encoding="utf-8"))
             except yaml.YAMLError as e:
-                return False, f"{agent_file.name}: invalid YAML: {e}"
+                return False, f"{agent_file.name}: invalid YAML: {e}", warnings
             if not isinstance(data, dict):
-                return False, f"{agent_file.name}: YAML root must be a mapping"
+                return False, f"{agent_file.name}: YAML root must be a mapping", warnings
 
             if agent_file.name == "openai.yaml":
                 interface = data.get("interface")
                 if not isinstance(interface, dict):
-                    return False, "openai.yaml: missing interface mapping"
+                    return False, "openai.yaml: missing interface mapping", warnings
                 short_description = interface.get("short_description", "")
                 if not isinstance(short_description, str) or not (25 <= len(short_description) <= 64):
-                    return False, "openai.yaml: short_description must be 25-64 characters"
+                    return False, "openai.yaml: short_description must be 25-64 characters", warnings
                 default_prompt = interface.get("default_prompt", "")
                 expected_token = f"${name}"
                 if not isinstance(default_prompt, str) or expected_token not in default_prompt:
-                    return False, f"openai.yaml: default_prompt must mention {expected_token}"
+                    return False, f"openai.yaml: default_prompt must mention {expected_token}", warnings
 
     ok, message = validate_resources_are_discoverable(skill_path, content)
     if not ok:
-        return False, message
+        return False, message, warnings
 
     ok, message = validate_no_unfinished_placeholders(content)
     if not ok:
-        return False, message
+        return False, message, warnings
 
-    return True, "Skill is valid!"
+    line_count = len(content.splitlines())
+    if line_count > MAX_ENTRYPOINT_LINES:
+        warnings.append(
+            f"SKILL.md has {line_count} lines; keep the entrypoint under {MAX_ENTRYPOINT_LINES} lines"
+        )
+    if not has_nongoal_cue(description):
+        warnings.append("description has no non-goal cue (Do not / not for / 不要)")
+
+    junk = find_junk_paths(skill_path)
+    if junk:
+        return False, "Junk files in package: " + ", ".join(junk), warnings
+
+    if warnings:
+        return True, "Skill is valid with warnings.", warnings
+    return True, "Skill is valid!", warnings
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Validate a Codex-style skill package.")
+    parser = argparse.ArgumentParser(description="Validate a skill package.")
     parser.add_argument("skill_directory", help="Skill directory containing SKILL.md")
     parser.add_argument(
         "--hub",
@@ -207,6 +241,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    valid, message = validate_skill(args.skill_directory, args.hub)
+    valid, message, warnings = validate_skill(args.skill_directory, args.hub)
     print(message)
+    for warning in warnings:
+        print(f"[WARN] {warning}")
     sys.exit(0 if valid else 1)

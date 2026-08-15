@@ -8,6 +8,7 @@ Use `agents/` for product or runtime metadata. Adapters should not duplicate the
 agents/
 +-- openai.yaml
 +-- reasonix.yaml
++-- opencode.yaml
 +-- trae-solo.yaml
 +-- cherrystudio.yaml
 +-- <runtime>.yaml
@@ -50,14 +51,18 @@ description: "Runtime-specific adapter purpose."
 run_as: "subagent"
 model: "deepseek-v4-pro" # default; override per project when the runtime supports it
 allowed_tools:
+  - run_skill
+  - bash
   - read_file
-  - search_content
-  - search_files
-  - directory_tree
-  - get_file_info
-  - glob
   - write_file
-  - run_command
+  - edit_file
+  - grep
+  - glob
+  - ls
+  - task
+capability_status:
+  verified_tools: "run_skill and Bash(...) from local reasonix.toml"
+  unverified_tools: "other names follow the hub fingerprint; do not copy Codex tool names"
 usage:
   default_prompt: "Use skill-name for the concrete task."
   shared_instructions:

@@ -1,4 +1,4 @@
-﻿# Skill Consolidation Workflow
+# Skill Consolidation Workflow
 
 When multiple skills overlap, consolidate into class-level skills following this workflow.
 
@@ -12,23 +12,32 @@ When multiple skills overlap, consolidate into class-level skills following this
 
 ### Step 1: Inventory
 
+Search the skill root you are actually auditing. Resolve that root from `references/runtime-mapping.md`. Do not hardcode a single product path.
+
 PowerShell:
 
 ```powershell
-Get-ChildItem -Path "$HOME/.hermes/skills" -Recurse -Filter SKILL.md |
-  Select-String -Pattern "关键词" -List |
+Get-ChildItem -Path $SkillRoot -Recurse -Filter SKILL.md |
+  Select-String -Pattern "keyword" -List |
   Select-Object -ExpandProperty Path
 ```
 
 Bash:
 
 ```bash
-find ~/.hermes/skills -name "SKILL.md" -print0 | xargs -0 grep -l "关键词"
+find "$SKILL_ROOT" -name "SKILL.md" -print0 | xargs -0 grep -l "keyword"
 ```
 
+Common roots:
+
+- OpenCode: `~/.config/opencode/skills` or a hub checkout
+- Reasonix: `~/.reasonix/skills`
+- Codex: project `.agents/skills`
+
 Read each candidate skill. For each, note:
+
 - **Unique content** — what only this skill provides
-- **Overlap** — what'"'"'s duplicated across skills
+- **Overlap** — what is duplicated across skills
 - **Trigger conditions** — when each skill fires
 
 ### Step 2: Design the Unified Skill
@@ -36,18 +45,21 @@ Read each candidate skill. For each, note:
 Choose a structure:
 
 **Option A: Orchestration layer** (like design-plan)
+
 - One routing skill receives all requests
 - Specialist skills handle specific sub-tasks
-- Router analyzes need → loads specialist → executes
+- Router analyzes need, loads specialist, executes
 
 **Option B: Single unified skill** (like document, hyperframes)
+
 - One skill with sections for each sub-domain
 - Clear section headers for navigation
 - References to deep-dive docs in `references/`
 
 **Option C: Class + sub-skills** (like github-cli + sub-skills)
+
 - Main skill covers common cases
-- Sub-skills for niche scenarios (but consider if they'"'"'re needed)
+- Sub-skills for niche scenarios (but consider if they are needed)
 
 ### Step 3: Merge Content
 
@@ -59,23 +71,25 @@ Choose a structure:
 ### Step 4: Mark Deprecated
 
 For each old skill, update description:
+
 ```yaml
-description: "⚠️ 已合并到 <new-skill>。[功能] 现在是 <new-skill> skill 的一部分。请直接使用 <new-skill>。"
+description: "Merged into new-skill. This capability now lives there. Use new-skill instead."
 ```
 
 ### Step 5: Delete
 
-After confirming the new skill works:
+After confirming the new skill works, delete the deprecated folder from the same skill root you inventoried.
+
 PowerShell:
 
 ```powershell
-Remove-Item -Path "$HOME/.hermes/skills/<deprecated-skill>" -Recurse -Force
+Remove-Item -LiteralPath (Join-Path $SkillRoot $DeprecatedSkill) -Recurse -Force
 ```
 
 Bash:
 
 ```bash
-rm -rf ~/.hermes/skills/<deprecated-skill>
+rm -rf "$SKILL_ROOT/$DEPRECATED_SKILL"
 ```
 
 ## Naming Convention
@@ -84,79 +98,31 @@ rm -rf ~/.hermes/skills/<deprecated-skill>
 - **NOT session-level**: `fix-pdf-bug`, `debug-video-pipeline`
 - **NOT library-level**: `pymupdf`, `reportlab`
 
-The name should describe the DOMAIN, not the TOOL.
+The name should describe the domain, not the tool.
 
-## Example: This Session'"'"'s Consolidation
+## Example Consolidations
 
 | Before | After | Pattern |
-|--------|-------|---------|
-| design-plan + design-md + frontend-design + ui-ux-pro-max + claude-design + popular-web-designs + sketch | design-plan (router) + 4 specialists | Orchestration |
-| hyperframes + hyperframes-cli + hyperframes-media + hyperframes-registry | hyperframes (unified) | Single skill |
-| remotion-best-practices + remotion-to-hyperframes | remotion (unified) | Single skill |
-| plan + writing-plans + planning-with-files + superpowers + systematic-debugging + test-driven-development | project-plan + task-plan | Split by scope |
-| pdf + ocr-and-documents + markdown-converter + nano-pdf | document (unified) | Single skill |
-| github-cli + github-auth + github-code-review + github-issues + github-pr-workflow + github-repo-management | github-cli (already comprehensive) | Keep best, delete rest |
+|---|---|---|
+| design-plan + design-md + frontend-design + ui-ux-pro-max | design-plan (router) + specialists | Orchestration |
+| hyperframes + hyperframes-cli + hyperframes-media | hyperframes (unified) | Single skill |
+| github-cli + github-auth + github-issues + github-pr-workflow | github-cli | Keep best, delete rest |
 
-## Removing an Orchestrator (De-consolidation)
+## Removing an Orchestrator
 
-Sometimes an orchestration layer is created but the user wants sub-skills to operate independently. When removing an orchestrator:
+Sometimes an orchestration layer exists but the user wants sub-skills to operate independently.
 
-### Step 1: Distribute Reference Files
-Orchestrators often accumulate `references/` files. Each file belongs to a specific sub-skill:
-- Execution patterns, delegate_task guides → the sub-skill that does the parallel work
-- Prompt formulas, templates → the sub-skill that uses them
-- Batch generation guides → the sub-skill that produces the output
-- Asset prompts, visual references → the sub-skill that generates visuals
-
-PowerShell:
-
-```powershell
-$target = "$HOME/.hermes/skills/creative/<sub-skill>/references"
-New-Item -ItemType Directory -Path $target -Force | Out-Null
-Copy-Item -Path "$HOME/.hermes/skills/creative/<orchestrator>/references/<file>.md" -Destination $target
-```
-
-Bash:
-
-```bash
-mkdir -p ~/.hermes/skills/creative/<sub-skill>/references/
-cp ~/.hermes/skills/creative/<orchestrator>/references/<file>.md \
-   ~/.hermes/skills/creative/<sub-skill>/references/
-```
-
-### Step 2: Clean Up References
-After copying, grep for the old orchestrator name in copied files and replace with the correct sub-skill name:
-PowerShell:
-
-```powershell
-Get-ChildItem -Path "$HOME/.hermes/skills/creative/<sub-skill>/references" -Recurse -File |
-  Select-String -Pattern "<orchestrator-name>"
-# Replace any scheduled-task examples, skill references, etc.
-```
-
-Bash:
-
-```bash
-grep -rn '<orchestrator-name>' ~/.hermes/skills/creative/<sub-skill>/references/
-# Replace any cronjob examples, skill references, etc.
-```
-
-### Step 3: Delete the Orchestrator
-```python
-skill_manage(action='delete', name='<orchestrator>',
-             absorbed_into='<primary-sub-skill>')
-```
-The `absorbed_into` parameter tells the curator where the content went.
-
-### Step 4: Update Memory
-Remove or update any memory entries that reference the orchestrator pattern.
+1. Copy each `references/` file to the sub-skill that owns that knowledge.
+2. Replace the old orchestrator name in the copied files.
+3. Delete the orchestrator only after the sub-skills work alone.
+4. Update any project memory that still points at the orchestrator.
 
 ## Pitfalls
 
-1. **Don'"'"'t merge tools into skills** — `pymupdf` is a tool, `document` is a skill. Skill = domain knowledge, not library docs.
-2. **Orchestration needs clear routing table** — If using pattern A, the router must have a decision table, not vague "use the right skill".
-3. **Don'"'"'t over-consolidate** — If two skills are truly independent (e.g., `minecraft` and `spotify`), keep them separate.
-4. **Mark deprecated BEFORE deleting** — Gives users a transition period. Mark, verify, then delete.
-5. **Preserve all unique content** — When merging, every unique section from every source skill must appear in the unified skill. Don'"'"'t lose knowledge.
-6. **Don'"'"'t assume user wants orchestration** — If sub-skills are already self-contained, an orchestrator adds complexity without value. User preference: flat/independent > orchestrated. When in doubt, make sub-skills standalone first; add orchestration later only if the user asks for it.
-7. **When deleting an orchestrator, distribute references first** — Orchestrators accumulate `references/` files. Before deleting, copy each file to the sub-skill that owns that knowledge. Then grep+replace the old orchestrator name in copied files.
+1. **Do not merge tools into skills** — `pymupdf` is a tool, `document` is a skill.
+2. **Orchestration needs a routing table** — not "use the right skill".
+3. **Do not over-consolidate** — independent domains stay separate.
+4. **Mark deprecated before deleting.**
+5. **Preserve all unique content.**
+6. **Do not assume the user wants orchestration** — prefer flat/independent unless asked.
+7. **Distribute references before deleting an orchestrator.**

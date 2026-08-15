@@ -29,6 +29,23 @@ For trigger optimization:
 - Mix formal and casual phrasing.
 - Include prompts that do not mention the skill name.
 
+## Description Optimization
+
+The `description` field is the primary trigger surface. Improve it by:
+
+- naming the task type;
+- listing concrete trigger contexts, a bit pushy so the skill is not under-triggered;
+- naming important file types, tools, or workflows;
+- saying when not to use the skill, using near misses rather than unrelated chores;
+- avoiding vague claims like "helps with productivity";
+- keeping platform-specific assumptions out unless the skill is platform-specific.
+
+Should-trigger prompts should sound like a real user: casual, typo-prone, and not always naming the skill.
+
+Should-not-trigger prompts must be near misses. "Write a Fibonacci function" is too easy for a PDF skill. Good negatives share keywords but need a different tool.
+
+For high-stakes trigger tuning, create roughly half should-trigger prompts and half should-not-trigger prompts. Behavior comparisons use `eval-run-loop.md`, not string matches on this creator's reply.
+
 ## Evals JSON
 
 ```json
@@ -36,14 +53,25 @@ For trigger optimization:
   "skill_name": "example-skill",
   "evals": [
     {
-      "id": 1,
+      "id": "basic-trigger",
       "prompt": "Concrete user task",
+      "trigger_expected": true,
       "expected_output": "What good looks like",
-      "files": []
+      "files": [],
+      "assertions": [
+        {"type": "contains", "value": "expected phrase"}
+      ]
     }
   ]
 }
 ```
+
+Rules:
+
+- `id` is a stable string, not a number.
+- `trigger_expected` is required and boolean.
+- Assertion types: `contains`, `not_contains`, `file_exists`, `exit_code`.
+- For this hub, classify behavior with Create / Repair / Audit / Evaluate / Optimize / Port / Merge. Do not use Standardize as a mode name.
 
 ## Review Checklist
 

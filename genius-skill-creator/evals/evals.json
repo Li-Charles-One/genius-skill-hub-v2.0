@@ -5,26 +5,27 @@
       "id": "create-package",
       "prompt": "Create a new skill for backing up code to GitHub.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Create, captures purpose/trigger/non-goals/outputs/dependencies, uses init_skill.py when useful, creates SKILL.md and agents/openai.yaml, and validates with quick_validate.py.",
+      "expected_output": "Classifies the request as Create, harvests intent from the request, uses init_skill.py when useful, replaces (fill: ...) markers, creates SKILL.md and agents/openai.yaml, and runs quick_validate.py plus security_scan.py.",
       "files": [],
       "assertions": [
         {"type": "contains", "value": "Create"},
         {"type": "contains", "value": "SKILL.md"},
         {"type": "contains", "value": "agents/openai.yaml"},
-        {"type": "contains", "value": "quick_validate.py"}
+        {"type": "contains", "value": "quick_validate.py"},
+        {"type": "contains", "value": "security_scan.py"}
       ]
     },
     {
       "id": "optimize-existing-skill",
       "prompt": "Optimize this existing skill so it can be the template for the rest of my Skill Hub.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Standardize or Optimize, reads skill-optimization-template.md, keeps SKILL.md thin, moves detailed guidance into references, records output standard, and validates before delivery.",
+      "expected_output": "Classifies the request as Optimize, reads skill-optimization-template.md, keeps SKILL.md thin, moves detailed guidance into references, records output standard, and validates before delivery.",
       "files": [
         "SKILL.md",
         "references/skill-optimization-template.md"
       ],
       "assertions": [
-        {"type": "contains", "value": "Standardize"},
+        {"type": "contains", "value": "Optimize"},
         {"type": "contains", "value": "skill-optimization-template.md"},
         {"type": "contains", "value": "SKILL.md"},
         {"type": "contains", "value": "references"}
@@ -34,10 +35,11 @@
       "id": "multi-agent-adapter",
       "prompt": "Port this skill so Reasonix can use it too.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, keeps runtime metadata in agents/reasonix.yaml, lists only verified tools, and keeps shared instructions in SKILL.md and references.",
+      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md and runtime-mapping.md, keeps runtime metadata in agents/reasonix.yaml, lists only verified tools, and keeps shared instructions in SKILL.md and references.",
       "files": [
         "agents/reasonix.yaml",
-        "references/agent-adapter-standard.md"
+        "references/agent-adapter-standard.md",
+        "references/runtime-mapping.md"
       ],
       "assertions": [
         {"type": "contains", "value": "Port"},
@@ -50,7 +52,7 @@
       "id": "create-with-adapters",
       "prompt": "Create a new skill and scaffold OpenAI, Reasonix, and Trae adapter metadata for it.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Create, uses init_skill.py with --adapters, generates agents/openai.yaml, agents/reasonix.yaml, and agents/trae-solo.yaml, and explains that generated TODO scaffolds must be edited before final validation.",
+      "expected_output": "Classifies the request as Create, uses init_skill.py with --adapters, generates agents/openai.yaml, agents/reasonix.yaml, and agents/trae-solo.yaml, and explains that generated fill markers must be replaced before final validation of content quality.",
       "files": [
         "scripts/init_skill.py",
         "agents/openai.yaml",
@@ -100,7 +102,7 @@
       "id": "cross-platform-commands",
       "prompt": "Update the scripts and command examples so they run on Windows, macOS, and Linux.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Standardize or Repair, checks cross-platform-command-standard.md, prefers Python or Node for repeated logic, provides PowerShell and Bash variants when syntax differs, avoids Bash-only Windows instructions, and marks unverified operating systems.",
+      "expected_output": "Classifies the request as Optimize or Repair, checks cross-platform-command-standard.md, prefers Python or Node for repeated logic, provides PowerShell and Bash variants when syntax differs, avoids Bash-only Windows instructions, and marks unverified operating systems.",
       "files": [
         "references/cross-platform-command-standard.md"
       ],
@@ -156,10 +158,53 @@
       ]
     },
     {
+      "id": "merge-related-skills",
+      "prompt": "These two skills overlap. Merge them into one class-level skill.",
+      "trigger_expected": true,
+      "expected_output": "Classifies the request as Merge, reads consolidation-workflow.md, inventories unique content and overlap, picks a structure, merges unique content, and marks deprecated skills before delete.",
+      "files": [
+        "references/consolidation-workflow.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Merge"},
+        {"type": "contains", "value": "consolidation-workflow.md"},
+        {"type": "contains", "value": "deprecated"},
+        {"type": "contains", "value": "overlap"}
+      ]
+    },
+    {
+      "id": "create-from-session",
+      "prompt": "刚才这套备份流程挺顺的，做成一个 skill 吧。",
+      "trigger_expected": true,
+      "expected_output": "Classifies the request as Create, reads capture-intent.md, harvests the conversation instead of starting a questionnaire, then scaffolds and validates.",
+      "files": [
+        "references/capture-intent.md"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Create"},
+        {"type": "contains", "value": "capture-intent.md"},
+        {"type": "contains", "value": "conversation"}
+      ]
+    },
+    {
+      "id": "audit-untrusted-skill",
+      "prompt": "有人给了我一个 skill 文件夹，安装前帮我看看安不安全。",
+      "trigger_expected": true,
+      "expected_output": "Classifies the request as Audit, runs security_scan.py, reports findings first, and does not install an unscanned package.",
+      "files": [
+        "scripts/security_scan.py"
+      ],
+      "assertions": [
+        {"type": "contains", "value": "Audit"},
+        {"type": "contains", "value": "security_scan.py"},
+        {"type": "contains", "value": "findings"}
+      ]
+    },
+    {
       "id": "non-skill-python-script",
       "prompt": "帮我写一个 Python 脚本，读取 CSV 并输出前 10 行。",
       "trigger_expected": false,
-      "expected_output": "Should not trigger genius-skill-creator because the request is ordinary script writing, not skill creation, repair, validation, audit, evaluation, optimization, standardization, or porting.",
+      "expected_output": "Should not trigger genius-skill-creator because the request is ordinary script writing, not skill creation, repair, validation, audit, evaluation, optimization, or porting.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "genius-skill-creator"},
@@ -197,6 +242,72 @@
       "assertions": [
         {"type": "not_contains", "value": "SKILL.md"},
         {"type": "not_contains", "value": "evals/evals.json"}
+      ]
+    },
+    {
+      "id": "non-skill-session-to-readme",
+      "prompt": "把刚才这通对话整理成 README。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the user wants a README from the chat, not a skill package.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "init_skill.py"},
+        {"type": "not_contains", "value": "quick_validate.py"}
+      ]
+    },
+    {
+      "id": "non-skill-refactor-react",
+      "prompt": "帮我重构这个 React 组件，把状态提升到父级。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is application refactoring, not skill maintenance.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "SKILL.md"},
+        {"type": "not_contains", "value": "agents/openai.yaml"}
+      ]
+    },
+    {
+      "id": "non-skill-install-opencode",
+      "prompt": "这个 skill 怎么装到 OpenCode？",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is install-path help, not creating or repairing a skill package.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "genius-skill-creator"},
+        {"type": "not_contains", "value": "skill-optimization-template.md"}
+      ]
+    },
+    {
+      "id": "non-skill-translate-skillmd",
+      "prompt": "帮我把这个 SKILL.md 翻译成中文。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is translation of an existing file, not skill creation, repair, or audit.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "evals/evals.json"},
+        {"type": "not_contains", "value": "runtime-mapping.md"}
+      ]
+    },
+    {
+      "id": "non-skill-feishu-message",
+      "prompt": "帮我给飞书群发一条消息。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is Lark/Feishu messaging, not skill creation or repair.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "init_skill.py"},
+        {"type": "not_contains", "value": "agents/reasonix.yaml"}
+      ]
+    },
+    {
+      "id": "non-skill-explain-concept",
+      "prompt": "skill 这个词在 AI agent 里是什么意思？",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because the request is a concept explanation, not a request to create or modify a skill package.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "quick_validate.py"},
+        {"type": "not_contains", "value": "agents/openai.yaml"}
       ]
     }
   ]

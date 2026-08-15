@@ -4,21 +4,25 @@ description: "Reasonix adapter for creating, repairing, auditing, evaluating, an
 run_as: "subagent"
 model: "deepseek-v4-pro" # default; override per project when the Reasonix runtime supports it
 allowed_tools:
+  - run_skill
+  - bash
   - read_file
-  - search_content
-  - search_files
-  - directory_tree
-  - get_file_info
-  - glob
   - write_file
-  - run_command
-  - web_search
-  - web_fetch
+  - edit_file
+  - grep
+  - glob
+  - ls
+  - task
+capability_status:
+  verified_tools: "run_skill and Bash(...) from local reasonix.toml"
+  unverified_tools: "read_file, write_file, edit_file, grep, glob, ls, task follow the hub fingerprint; not re-checked against Reasonix source"
+  do_not_copy: "Codex names such as search_content, search_files, directory_tree, get_file_info, run_command"
 usage:
   default_prompt: "Use genius-skill-creator to optimize a skill package against the Skill Hub template."
   shared_instructions:
     - "../SKILL.md"
     - "../references/skill-optimization-template.md"
+    - "../references/runtime-mapping.md"
     - "../references/agent-adapter-standard.md"
     - "../references/eval-workflow.md"
   output_contract: "Report requirement summary, files changed, adapter status, validation results, and remaining risks."

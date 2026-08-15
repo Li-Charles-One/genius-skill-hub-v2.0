@@ -26,17 +26,19 @@ Target shape:
 +-- SKILL.md                 Thin entrypoint: trigger, mode routing, workflow, resource map
 +-- agents/
 |   +-- openai.yaml          Codex/UI metadata
-|   +-- reasonix.yaml        Reasonix/runtime adapter when supported
-|   +-- trae-solo.yaml       Trae SOLO rule/custom-instruction adapter when supported
-|   +-- cherrystudio.yaml    CherryStudio Code Tool/Agent/MCP adapter when supported
+|   +-- reasonix.yaml        Reasonix adapter when supported
+|   +-- opencode.yaml        OpenCode adapter when supported
+|   +-- trae-solo.yaml       Trae SOLO adapter when supported
+|   +-- cherrystudio.yaml    CherryStudio adapter when supported
 +-- references/              Detailed reusable guidance, loaded only when needed
+|   +-- runtime-mapping.md
 |   +-- cross-platform-command-standard.md
 +-- scripts/                 Deterministic helpers and validators
 +-- evals/                   Trigger and behavior test prompts
 +-- assets/                  Templates, icons, report files, or other output assets
 ```
 
-Use only the directories the skill actually needs. `agents/openai.yaml` is expected for Skill Hub UI metadata. Add other adapters when the skill is intended to run on another Agent.
+Use only the directories the skill actually needs. `agents/openai.yaml` is expected for Skill Hub UI metadata. Add other adapters when the skill is intended to run on another Agent. Runtime fingerprints belong in `references/runtime-mapping.md`, not in `SKILL.md`.
 
 ## Thin Entrypoint Rules
 
@@ -112,10 +114,11 @@ For audit-only work, lead with findings and avoid pretending changes were made.
 Run the smallest set that proves the change:
 
 - `python scripts/quick_validate.py <skill-dir>`;
+- `python scripts/security_scan.py <skill-dir>`;
 - parse every `agents/*.yaml`;
 - run `node --check` or language syntax checks for changed scripts;
 - run representative script smoke tests when scripts changed;
-- run or manually review evals when trigger/output behavior changed.
+- run or manually review evals when trigger/output behavior changed. Use `eval-run-loop.md` for with-skill vs baseline.
 - review commands against `cross-platform-command-standard.md` when command examples changed.
 
 When syncing to Skill Hub, validate both the local source package and the synced package.
