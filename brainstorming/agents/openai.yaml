@@ -1,4 +1,0 @@
-interface:
-  display_name: "Brainstorming"
-  short_description: "Explore intent, requirements and design before implementing complex multi-file features"
-  default_prompt: "Use $brainstorming to explore what to build and why. For complex features touching 3+ files with ambiguous approaches, walk through clarifying questions, propose alternatives, and produce a design spec before coding."
