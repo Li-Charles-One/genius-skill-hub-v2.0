@@ -24,7 +24,7 @@
 | Skill | Purpose |
 |:--|:--|
 | [genius-brief-thing](./genius-brief-thing/) | Turn an unclear idea into a design brief (formerly brainstorming) |
-| [writing-plans](./writing-plans/) | Turn a spec into an implementation plan |
+| [writing-plans](./writing-plans/) | Turn a brief/spec into an implementation plan |
 | [genius-weplaning](./genius-weplaning/) | Project memory lifecycle (`.agent-memory/`) |
 
 ### Creative / media
@@ -57,7 +57,7 @@ genius-brief-thing  →  writing-plans  →  implementation  →  genius-weplani
 ```
 
 - `genius-brief-thing` — 方案不清时先收成 brief（旧名 brainstorming）
-- `writing-plans` — 把设计规格拆成可执行步骤
+- `writing-plans` — 有 brief/spec 之后，拆成可执行步骤；未叫执行就停
 - `genius-weplaning` — 持久化项目记忆
 - 其余 skill 为叶子工具，不强制进这条流水线
 

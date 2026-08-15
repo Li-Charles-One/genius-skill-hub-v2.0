@@ -1,66 +1,57 @@
 ---
 name: writing-plans
-description: Use when you have a spec or requirements for a multi-step task, before touching code
+description: Turn an approved brief or spec into a task-by-task implementation plan before coding. Use after genius-brief-thing, or when the user already has a spec and asks for a plan. Do not use while already writing code, and do not use when what to build is still unclear — that is genius-brief-thing.
 ---
 
 # Writing Plans
 
-## Overview
+Write an implementation plan an engineer can follow without extra context. Exact files, complete code for code steps, exact commands, expected results. DRY. YAGNI.
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
+Save to `docs/plans/YYYY-MM-DD-<feature-name>.md` unless the user names another path.
 
-Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
+This skill stops at the plan. Do not start implementation unless the user asks.
 
-**Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
+## Before You Write
 
-**Context:** This should be run in a dedicated worktree (created by genius-brief-thing).
+- If there is no brief/spec and the approach is still ambiguous, send them to `genius-brief-thing`.
+- If one spec covers independent subsystems, suggest one plan per subsystem.
+- Map files first: what is created, modified, or tested, and what each file is for. Follow existing repo patterns. Do not plan unrelated refactors.
 
-**Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
-- (User preferences for plan location override this default)
+## Task Granularity
 
-## Scope Check
+Each step is one action. Prefer the repo's real loop over a generic TDD ritual.
 
-If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during genius-brief-thing. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+If the repo already uses tests:
 
-## File Structure
+1. Write or update the test
+2. Run the project's test command
+3. Write the minimal code
+4. Run the same command again
+5. Commit only if the user asked for commits in the plan
 
-Before defining tasks, map out which files will be created or modified and what each one is responsible for. This is where decomposition decisions get locked in.
+If the repo has no test runner, write the verification step that this repo actually uses (typecheck, script smoke test, or manual check). Do not invent `pytest` for a Node or PowerShell project.
 
-- Design units with clear boundaries and well-defined interfaces. Each file should have one clear responsibility.
-- You reason best about code you can hold in context at once, and your edits are more reliable when files are focused. Prefer smaller, focused files over large ones that do too much.
-- Files that change together should live together. Split by responsibility, not by technical layer.
-- In existing codebases, follow established patterns. If the codebase uses large files, don't unilaterally restructure - but if a file you're modifying has grown unwieldy, including a split in the plan is reasonable.
+Do not make every step a commit. Frequent commits are optional and only when the user wants them.
 
-This structure informs the task decomposition. Each task should produce self-contained changes that make sense independently.
+## Plan Header
 
-## Bite-Sized Task Granularity
-
-**Each step is one action (2-5 minutes):**
-- "Write the failing test" - step
-- "Run it to make sure it fails" - step
-- "Implement the minimal code to make the test pass" - step
-- "Run the tests and make sure they pass" - step
-- "Commit" - step
-
-## Plan Document Header
-
-**Every plan MUST start with this header:**
+Every plan starts with:
 
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** Implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. After completing each task, verify it works before moving to the next.
+> Implement task-by-task. Steps use `- [ ]`. Verify each task before the next.
 
-**Goal:** [One sentence describing what this builds]
+**Goal:** [one sentence]
 
-**Architecture:** [2-3 sentences about approach]
+**Architecture:** [2-3 sentences]
 
-**Tech Stack:** [Key technologies/libraries]
+**Tech Stack:** [what this repo already uses]
 
 ---
 ```
 
-## Task Structure
+## Task Shape
 
 ````markdown
 ### Task N: [Component Name]
@@ -78,10 +69,10 @@ def test_specific_behavior():
     assert result == expected
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run the project test command**
 
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: FAIL with "function not defined"
+Run: `<the command this repo already uses>`
+Expected: FAIL with a specific reason
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -90,12 +81,11 @@ def function(input):
     return expected
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Re-run the same command**
 
-Run: `pytest tests/path/test.py::test_name -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit** (only if the user asked)
 
 ```bash
 git add tests/path/test.py src/path/file.py
@@ -103,52 +93,37 @@ git commit -m "feat: add specific feature"
 ```
 ````
 
+Use the languages and commands of the target repo. The Python above is an example, not a requirement.
+
 ## No Placeholders
 
-Every step must contain the actual content an engineer needs. These are **plan failures** — never write them:
-- "TBD", "TODO", "implement later", "fill in details"
-- "Add appropriate error handling" / "add validation" / "handle edge cases"
-- "Write tests for the above" (without actual test code)
-- "Similar to Task N" (repeat the code — the engineer may be reading tasks out of order)
-- Steps that describe what to do without showing how (code blocks required for code steps)
-- References to types, functions, or methods not defined in any task
+These are plan failures — never write them:
 
-## Remember
-- Exact file paths always
-- Complete code in every step — if a step changes code, show the code
-- Exact commands with expected output
-- DRY, YAGNI, TDD, frequent commits
+- TBD, TODO, implement later, fill in details
+- "Add error handling" / "add validation" without the code
+- "Write tests" without the actual test
+- "Similar to Task N" (repeat the code)
+- Steps that say what but not how
+- Types or functions never defined in any task
 
 ## Self-Review
 
-After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This is a checklist you run yourself — not a subagent dispatch.
+After the plan is written, check it yourself:
 
-**1. Spec coverage:** Skim each section/requirement in the spec. Can you point to a task that implements it? List any gaps.
+1. **Spec coverage:** every spec requirement has a task
+2. **Placeholder scan:** none of the failures above
+3. **Name consistency:** later tasks use the same types and function names as earlier ones
 
-**2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
+Fix inline and save.
 
-**3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+## After the Plan
 
-If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
+Tell the user where the file is. Stop.
 
-## Execution Handoff
+If they ask to execute: follow the plan in this session, one task at a time, and pause after each group. Do not spawn implementation subagents unless they ask for that.
 
-After saving the plan, offer execution choice:
+## Gotchas
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
-
-**1. Subagent-Driven (recommended)** — dispatch a fresh subagent per task, review between tasks, fast iteration. The agent spawns a child task for each checkbox block, verifies the result, then moves on.
-
-**2. Inline Execution** — execute tasks sequentially in this session with checkpoints for review after each task group.
-
-**Which approach?"**
-
-**If Subagent-Driven chosen:**
-- Spawn a subagent (via the runtime's task/agent tool) for each task block
-- Pass the task content + relevant context as the subagent prompt
-- Review the subagent's result before proceeding to the next task
-
-**If Inline Execution chosen:**
-- Work through the plan's checkboxes one task at a time in the current session
-- Pause for user review after each logical group of tasks
-- Mark checkboxes as completed before moving on
+- No brief and the approach is still fuzzy → `genius-brief-thing`, not this skill.
+- Writing the plan is not permission to code or commit.
+- Do not force pytest, TDD, worktrees, or per-step commits onto a repo that does not use them.
