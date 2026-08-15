@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
-"""Genius CPA Image — multi-provider CPA image generation.
+"""Genius CPA Image — CPA-US gpt-image-2 only.
 
-Providers:
-  cpa-jp  Gemini native generateContent
-    POST {CPA_JP_BASE}/v1beta/models/{model}:generateContent
-    default model: gemini-3.1-flash-image
-    auth: CPA_JP_API_KEY (alias CPA_API_KEY)
+  POST {CPA_US_BASE}/v1/images/generations
+  POST {CPA_US_BASE}/v1/images/edits   (when --ref)
+  model: gpt-image-2
+  auth: CPA_US_API_KEY (alias CPA_GPT_API_KEY)
 
-  cpa-us  OpenAI-compatible images API (Codex / gpt-image-2)
-    POST {CPA_US_BASE}/v1/images/generations
-    POST {CPA_US_BASE}/v1/images/edits   (when --ref)
-    default model: gpt-image-2
-    auth: CPA_US_API_KEY (alias CPA_GPT_API_KEY)
-
-Native controls:
-  Gemini: imageConfig.aspectRatio + imageSize (0.5K/1K/2K/4K), --ref, --google-search
-  gpt-image-2 (CPA-US observed): aspect→fixed 1K size presets, --quality, --output-format,
-    --ref edits. Higher 2K/4K requests are not available on this channel.
+Native controls: aspect→fixed 1K size presets, --quality, --output-format, --ref edits.
+2K/4K requests are not available on this channel (coerced to 1K).
 """
 
 from __future__ import annotations
@@ -100,13 +91,6 @@ _FILE_KEYS = load_dotenv_map()
 # ---------------------------------------------------------------------------
 
 PROVIDERS = {
-    "cpa-jp": {
-        "label": "JP CPA Gemini",
-        "api_key_names": ("CPA_JP_API_KEY", "CPA_API_KEY"),
-        "base_name": "CPA_JP_BASE",
-        "base_default": "https://cpa-jp.charles-ai.space",
-        "api": "generateContent",
-    },
     "cpa-us": {
         "label": "US CPA OpenAI images",
         "api_key_names": ("CPA_US_API_KEY", "CPA_GPT_API_KEY"),
@@ -116,11 +100,11 @@ PROVIDERS = {
     },
 }
 
-ASPECTS_GEMINI = {
-    "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
-    "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+RETIRED_GEMINI_MODELS = {
+    "gemini-3.1-flash-image",
+    "gemini-3-flash-image",
+    "gemini-2.5-flash-image",
 }
-RESOLUTIONS_GEMINI = {"0.5K", "1K", "2K", "4K"}
 
 # gpt-image-2 via CPA-US: observed fixed 1K size matrix (UI + live actual_size).
 # Verified 2026-08-05: requesting 16:9 4K / 3840x2160 still returns 1672x941.
@@ -244,22 +228,6 @@ GPT_IMAGE_LEGACY_SIZE_ALIASES = {
 }
 
 MODELS = {
-    "gemini-3.1-flash-image": {
-        "id": "gemini-3.1-flash-image",
-        "provider": "cpa-jp",
-        "api": "generateContent",
-        "max_ref": 14,
-        "max_prompt": 20000,
-        "default_aspect": "1:1",
-        "default_resolution": "1K",
-        "aspects": ASPECTS_GEMINI,
-        "resolutions": RESOLUTIONS_GEMINI,
-        "supports_google_search": True,
-        "supports_quality": False,
-        "supports_output_format": False,
-        "default_quality": None,
-        "default_output_format": None,
-    },
     "gpt-image-2": {
         "id": "gpt-image-2",
         "provider": "cpa-us",
@@ -285,7 +253,7 @@ MODELS = {
     },
 }
 
-DEFAULT_MODEL = "gemini-3.1-flash-image"
+DEFAULT_MODEL = "gpt-image-2"
 
 TIMEOUT_SUBMIT = 180
 TIMEOUT_MODELS = 20
@@ -1195,16 +1163,6 @@ def load_ref_bytes(ref: str):
     return p.name, mime, base64.b64decode(b64)
 
 
-def resolve_ref_parts(refs):
-    """Return Gemini parts for reference images (inlineData or file URI text fallback)."""
-    parts = []
-    for ref in refs or []:
-        name, mime, raw = load_ref_bytes(ref)
-        b64 = base64.b64encode(raw).decode("ascii")
-        parts.append({"inlineData": {"mimeType": mime, "data": b64}})
-    return parts
-
-
 def normalize_output_format(fmt: str | None) -> str | None:
     if fmt is None or fmt is False or fmt == "":
         return None
@@ -1252,7 +1210,7 @@ def normalize_gpt_image_resolution(
             print(
                 f"  [note] gpt-image-2 CPA-US has no {canonical} resolution; "
                 f"coerced to {real} (quality does not raise pixels; "
-                f"use Gemini for true 2K/4K)",
+                f"this channel is 1K-only)",
                 flush=True,
             )
         return real
@@ -1290,7 +1248,7 @@ def parse_gpt_image_size_string(size: str) -> str:
     raise RuntimeError(
         f"gpt-image-2 size {normalized} is not in the CPA-US 1K matrix. "
         f"Supported: {popular} (or auto). "
-        f"Note: 2K/4K are not available on this channel; use Gemini for true 4K."
+        f"Note: 2K/4K are not available on this channel."
     )
 
 
@@ -1414,6 +1372,10 @@ def aspect_from_size_string(size: str) -> str | None:
 
 def validate_task(task):
     model = task.get("model") or DEFAULT_MODEL
+    if str(model).lower().startswith("gemini") or model in RETIRED_GEMINI_MODELS:
+        raise RuntimeError(
+            "Gemini image models were removed. Use gpt-image-2 (CPA-US, 1K only)."
+        )
     if model not in MODELS:
         raise RuntimeError(f"unknown model: {model}; available: {sorted(MODELS)}")
     cfg = MODELS[model]
@@ -1526,76 +1488,14 @@ def validate_task(task):
     else:
         task["output_format"] = None
 
-    google_search = bool(task.get("google_search"))
-    if google_search and not cfg.get("supports_google_search"):
-        raise RuntimeError(f"{model} does not support --google-search")
-    task["google_search"] = google_search
+    if task.get("google_search"):
+        raise RuntimeError("gpt-image-2 does not support --google-search")
+    task["google_search"] = False
 
     if cfg["api"] == "images":
         task["size"] = gpt_image_size_for(task, cfg)
 
     return task
-
-
-def build_generate_content_body(task):
-    parts = [{"text": task["prompt"]}]
-    parts.extend(resolve_ref_parts(task.get("ref") or []))
-
-    image_config = {
-        "aspectRatio": task["aspect"],
-        "imageSize": task["resolution"],
-    }
-    body = {
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "responseModalities": ["IMAGE"],
-            "imageConfig": image_config,
-        },
-    }
-    if task.get("google_search"):
-        body["tools"] = [{"google_search": {}}]
-    return body
-
-
-def extract_images_from_generate_content(resp):
-    if not isinstance(resp, dict):
-        raise RuntimeError(f"response is not object: {type(resp).__name__}")
-    if resp.get("error"):
-        err = resp["error"]
-        if isinstance(err, dict):
-            raise RuntimeError(f"CPA/Gemini error: {err.get('message') or err}")
-        raise RuntimeError(f"CPA/Gemini error: {err}")
-
-    candidates = resp.get("candidates") or []
-    if not candidates:
-        raise RuntimeError(f"no candidates in response: keys={list(resp.keys())}")
-
-    images = []
-    texts = []
-    for cand in candidates:
-        content = cand.get("content") or {}
-        for part in content.get("parts") or []:
-            if not isinstance(part, dict):
-                continue
-            if "text" in part and part["text"]:
-                texts.append(part["text"])
-            ind = part.get("inlineData") or part.get("inline_data")
-            if isinstance(ind, dict) and ind.get("data"):
-                mime = ind.get("mimeType") or ind.get("mime_type") or "image/jpeg"
-                try:
-                    data = base64.b64decode(re.sub(r"\s+", "", ind["data"]))
-                except Exception as e:
-                    raise RuntimeError(f"inlineData base64 decode failed: {e}")
-                images.append({"mime": mime, "data": data})
-            fd = part.get("fileData") or part.get("file_data")
-            if isinstance(fd, dict) and fd.get("fileUri"):
-                images.append({"url": fd["fileUri"], "mime": fd.get("mimeType") or "image/jpeg"})
-
-    if not images:
-        raise RuntimeError(
-            f"no image parts in response; texts={texts[:1]!r} finish={((candidates[0] or {}).get('finishReason'))}"
-        )
-    return images, texts
 
 
 def extract_images_from_openai_images(resp):
@@ -1665,43 +1565,6 @@ def save_image_obj(img, dest):
         raise RuntimeError(f"download failed HTTP {r.status_code}")
     dest.write_bytes(r.content)
     return len(r.content)
-
-
-def generate_content_url(base: str, model_id: str) -> str:
-    return f"{base}/v1beta/models/{model_id}:generateContent"
-
-
-def submit_gemini(task):
-    provider = "cpa-jp"
-    require_api_key(provider)
-    cfg = MODELS[task["model"]]
-    base = provider_base(provider)
-    body = build_generate_content_body(task)
-    url = generate_content_url(base, cfg["id"])
-    r = request_with_retry(
-        "POST", url, headers=headers_for(provider), json=body, timeout=TIMEOUT_SUBMIT
-    )
-    try:
-        d = r.json()
-    except Exception:
-        raise RuntimeError(f"non-JSON HTTP {r.status_code}: {r.text[:300]}")
-    if r.status_code >= 400:
-        raise RuntimeError(
-            format_http_error(r.status_code, r.text or json.dumps(d, ensure_ascii=False))
-        )
-    images, texts = extract_images_from_generate_content(d)
-    tid = d.get("responseId") or d.get("id") or f"cpa-{int(time.time())}"
-    return {
-        "task_id": tid,
-        "images": images,
-        "texts": texts,
-        "usage": d.get("usageMetadata") or d.get("usage"),
-        "model": cfg["id"],
-        "provider": provider,
-        "api": "generateContent",
-        "raw_model_version": d.get("modelVersion"),
-        "base": base,
-    }
 
 
 def submit_gpt_image(task):
@@ -1801,12 +1664,9 @@ def submit_gpt_image(task):
 
 def submit(task):
     task = validate_task(task)
-    api = task["api"]
-    if api == "generateContent":
-        return submit_gemini(task)
-    if api == "images":
+    if task["api"] == "images":
         return submit_gpt_image(task)
-    raise RuntimeError(f"unsupported api for model {task['model']}: {api}")
+    raise RuntimeError(f"unsupported api for model {task['model']}: {task['api']}")
 
 
 def list_models(provider: str | None = None):
@@ -1848,21 +1708,22 @@ def list_models(provider: str | None = None):
 
 def run_preflight(model: str | None = None):
     model = model or DEFAULT_MODEL
+    if str(model).lower().startswith("gemini") or model in RETIRED_GEMINI_MODELS:
+        raise RuntimeError(
+            "Gemini image models were removed. Use gpt-image-2 (CPA-US, 1K only)."
+        )
     if model not in MODELS:
         raise RuntimeError(f"unknown model: {model}; available: {sorted(MODELS)}")
     cfg = MODELS[model]
     provider = cfg["provider"]
     base = provider_base(provider)
-    log_print(">> Preflight (multi-provider CPA image)")
+    log_print(">> Preflight (CPA-US gpt-image-2)")
     log_print(f"   script  : {Path(__file__).resolve()}")
     log_print(f"   model   : {model}")
     log_print(f"   provider: {provider} ({PROVIDERS[provider]['label']})")
     log_print(f"   api     : {cfg['api']}")
     log_print(f"   base    : {base}")
-    if cfg["api"] == "generateContent":
-        log_print("   endpoint: /v1beta/models/<model>:generateContent")
-    else:
-        log_print("   endpoint: /v1/images/generations (| /v1/images/edits with --ref)")
+    log_print("   endpoint: /v1/images/generations (| /v1/images/edits with --ref)")
     log_print(f"   out     : {OUT_DIR}")
     require_api_key(provider)
     log_print("   api key : PASS")
@@ -1970,14 +1831,11 @@ def run_single(args):
         "resolution": args.resolution,
         "size": args.size,
         "ref": args.ref,
-        "google_search": args.google_search,
         "quality": args.quality,
         "output_format": args.output_format,
     }
     # drop Nones so validate defaults apply cleanly
     task = {k: v for k, v in task.items() if v is not None and v is not False}
-    if args.google_search:
-        task["google_search"] = True
 
     validated = validate_task(dict(task))
     provider = validated["provider"]
@@ -1998,8 +1856,6 @@ def run_single(args):
         log_print(f">> output_format: {validated['output_format']}")
     if args.ref:
         log_print(f">> refs: {len(args.ref)}")
-    if args.google_search:
-        log_print(">> google_search: on")
 
     if getattr(args, "async_mode", False):
         submit_async_job(
@@ -2183,10 +2039,7 @@ def run_batch(args):
 
 def build_arg_parser():
     ap = argparse.ArgumentParser(
-        description=(
-            "Genius CPA Image — multi-provider CPA image generation "
-            "(Gemini generateContent + OpenAI images / gpt-image-2)"
-        )
+        description="Genius CPA Image — CPA-US gpt-image-2 only"
     )
     ap.add_argument("prompt", nargs="?", help="image prompt")
     ap.add_argument("--batch", help="batch JSON path")
@@ -2194,25 +2047,20 @@ def build_arg_parser():
     ap.add_argument(
         "--model",
         default=DEFAULT_MODEL,
-        choices=list(MODELS.keys()),
-        help="model id; selects provider automatically",
+        help="model id (only gpt-image-2)",
     )
     ap.add_argument(
         "--aspect",
         default=None,
         help=(
-            "aspect ratio. Gemini: many incl. 16:9/9:16/1:4...; "
-            "gpt-image-2 CPA-US: 1:1 3:2 2:3 4:3 3:4 5:4 4:5 "
+            "aspect ratio: 1:1 3:2 2:3 4:3 3:4 5:4 4:5 "
             "16:9 9:16 21:9 9:21 2:1 1:2 auto"
         ),
     )
     ap.add_argument(
         "--resolution",
         default=None,
-        help=(
-            "Gemini imageSize 0.5K/1K/2K/4K; "
-            "gpt-image-2 CPA-US: only 1K/auto are real (2K/4K coerce to 1K)"
-        ),
+        help="only 1K/auto are real (2K/4K coerce to 1K)",
     )
     ap.add_argument(
         "--size",
@@ -2239,12 +2087,6 @@ def build_arg_parser():
         help="gpt-image-2 only: png|jpeg|webp",
     )
     ap.add_argument("--ref", nargs="+", help="reference image URL(s) or local path(s)")
-    ap.add_argument(
-        "--google-search",
-        dest="google_search",
-        action="store_true",
-        help="Gemini only: enable tools.google_search grounding",
-    )
     ap.add_argument("--name", default=None, help="output basename without extension")
     ap.add_argument("--preflight", action="store_true")
     ap.add_argument("--no-gen", action="store_true", help="required with --preflight")

@@ -32,7 +32,7 @@
 | Skill | Purpose |
 |:--|:--|
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
-| [genius-cpa-image](./genius-cpa-image/) | Multi-provider CPA images: Gemini + gpt-image-2 |
+| [genius-cpa-image](./genius-cpa-image/) | CPA-US gpt-image-2 images |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
 | [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
 | [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |

@@ -11,29 +11,35 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 print("=== load ===")
-assert "gemini-3.1-flash-image" in mod.MODELS
-assert "gpt-image-2" in mod.MODELS
-assert mod.MODELS["gemini-3.1-flash-image"]["provider"] == "cpa-jp"
+assert list(mod.MODELS) == ["gpt-image-2"]
+assert "gemini-3.1-flash-image" not in mod.MODELS
+assert "cpa-jp" not in mod.PROVIDERS
 assert mod.MODELS["gpt-image-2"]["provider"] == "cpa-us"
-assert "2K" in mod.MODELS["gemini-3.1-flash-image"]["resolutions"]
-assert "1:4" in mod.MODELS["gemini-3.1-flash-image"]["aspects"]
 assert "16:9" in mod.MODELS["gpt-image-2"]["aspects"]
 assert "9:21" in mod.MODELS["gpt-image-2"]["aspects"]
 assert "2:1" in mod.MODELS["gpt-image-2"]["aspects"]
 assert "1K" in mod.MODELS["gpt-image-2"]["resolutions"]
 assert "4K" in mod.MODELS["gpt-image-2"]["resolutions"]  # alias, coerces to 1K
 assert mod.MODELS["gpt-image-2"]["flexible_size"] is False
+assert mod.DEFAULT_MODEL == "gpt-image-2"
 print("  PASS models + providers")
 
-print("=== validate gemini defaults ===")
+print("=== validate gpt defaults ===")
 t = mod.validate_task({"prompt": "cat"})
-assert t["model"] == "gemini-3.1-flash-image"
-assert t["provider"] == "cpa-jp"
-assert t["api"] == "generateContent"
+assert t["model"] == "gpt-image-2"
+assert t["provider"] == "cpa-us"
+assert t["api"] == "images"
 assert t["aspect"] == "1:1" and t["resolution"] == "1K"
-t = mod.validate_task({"prompt": "cat", "aspect": "16:9", "resolution": "2k"})
-assert t["resolution"] == "2K"
-print("  PASS gemini defaults + case normalize")
+assert t["size"] == "1024x1024"
+print("  PASS gpt defaults")
+
+print("=== reject retired gemini ===")
+try:
+    mod.validate_task({"prompt": "cat", "model": "gemini-3.1-flash-image"})
+    raise SystemExit("FAIL should reject gemini-3.1-flash-image")
+except RuntimeError as e:
+    assert "removed" in str(e).lower()
+    print("  PASS retired gemini")
 
 print("=== validate gpt-image-2 CPA-US 1K matrix ===")
 t = mod.validate_task({"prompt": "cat", "model": "gpt-image-2"})
@@ -141,16 +147,10 @@ for bad in ["1000x1000", "10000x10000", "3840x1000", "16x16", "2560x1441"]:
         print(f"  PASS rejects {bad}")
 
 print("=== param ownership ===")
-try:
-    mod.validate_task({"prompt": "x", "quality": "high"})
-    raise SystemExit("FAIL gemini should reject quality")
-except RuntimeError:
-    print("  PASS gemini rejects quality")
-try:
-    mod.validate_task({"prompt": "x", "output_format": "png"})
-    raise SystemExit("FAIL gemini should reject output_format")
-except RuntimeError:
-    print("  PASS gemini rejects output_format")
+t = mod.validate_task({"prompt": "x", "quality": "high"})
+assert t["quality"] == "high"
+t = mod.validate_task({"prompt": "x", "output_format": "png"})
+assert t["output_format"] == "png"
 try:
     mod.validate_task({
         "prompt": "x",
@@ -161,42 +161,13 @@ try:
 except RuntimeError:
     print("  PASS gpt-image rejects google_search")
 
-print("=== gemini body shape ===")
-body = mod.build_generate_content_body(mod.validate_task({
-    "prompt": "a cat", "aspect": "16:9", "resolution": "2K", "google_search": True
-}))
-assert body["generationConfig"]["imageConfig"]["aspectRatio"] == "16:9"
-assert body["generationConfig"]["imageConfig"]["imageSize"] == "2K"
-assert body["generationConfig"]["responseModalities"] == ["IMAGE"]
-assert body.get("tools") == [{"google_search": {}}]
-assert body["contents"][0]["parts"][0]["text"] == "a cat"
-print("  PASS generateContent body")
-
-print("=== ref local inlineData ===")
+print("=== ref local bytes ===")
 with tempfile.TemporaryDirectory() as td:
     p = Path(td) / "a.png"
     p.write_bytes(b"\x89PNG\r\n\x1a\n")
-    parts = mod.resolve_ref_parts([str(p)])
-    assert parts[0]["inlineData"]["mimeType"] == "image/png"
-    assert parts[0]["inlineData"]["data"]
     name, mime, raw = mod.load_ref_bytes(str(p))
     assert mime == "image/png" and raw.startswith(b"\x89PNG")
     print("  PASS ref helpers")
-
-print("=== extract gemini images ===")
-fake = {
-    "candidates": [{
-        "content": {
-            "parts": [
-                {"inlineData": {"mimeType": "image/jpeg", "data": "aGVsbG8="}},
-                {"text": "caption"},
-            ]
-        }
-    }]
-}
-imgs, texts = mod.extract_images_from_generate_content(fake)
-assert imgs[0]["data"] == b"hello" and texts == ["caption"]
-print("  PASS extract gemini")
 
 print("=== extract openai images ===")
 import base64
@@ -226,7 +197,8 @@ with tempfile.TemporaryDirectory() as td:
         {"prompt": "c", "model": "gpt-image-2", "size": "2160x3840"},
     ]), encoding="utf-8")
     tasks = mod.load_batch(str(batch))
-    assert tasks[0]["provider"] == "cpa-jp"
+    assert tasks[0]["provider"] == "cpa-us"
+    assert tasks[0]["model"] == "gpt-image-2"
     assert tasks[1]["model"] == "gpt-image-2"
     # 2K alias and legacy 4K size both coerce to CPA-US 1K
     assert tasks[1]["size"] == "1672x941"
@@ -267,7 +239,7 @@ body = json.dumps({
     "error": {
         "code": "model_cooldown",
         "message": "All credentials cooling down",
-        "model": "gemini-3.1-flash-image",
+        "model": "gpt-image-2",
         "provider": "antigravity",
         "reset_seconds": 100,
         "reset_time": "1h40m",
