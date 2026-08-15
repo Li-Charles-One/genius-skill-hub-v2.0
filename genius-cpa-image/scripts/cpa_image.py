@@ -111,7 +111,7 @@ PROVIDERS = {
         "label": "US CPA OpenAI images",
         "api_key_names": ("CPA_US_API_KEY", "CPA_GPT_API_KEY"),
         "base_name": "CPA_US_BASE",
-        "base_default": "https://cpa.charles-ai.space",
+        "base_default": "https://cpa.artistic-genius.vip",
         "api": "images",
     },
 }

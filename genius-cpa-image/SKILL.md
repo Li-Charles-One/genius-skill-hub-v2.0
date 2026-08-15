@@ -15,7 +15,7 @@ Multi-provider CPA 生图 skill。按 **model** 自动选供应商与接口：
 | `gpt-image-2` | `cpa-us` | `POST {CPA_US_BASE}/v1/images/generations`（`--ref` → `/v1/images/edits`） |
 
 - JP base 默认：`https://cpa-jp.charles-ai.space`
-- US base 默认：`https://cpa.charles-ai.space`
+- US base 默认：`https://cpa.artistic-genius.vip`
 - 密钥：环境变量 **或** skill 本地 `.env`
 - 输出目录：工作区 `genius_output/`（**始终传 `--out`**）
 - 详细尺寸矩阵 / API body / 错误与 async → `references/usage.md`
@@ -127,7 +127,7 @@ gpt-image 常用 1K：`1:1=1024x1024`，`16:9=1672x941`，`9:16=941x1672`，`3:2
 | `CPA_JP_BASE` | cpa-jp | no | `https://cpa-jp.charles-ai.space` |
 | `CPA_US_API_KEY` | cpa-us | for gpt-image-2 | — |
 | `CPA_GPT_API_KEY` | cpa-us alias | optional | — |
-| `CPA_US_BASE` | cpa-us | no | `https://cpa.charles-ai.space` |
+| `CPA_US_BASE` | cpa-us | no | `https://cpa.artistic-genius.vip` |
 
 Log/job rotation 可选 env 见 `.env.example`。
 

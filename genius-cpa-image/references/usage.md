@@ -101,7 +101,7 @@ cp .env.example .env
 # CPA_JP_API_KEY=...
 # CPA_US_API_KEY=...
 # CPA_JP_BASE=https://cpa-jp.charles-ai.space
-# CPA_US_BASE=https://cpa.charles-ai.space
+# CPA_US_BASE=https://cpa.artistic-genius.vip
 ```
 
 ## Examples
