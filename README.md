@@ -9,7 +9,7 @@
 - **不是什么**：不含 Charles 个人主机路径、私有运维拓扑、生产密钥约定
 
 个人高定制 skill 见 private 仓 [chales_wrokflow_skills](https://github.com/Li-Charles-One/chales_wrokflow_skills)。  
-第三方聚合 skill（Tavily / Firecrawl / Context7 / OfficeCLI 等）见 [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection)。
+第三方聚合 skill（Tavily / Firecrawl / Context7 / 即梦 dreamina-cli 等）见 [NIUBI-skills-collection](https://github.com/Li-Charles-One/NIUBI-skills-collection)。
 
 | | 本仓库 | chales_wrokflow_skills |
 |---|---|---|
@@ -35,7 +35,6 @@
 | [genius-cpa-image](./genius-cpa-image/) | CPA-US gpt-image-2 images |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
 | [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
-| [dreamina-cli](./dreamina-cli/) | Dreamina（即梦） image/video generation CLI |
 
 ### Tools
 
@@ -65,7 +64,6 @@ genius-brief-thinking  →  genius-impl-plans  →  implementation  →  genius-
 ```
 genius-skill-hub-v2.0/
 ├── genius-brief-thinking/
-├── dreamina-cli/
 ├── genius-cpa-image/
 ├── genius-design/
 ├── genius-omni/
