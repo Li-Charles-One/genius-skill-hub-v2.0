@@ -32,9 +32,7 @@
 | Skill | Purpose |
 |:--|:--|
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
-| [genius-cpa-image](./genius-cpa-image/) | CPA-US gpt-image-2 images |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
-| [genius-shotlist-director](./genius-shotlist-director/) | Seedance 2.0 director shotlist → editable HTML (15s English prompts) |
 
 ### Tools
 
@@ -65,10 +63,8 @@ genius-brief-thinking  →  genius-impl-plans  →  implementation  →  genius-
 ```
 genius-skill-hub-v2.0/
 ├── genius-brief-thinking/
-├── genius-cpa-image/
 ├── genius-design/
 ├── genius-omni/
-├── genius-shotlist-director/
 ├── genius-skill-creator/
 ├── genius-weplaning/
 ├── genius-github-usage/
