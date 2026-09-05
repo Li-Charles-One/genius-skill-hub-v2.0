@@ -67,6 +67,14 @@ Qualifiers must be bare tokens, not one quoted blob. Details: `references/offici
 - Non-interactive `gh pr create` / `gh issue create` need `--title` and `--body`.
 - Do not invent `--no-pager`.
 
+## Action safety
+
+- **Read-only:** views, searches, `gh api` GETs, and status checks may run directly.
+- **Reversible writes:** draft PRs, issues, comments, and ordinary branch pushes should show the target and changed scope before execution.
+- **High-risk writes:** merge/close/delete, release deletion, secret or variable changes, force-push, and remote branch replacement require confirmation.
+
+For a commit/push, check `git status --short`, `git diff --check`, `git diff --stat`, the remote, and the current branch first; stage only the intended files, then verify `git status --short` after pushing. If push is rejected, stop: do not force-push, reset, or choose merge/rebase automatically.
+
 ## Confirm first
 
 Ask the user before:

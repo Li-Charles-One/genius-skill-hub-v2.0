@@ -45,6 +45,19 @@ Auto remap: audio `describe`→`audio-summary`, `ocr`→`audio-transcribe`. Vide
 
 Local video ≥ 15 min is segmented (disable `--no-long-video`). `ffprobe` injects real duration.
 
+## Before Run
+
+Check that the file or URL exists, the format is supported, required `ffmpeg` / `ffprobe` dependencies are available, and the requested output is `text` or `json`. Note video duration, PDF page count, and whether long-media segmentation is needed before running.
+
+## Output contract
+
+- Image: `Summary`, `Observations`, `Extracted Text` (when requested), `Uncertainty`.
+- Video: `Summary`, `Timeline`, `Key Moments`, `Uncertainty`.
+- Audio: `Summary`, `Transcript or Key Segments`, `Speakers or Sound Events`, `Uncertainty`.
+- Compare: `Unchanged`, `Added`, `Removed`, `Uncertain`.
+
+Keep OCR as observed text; mark inferred repairs separately and use `[无法识别]` instead of guessing. Report failures as `INPUT_NOT_FOUND`, `UNSUPPORTED_FORMAT`, `DEPENDENCY_MISSING`, `PROVIDER_ERROR`, `TIMEOUT`, or `NO_TEXT_FOUND` when applicable. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
+
 ## Run
 
 Needs `ffmpeg` / `ffprobe`. Then:

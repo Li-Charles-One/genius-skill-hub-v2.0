@@ -75,13 +75,16 @@ For trigger tuning, read `references/eval-workflow.md`. For checkable behavior, 
 
 ### Optimize
 
+Audit is read-only. For Optimize, state the limited file scope before editing, then validate only that scope; do not perform unrelated refactors.
+
 1. Capture the six requirement fields in the optimization template.
 2. Keep `SKILL.md` as trigger, mode routing, workflow, resource map, and output contract.
 3. Move reusable detail into `references/`.
 4. Keep deterministic work in `scripts/`.
 5. Keep runtime facts in `agents/` and `references/runtime-mapping.md`.
 6. Update evals when trigger or output risk changes.
-7. Validate before hub sync.
+7. Check referenced resources and script entrypoints exist, adapters match declared runtimes, and description triggers align with evals.
+8. Validate before hub sync.
 
 ### Port
 
@@ -90,6 +93,10 @@ Read `references/agent-adapter-standard.md`. Research the runtime. Map only veri
 ### Merge
 
 Read `references/consolidation-workflow.md`. Inventory overlap, pick a structure, merge unique content, mark deprecated skills, then delete only after the replacement works.
+
+## Minimum acceptance matrix
+
+Every repair or optimization checks: a positive trigger, a negative trigger, the output contract, and honest failure handling. A passing structural validator alone is not completion.
 
 ## Gotchas
 

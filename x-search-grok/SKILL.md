@@ -160,6 +160,10 @@ Heat mode should return:
   (`love OR hate OR impressed OR disappointed OR benchmark`)
 - Prefer recent windows (`1d`, `3d`, `7d`) unless user asks broader
 
+## Evidence rules
+
+Keep original-post content, search-result summaries, and agent inference distinct. Include direct post links whenever available. Heat and sentiment conclusions must state the time window and sample size; if the sample is too small, say so explicitly. Merge duplicates from the same post, event, or author and prefer original posts with direct links.
+
 ## Output Contract
 
 Default to concise Chinese unless the user asks for another language.

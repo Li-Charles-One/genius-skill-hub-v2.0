@@ -49,7 +49,9 @@ Brand list, font substitutions, selection guide: `reference/catalog.md`. Refusal
 
 ## Delivery
 
-Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. Then tell the user: key decisions (color, type, vibe, dials), save path `./DESIGN.md`, what was inferred, what they may override.
+A delivered `DESIGN.md` must include: Design Read, the three dials, semantic color/type/spacing tokens, component guidance, category anti-patterns, refusal rules, accessibility constraints, the 12-item pre-ship checklist, and source/inference notes. For reverse-engineering, label claims as `Observed`, `Inferred`, or `Recommended`; never present inference as a site fact.
+
+Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. If `./DESIGN.md` already exists, never silently overwrite an existing `.bak`; use a distinct backup path or stop for confirmation. If lint still fails, report the failure and do not claim delivery. Then tell the user: key decisions (color, type, vibe, dials), save path `./DESIGN.md`, what was inferred, what they may override.
 
 ## Gotchas
 
