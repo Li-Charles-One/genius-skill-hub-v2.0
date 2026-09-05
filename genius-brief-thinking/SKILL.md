@@ -11,7 +11,7 @@ metadata:
 
 # Genius Brief Thinking
 
-This skill produces a **brief**: what to build and why. `genius-impl-plans` defines how. They are sequential. If the user already knows what they want, skip this skill and go to `genius-impl-plans`. Do not write implementation details here.
+This skill produces a **brief**: what to build and why. `genius-impl-plans` defines how. They are sequential. See the repository-level [`WORKFLOW.md`](../WORKFLOW.md) for the shared handoff states. If the user already knows what they want, skip this skill and go to `genius-impl-plans`. Do not write implementation details here.
 
 `brainstorm` and `plan` are trigger words only. Speak in briefs, not brainstorming ritual.
 
@@ -88,6 +88,23 @@ The terminal state is `genius-impl-plans`. Do not start implementation from this
 - Design small units with one purpose and clear interfaces
 - Follow existing codebase patterns. Only include refactors that serve this goal
 
+## Brief Format
+
+Every saved brief uses these minimum sections:
+
+```markdown
+## Problem
+## Goal
+## Non-goals
+## Requirements
+- R1: ...
+## Decision
+## Success Criteria
+## Open Questions
+```
+
+Number requirements as `R1`, `R2`, etc. A complete spec with settled goals, constraints, and acceptance criteria may go directly to `genius-impl-plans`.
+
 ## After the Brief
 
 - Save the approved brief to `specs/YYYY-MM-DD-<topic>-design.md` unless the user names another path
@@ -100,7 +117,7 @@ The terminal state is `genius-impl-plans`. Do not start implementation from this
 - One question at a time
 - Multiple choice when possible
 - YAGNI
-- Always show 2-3 approaches before settling
+- Compare 2-3 approaches when multiple viable options have meaningful trade-offs; if one approach is clearly appropriate, explain why and proceed
 - Incremental approval
 - Explain why, then stop. Coding is the next skill's job
 

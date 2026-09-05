@@ -8,6 +8,8 @@ description: "Maintain WePlaning 3.0 project memory in .agent-memory. Use for: �
 # Genius-WePlaning
 _(Skill package v3.0.0; protocol 3.0)_
 
+The planning handoff states and fields are defined in the repository-level [`WORKFLOW.md`](../WORKFLOW.md). Reuse the existing `CURRENT.md` sections; do not create another state file.
+
 ## Use When
 
 - Shared durable project state lives in `.agent-memory/`.
@@ -42,6 +44,10 @@ Do not use for ordinary summaries, one-off answers, trivial code edits, or **thi
 | "修一下记忆" | `check-memory.cjs` first, then `repair-memory.cjs` if the cause is known |
 
 Oral "完成了" with no new fact **must not** write. If accepted state changed, pass `--state` / `--next-step` / `--goal` / `--blockers`. `--changed` alone never overwrites Current State.
+
+## Workflow Handoff
+
+When a durable transition occurs, record `Brief`, `Plan`, `Status`, and `Current Task` in the existing Current State or Accepted Next Steps sections. Use the states from `WORKFLOW.md`: `BRIEF_APPROVED`, `PLAN_DRAFT`, `PLAN_APPROVED`, `IMPLEMENTING`, `BLOCKED`, or `DONE`. Write on approvals, implementation start, blockers, or verified completion; do not write for routine task progress or ordinary code edits.
 
 ## Proactive Triggers
 

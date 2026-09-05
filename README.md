@@ -56,7 +56,8 @@ genius-brief-thinking  →  genius-impl-plans  →  implementation  →  genius-
 
 - `genius-brief-thinking` — 方案不清时先收成 brief（旧名 brainstorming）
 - `genius-impl-plans` — 有 brief/spec 之后，拆成可执行步骤；未叫执行就停
-- `genius-weplaning` — 持久化项目记忆
+- `genius-weplaning` — 持久化项目记忆和工作流状态
+- 交接协议见 [`WORKFLOW.md`](./WORKFLOW.md)：brief 用 R1/R2 编号，plan 标注覆盖需求，memory 记录阶段状态
 - 其余 skill 为叶子工具，不强制进这条流水线
 
 ## Layout

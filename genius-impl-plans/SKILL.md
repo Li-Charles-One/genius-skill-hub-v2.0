@@ -56,6 +56,8 @@ Every plan starts with:
 ````markdown
 ### Task N: [Component Name]
 
+**Covers:** R1, R2
+
 **Files:**
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
@@ -92,6 +94,8 @@ git add tests/path/test.py src/path/file.py
 git commit -m "feat: add specific feature"
 ```
 ````
+
+End every plan with a `## Requirement Coverage` table mapping each brief requirement to its task and verification.
 
 Use the languages and commands of the target repo. The Python above is an example, not a requirement.
 
