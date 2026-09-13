@@ -5,14 +5,14 @@ const fs = require("fs");
 const {
   allowNoCheck,
   emitResult,
+  findMemoryConflicts,
   hasSupportedSchema,
   parseArgs,
-  parseCurrentMd,
-  renderCurrentMd,
   runCheck,
   SCHEMA_VERSION,
   usage,
   utcNow,
+  validateKnownMarkdown,
   withMemoryLock,
   writeMemory,
 } = require("./weplaning-utils.cjs");
@@ -23,7 +23,7 @@ Usage:
 
 Repairs WePlaning 3.0 drift:
   - recreate a missing CHANGES.md header
-  - add a supported schema line when CURRENT/CHANGES still parse
+  - add a missing schema line when CURRENT/CHANGES are structurally valid
 
 Does not rebuild 2.3 session trees. Leftover THREADS.md / sessions/ are ignored.
 
@@ -53,51 +53,39 @@ if (!fs.existsSync(memoryDir)) {
 }
 
 const currentPath = path.join(memoryDir, "CURRENT.md");
-const changesPath = path.join(memoryDir, "CHANGES.md");
-
 if (!fs.existsSync(currentPath)) {
   console.error("CURRENT.md is missing; refuse to invent accepted state. Run init-memory.cjs.");
   process.exit(1);
 }
 
 withMemoryLock(root, () => {
-  let currentText = fs.readFileSync(currentPath, "utf8");
-  if (!hasSupportedSchema(currentText)) {
-    repairs.push(`CURRENT.md add Schema version: ${SCHEMA_VERSION}`);
-    if (!/^Schema version:/m.test(currentText)) {
-      currentText = currentText.replace(/^(# Current Mainline\n)/, `$1Schema version: ${SCHEMA_VERSION}\n`);
+  const conflicts = findMemoryConflicts(root);
+  usage(!conflicts.length, `Sync conflict copies found: ${conflicts.join(", ")}. Resolve them before repair.`, help);
+  const outputs = [];
+  for (const file of ["CURRENT.md", "CHANGES.md"]) {
+    const filePath = path.join(memoryDir, file);
+    if (!fs.existsSync(filePath)) {
+      repairs.push("CHANGES.md recreate missing ledger");
+      outputs.push([file, `# Changes\nSchema version: ${SCHEMA_VERSION}\n\n## ${now} repair\n- Agent: repair\n- Change ID: ${now} repair\n- Changed:\n  - Recreated missing CHANGES.md\n- Files touched:\n  - .agent-memory/CHANGES.md\n- Verification:\n  - repair-memory.cjs\n- Notes:\n  - none\n`]);
+      continue;
     }
+    let text = fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
+    if (!hasSupportedSchema(text)) {
+      usage(!/^Schema version:/m.test(text), `${file} has an unsupported schema; refusing to rewrite it.`, help);
+      repairs.push(`${file} add Schema version: ${SCHEMA_VERSION}`);
+      text = /^#[ \t]+[^\n]*\n/.test(text)
+        ? text.replace(/^(#[ \t]+[^\n]*\n)/, (heading) => `${heading}Schema version: ${SCHEMA_VERSION}\n`)
+        : `Schema version: ${SCHEMA_VERSION}\n${text}`;
+      outputs.push([file, text]);
+    }
+    validateKnownMarkdown(file, text);
   }
-
-  if (!fs.existsSync(changesPath)) {
-    repairs.push("CHANGES.md recreate missing ledger");
-    if (!args["dry-run"]) {
-      writeMemory(
-        root,
-        "CHANGES.md",
-        `# Changes\nSchema version: ${SCHEMA_VERSION}\n\n## ${now} repair\n- Agent: repair\n- Change ID: ${now} repair\n- Changed:\n  - Recreated missing CHANGES.md\n- Files touched:\n  - .agent-memory/CHANGES.md\n- Verification:\n  - repair-memory.cjs\n- Notes:\n  - none\n`,
-      );
-    }
-  } else {
-    let changesText = fs.readFileSync(changesPath, "utf8");
-    if (!hasSupportedSchema(changesText)) {
-      repairs.push(`CHANGES.md add Schema version: ${SCHEMA_VERSION}`);
-      if (!args["dry-run"]) {
-        if (!/^Schema version:/m.test(changesText)) {
-          changesText = changesText.replace(/^(# Changes\n)?/, `# Changes\nSchema version: ${SCHEMA_VERSION}\n\n`);
-        }
-        writeMemory(root, "CHANGES.md", changesText);
-      }
-    }
-  }
-
+  const decisionsPath = path.join(memoryDir, "DECISIONS.md");
+  if (fs.existsSync(decisionsPath)) validateKnownMarkdown("DECISIONS.md", fs.readFileSync(decisionsPath, "utf8"));
+  for (const [file, text] of outputs) validateKnownMarkdown(file, text);
   if (args["dry-run"]) return;
-
-  if (repairs.some((item) => item.startsWith("CURRENT.md"))) {
-    const parsed = parseCurrentMd(currentText);
-    parsed.lastUpdated = parsed.lastUpdated === "unknown" ? now : parsed.lastUpdated;
-    writeMemory(root, "CURRENT.md", renderCurrentMd(parsed));
-  }
+  for (const [file, text] of outputs) writeMemory(root, file, text);
+  if (!args["no-check"]) runCheck(root, __dirname);
 });
 
 if (args["dry-run"]) {
@@ -110,8 +98,6 @@ if (args["dry-run"]) {
   }
   process.exit(0);
 }
-
-if (!args["no-check"]) runCheck(root, __dirname);
 
 if (args.json) {
   emitResult(args, repairs.length ? repairs.join("; ") : "No repairs needed.", {

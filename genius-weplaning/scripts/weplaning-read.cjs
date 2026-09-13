@@ -12,6 +12,7 @@ const {
   parseCurrentMd,
   parseThreads,
   readMemory,
+  runCheck,
   truncateSummary,
   usage,
   utcNow,
@@ -23,7 +24,7 @@ Usage:
 
 Options:
   --handoff     Highlight next step #1
-  --brief       Goal, state, next steps and blockers only
+  --brief       Goal, context, state, next steps and blockers (no ledger)
   --full        Also list leftover 2.3 sessions and archive files
   --json        Machine-readable JSON on stdout
   --next <N>    Focus Accepted Next Steps item N (1-based)
@@ -37,7 +38,9 @@ usage(!args.help, "", help);
 const root = path.resolve(args._[0] || process.cwd());
 const memDir = path.join(root, ".agent-memory");
 const limit = Math.max(1, Number(args.limit || 3) || 3);
-const nextN = args.next === undefined || args.next === true ? null : Number(args.next);
+const nextN = args.next === undefined ? null : Number(args.next);
+usage(args.next === undefined || (typeof args.next === "string" && /^[1-9]\d*$/.test(args.next) && Number.isSafeInteger(nextN)), "--next requires a positive integer", help);
+usage(args.find === undefined || (typeof args.find === "string" && args.find.trim()), "--find requires a query", help);
 
 if (args.find && args.find !== true) {
   const finder = path.join(__dirname, "weplaning-find.cjs");
@@ -65,15 +68,11 @@ function parseChangeBlocks(text) {
     const body = match[2].trim();
     const session = (body.match(/^- Session:\s*(.+)$/m) || [])[1]?.trim() || null;
     const agent = (body.match(/^- Agent:\s*(.+)$/m) || [])[1]?.trim() || null;
-    const changed = [];
-    const changedSection = body.match(/^- Changed:\n((?:  - .+\n?)*)/m);
-    if (changedSection) {
-      for (const line of changedSection[1].split("\n")) {
-        const item = line.match(/^\s+- (.+)$/);
-        if (item) changed.push(item[1].trim());
-      }
+    function items(label) {
+      const match = body.match(new RegExp(`^- ${label}:\\n((?:  - .+\\n?)*)`, "m"));
+      return match ? match[1].split("\n").map((line) => line.replace(/^\s+- /, "").trim()).filter(Boolean) : [];
     }
-    blocks.push({ id, session, agent, changed, body });
+    blocks.push({ id, session, agent, changed: items("Changed"), verification: items("Verification"), files: items("Files touched"), body });
   }
   return blocks;
 }
@@ -92,12 +91,13 @@ function parseNextSteps(text) {
   return items;
 }
 
+runCheck(root, __dirname, { quiet: true });
 const currentText = readMemory(root, "CURRENT.md");
 const current = parseCurrentMd(currentText);
 
 let threads = { rows: [], mainline: null };
 const threadsPath = path.join(memDir, "THREADS.md");
-if (fs.existsSync(threadsPath)) {
+if ((args.full || args.json) && fs.existsSync(threadsPath)) {
   threads = parseThreads(fs.readFileSync(threadsPath, "utf8"));
 }
 
@@ -108,7 +108,7 @@ if (fs.existsSync(changesPath)) {
 }
 
 const archiveDir = path.join(memDir, "archive");
-const archives = fs.existsSync(archiveDir)
+const archives = (args.full || args.json) && fs.existsSync(archiveDir)
   ? fs
       .readdirSync(archiveDir)
       .filter((name) => /^(CHANGES|THREADS)-.*\.md$/.test(name))
@@ -124,14 +124,21 @@ const archives = fs.existsSync(archiveDir)
 const closedNotes = threads.rows.filter((r) => r.status === "closed").slice(-8).reverse();
 const activeSessions = threads.rows.filter((r) => r.status === "active" || r.status === "paused").slice(-8).reverse();
 
-const nextSteps = parseNextSteps(current.acceptedNextSteps);
-const focusIndex = nextN === null || Number.isNaN(nextN) ? null : Math.trunc(nextN);
-const focusNextStep =
-  focusIndex && focusIndex >= 1 && focusIndex <= nextSteps.length ? nextSteps[focusIndex - 1] : null;
+const isNoTask = (text) => /^(none|no (?:pending )?tasks?|no (?:accepted )?next steps?|无|无待办|无待执行事项|暂无待办|暂无待执行事项)[。.]?$/i.test(text);
+const isUnknown = (text) => /^(unknown|unavailable|未知|待确认|未确定)[。.]?$/i.test(text);
+const rawSteps = parseNextSteps(current.acceptedNextSteps);
+const nextStepsStatus = rawSteps.every(isNoTask) ? "none" : rawSteps.every(isUnknown) ? "unknown" : "ready";
+const nextSteps = nextStepsStatus === "none" ? [] : rawSteps;
+if (nextN !== null) {
+  usage(nextN <= nextSteps.length, `Next step #${nextN} does not exist (${nextSteps.length} recorded)`, help);
+  usage(!isNoTask(nextSteps[nextN - 1]) && !isUnknown(nextSteps[nextN - 1]), `Next step #${nextN} is not an actionable task`, help);
+}
+const focusIndex = nextN ?? (args.handoff && nextStepsStatus === "ready" && !isNoTask(nextSteps[0]) && !isUnknown(nextSteps[0]) ? 1 : null);
 
 const payload = {
   ok: true,
   generatedAt: utcNow(),
+  lastUpdated: current.lastUpdated,
   schema: current.schemaVersion,
   handoff: Boolean(args.handoff),
   goal: current.activeGoal,
@@ -139,16 +146,15 @@ const payload = {
   understanding: current.currentUnderstanding,
   projectConfig: current.projectConfig || "",
   nextSteps,
-  focusNextStep: focusNextStep
-    ? { index: focusIndex, text: focusNextStep }
-    : args.handoff && nextSteps[0]
-      ? { index: 1, text: nextSteps[0] }
-      : null,
+  nextStepsStatus,
+  focusNextStep: focusIndex === null ? null : { index: focusIndex, text: nextSteps[focusIndex - 1] },
   blockers: current.openBlockers,
   recentChanges: recentChanges.map((c) => ({
     id: c.id,
     agent: c.agent,
     changed: c.changed,
+    verification: c.verification,
+    files: c.files,
   })),
   archives,
   leftoverSessions: {
@@ -164,11 +170,15 @@ if (args.json) {
 }
 
 const D = "─".repeat(52);
-let out = `\n${D}\n WePlaning · ${payload.generatedAt}${args.handoff ? " · HANDOFF" : ""}\n${D}\n`;
+let out = `\n${D}\n WePlaning · Read at: ${payload.generatedAt}${args.handoff ? " · HANDOFF" : ""}\n${D}\n`;
+out += `\nMemory last updated: ${payload.lastUpdated}\nRecorded state; not a live verification.\n`;
 
 out += `\n📌 Goal:\n${payload.goal}\n`;
 if (payload.projectConfig) {
   out += `\n⚙ Project Config:\n${payload.projectConfig}\n`;
+}
+if (payload.understanding && !isUnknown(payload.understanding)) {
+  out += `\n🧭 Current Understanding:\n${payload.understanding}\n`;
 }
 out += `\n📊 Current State:\n${payload.currentState}\n`;
 
@@ -176,13 +186,14 @@ if (payload.focusNextStep) {
   out += `\n🎯 Focus Next Step #${payload.focusNextStep.index}:\n${payload.focusNextStep.text}\n`;
 }
 
-out += `\n✅ Accepted Next Steps:\n${current.acceptedNextSteps}\n`;
+out += `\n✅ Accepted Next Steps:\n${nextStepsStatus === "none" ? "No pending tasks." : current.acceptedNextSteps}\n`;
+if (nextStepsStatus === "unknown") out += "Next steps are unknown; clarify before continuing.\n";
 
 const hasBlockers = String(payload.blockers || "")
   .split(/\r?\n/)
   .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
   .filter(Boolean)
-  .some((line) => !/^(none|unknown|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞)\s*[。.]?$/i.test(line));
+  .some((line) => !/^(none|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞)\s*[。.]?$/i.test(line));
 if (hasBlockers) {
   out += `\n🚧 Blockers:\n${payload.blockers}\n`;
 }
@@ -203,6 +214,12 @@ if (recentChanges.length === 0) {
       for (const item of change.changed) out += `- ${truncateSummary(item)}\n`;
     } else {
       out += `${truncateSummary(change.body)}\n`;
+    }
+    if (args.handoff) {
+      for (const item of change.verification.filter((value) => !/^(none|无)[。.]?$/i.test(value))) {
+        out += `  Verification (recorded): ${item}\n`;
+      }
+      for (const file of change.files.filter((value) => !/^(none|无)[。.]?$/i.test(value))) out += `  File: ${file}\n`;
     }
     out += `\n`;
   }

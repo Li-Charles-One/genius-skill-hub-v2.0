@@ -77,7 +77,13 @@ function collectFiles(dir, found = []) {
 const matches = [];
 let truncated = false;
 
-for (const file of collectFiles(memDir).sort()) {
+const priority = { current: 0, changes: 1, decisions: 2, archive: 3, threads: 4, sessions: 5, other: 6 };
+const files = collectFiles(memDir).sort((a, b) => {
+  const aScope = scopeOf(path.relative(memDir, a));
+  const bScope = scopeOf(path.relative(memDir, b));
+  return priority[aScope] - priority[bScope] || a.localeCompare(b);
+});
+for (const file of files) {
   const relativePath = path.relative(memDir, file).replace(/\\/g, "/");
   if (scope && scopeOf(relativePath) !== scope) continue;
   const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);

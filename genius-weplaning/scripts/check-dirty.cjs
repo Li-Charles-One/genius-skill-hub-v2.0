@@ -89,12 +89,14 @@ if (fs.existsSync(path.join(root, ".git"))) {
 }
 
 const payload = {
-  ok: true,
+  ok: mode !== "git-error",
   mode,
   dirty,
   count: dirty.length,
   message:
-    dirty.length === 0
+    mode === "git-error"
+      ? "Git status failed; workspace state is unknown."
+      : dirty.length === 0
       ? mode === "none"
         ? "No git repo and no CURRENT.md timestamp; dirty check skipped."
         : "Workspace clean (outside .agent-memory)."
@@ -111,5 +113,5 @@ if (args.json) {
   }
 }
 
-if (args.strict && dirty.length > 0) process.exit(1);
+if (mode === "git-error" || (args.strict && dirty.length > 0)) process.exit(1);
 process.exit(0);

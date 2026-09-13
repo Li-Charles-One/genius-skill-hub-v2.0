@@ -19,12 +19,14 @@ const {
   parseArgs,
   parseCurrentMd,
   readMemory,
-  renderCurrentMd,
+  replaceField,
   runCheck,
   SCHEMA_VERSION,
   toList,
+  uniqueStamp,
   usage,
   utcNow,
+  validateKnownMarkdown,
   withMemoryLock,
   writeMemory,
 } = require("./weplaning-utils.cjs");
@@ -55,6 +57,22 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 allowNoCheck(args, "weplaning-write.cjs");
+
+const valueFlags = ["agent", "changed", "state", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "file", "files", "verification", "note", "time"];
+for (const [key, value] of Object.entries(args)) {
+  if (key === "_") continue;
+  usage(valueFlags.includes(key) || ["json", "no-check", "help"].includes(key), `Unknown option: --${key}`, help);
+  if (valueFlags.includes(key)) {
+    const values = Array.isArray(value) ? value : [value];
+    usage(values.every((item) => typeof item === "string" && toList(item).length > 0), `Missing value for --${key}`, help);
+    if (["agent", "goal", "understanding", "decision", "rationale", "time"].includes(key)) {
+      usage(values.length === 1, `--${key} accepts one value`, help);
+    }
+  } else {
+    usage(value === true, `--${key} does not take a value`, help);
+  }
+}
+usage(args._.length <= 2, "Unexpected positional arguments", help);
 
 const root = path.resolve(args._[0] || process.cwd());
 const positional = args._[1] ? String(args._[1]).trim() : "";
@@ -92,8 +110,9 @@ if (!hasPatch && !hasDecision && trivialOnly) {
 }
 
 const patched = [];
-const changeId = `${now} change`;
+const changeId = `${now} change ${uniqueStamp()}`;
 let decisionRecorded = false;
+let persisted = false;
 
 function listBlock(items, fallback) {
   const values = items.length ? items : [fallback];
@@ -101,51 +120,60 @@ function listBlock(items, fallback) {
 }
 
 withMemoryLock(root, () => {
-  const current = parseCurrentMd(readMemory(root, "CURRENT.md"));
-  if (args.goal && args.goal !== true) {
-    current.activeGoal = String(args.goal).trim();
-    patched.push("goal");
-  }
-  if (args.understanding && args.understanding !== true) {
-    current.currentUnderstanding = String(args.understanding).trim();
-    patched.push("understanding");
-  }
-  if (args.state) {
-    current.currentState = formatSectionItems(args.state, { fallback: current.currentState });
-    patched.push("state");
-  }
-  if (args["next-step"]) {
-    current.acceptedNextSteps = formatSectionItems(args["next-step"], {
-      numbered: true,
-      fallback: current.acceptedNextSteps,
-    });
-    patched.push("next-step");
-  }
-  if (args.blockers) {
-    current.openBlockers = formatSectionItems(args.blockers, { fallback: "none" });
-    patched.push("blockers");
+  if (!args["no-check"]) runCheck(root, __dirname);
+  let currentText = readMemory(root, "CURRENT.md").replace(/\r\n/g, "\n");
+  const current = parseCurrentMd(currentText);
+  const patches = [];
+  const fields = {
+    goal: ["activeGoal", "Active Goal"],
+    understanding: ["currentUnderstanding", "Current Understanding"],
+    state: ["currentState", "Current State"],
+    "next-step": ["acceptedNextSteps", "Accepted Next Steps"],
+    blockers: ["openBlockers", "Open Blockers"],
+  };
+  for (const [flag, [field, heading]] of Object.entries(fields)) {
+    if (args[flag] === undefined) continue;
+    const value = ["goal", "understanding"].includes(flag)
+      ? args[flag].trim()
+      : formatSectionItems(args[flag], { numbered: flag === "next-step" });
+    if (value === current[field]) continue;
+    current[field] = value;
+    patches.push([heading, value]);
+    patched.push(flag);
   }
 
-  const summary = changed[0] || patched.join(", ") || String(args.decision || "update");
+  const ledgerItems = trivialOnly ? [] : [...changed];
+  if (!ledgerItems.length) {
+    for (const [heading, value] of patches) ledgerItems.push(`Updated ${heading}: ${value.replace(/\s+/g, " ")}`);
+    if (hasDecision) ledgerItems.push(`Decision: ${args.decision}`);
+  }
+  if (!ledgerItems.length) return;
+
+  const summary = ledgerItems[0];
   current.lastUpdated = now;
   const keptBasedOn = String(current.basedOn || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !/^- Last change:/.test(line) && !/^- Session:/.test(line));
   current.basedOn = [`- Last change: ${now} ${summary}`, ...keptBasedOn].join("\n");
-  writeMemory(root, "CURRENT.md", renderCurrentMd(current));
+  patches.push(["Based On", current.basedOn]);
+  for (const [heading, value] of patches) {
+    const pattern = new RegExp(`^##[ \\t]+${heading}[ \\t]*\\n[\\s\\S]*?(?=\\n##[ \\t]+|$(?![\\s\\S]))`, "m");
+    if (pattern.test(currentText)) currentText = currentText.replace(pattern, () => `## ${heading}\n${value}\n`);
+    else currentText = `${currentText.trimEnd()}\n\n## ${heading}\n${value}\n`;
+  }
+  currentText = replaceField(currentText, "Schema version", SCHEMA_VERSION).replace(/^Mainline session:[^\n]*\n?/m, "");
+  currentText = /^Last updated:/m.test(currentText)
+    ? replaceField(currentText, "Last updated", now)
+    : currentText.replace(/^(Schema version:[^\n]*)/m, (line) => `${line}\nLast updated: ${now}`);
 
-  if (changed.length && !trivialOnly) {
-    const existing = readMemory(root, "CHANGES.md").replace(/\s*$/, "\n");
-    const header = /^Schema version:/m.test(existing)
-      ? existing
-      : `# Changes\nSchema version: ${SCHEMA_VERSION}\n\n${existing}`;
-    const entry = `
+  const existing = readMemory(root, "CHANGES.md").replace(/\s*$/, "\n");
+  const entry = `
 ## ${changeId}
 - Agent: ${agent}
 - Change ID: ${changeId}
 - Changed:
-${listBlock(changed, "unknown")}
+${listBlock(ledgerItems, "unknown")}
 - Files touched:
 ${listBlock(files, "none")}
 - Verification:
@@ -153,8 +181,7 @@ ${listBlock(verification, "none")}
 - Notes:
 ${listBlock(extraNotes, "none")}
 `;
-    writeMemory(root, "CHANGES.md", `${header.replace(/\s*$/, "\n")}${entry}`);
-  }
+  const outputs = [["CURRENT.md", currentText], ["CHANGES.md", `${existing}${entry}`]];
 
   if (hasDecision) {
     const decisionsPath = path.join(root, ".agent-memory", "DECISIONS.md");
@@ -170,12 +197,19 @@ ${listBlock(extraNotes, "none")}
 - Decision: ${args.decision}
 - Rationale: ${args.rationale ? String(args.rationale) : "none"}
 `;
-    writeMemory(root, "DECISIONS.md", `${text}\n${entry}`);
+    outputs.push(["DECISIONS.md", `${text}\n${entry}`]);
     decisionRecorded = true;
   }
+  for (const [file, content] of outputs) validateKnownMarkdown(file, content);
+  for (const [file, content] of outputs) writeMemory(root, file, content);
+  persisted = true;
+  if (!args["no-check"]) runCheck(root, __dirname);
 });
 
-if (!args["no-check"]) runCheck(root, __dirname);
+if (!persisted) {
+  emitResult(args, "nothing-to-persist", { persisted: false, reason: "unchanged", patched: [], message: "nothing to persist" });
+  process.exit(0);
+}
 
 emitResult(args, changeId, {
   persisted: true,

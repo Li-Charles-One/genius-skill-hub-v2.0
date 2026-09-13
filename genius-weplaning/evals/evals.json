@@ -5,7 +5,7 @@
       "id": "read-memory",
       "prompt": "查看项目记忆",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs without writing. Reports goal, current state, and next steps.",
+      "expected_output": "Runs weplaning-read.cjs without writing. Reports memory update time, key understanding, goal, recorded state and next steps. Does not present a memory read as a live verification.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-read"}
@@ -25,7 +25,7 @@
       "id": "handoff",
       "prompt": "读取记忆接力",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs --handoff and reports Focus Next Step #1.",
+      "expected_output": "Runs weplaning-read.cjs --handoff. Reports Focus Next Step #1 when actionable, plus key understanding and recorded verification/file references. None/unknown next steps do not become tasks.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
         {"type": "contains", "value": "--handoff"}
@@ -45,10 +45,10 @@
       "id": "done-is-noop",
       "prompt": "完成了",
       "trigger_expected": true,
-      "expected_output": "Oral 完成了/done/搞定 with no new fact is a no-op (weplaning-write nothing-to-persist). Does not create a session.",
+      "expected_output": "Oral 完成了/done/搞定 with no new fact does not invoke a write. Reports that nothing was persisted. Does not create a session.",
       "files": ["scripts/weplaning-write.cjs"],
       "assertions": [
-        {"type": "contains", "value": "weplaning-write"}
+        {"type": "not_contains", "value": "weplaning-write"}
       ]
     },
     {
@@ -75,7 +75,7 @@
       "id": "continue-next",
       "prompt": "继续干 #1",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs --next 1, reports Focus Next Step #1, then starts that work.",
+      "expected_output": "Runs weplaning-read.cjs --next 1 and starts that work only after successful actionable selection. Does not execute none/unknown placeholders or bypass conditional triggers.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
         {"type": "contains", "value": "--next"}
@@ -109,6 +109,50 @@
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "weplaning-read"}
+      ]
+    },
+    {
+      "id": "read-no-pending-handoff",
+      "prompt": "读取记忆接力。CURRENT 的下一步只有一条：无待执行事项。",
+      "trigger_expected": true,
+      "expected_output": "Reads --handoff, reports no pending tasks, and stops. Does not turn maintaining stability into an invented task.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--handoff"},
+        {"type": "not_contains", "value": "weplaning-write"}
+      ]
+    },
+    {
+      "id": "invalid-next-is-error",
+      "prompt": "继续干 #99。项目记忆只有两条下一步。",
+      "trigger_expected": true,
+      "expected_output": "Runs --next 99, reports a nonexistent task number and asks for a valid selection. Does not fall back to task #1 or perform any task.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--next 99"},
+        {"type": "not_contains", "value": "weplaning-write"}
+      ]
+    },
+    {
+      "id": "preserve-other-facts",
+      "prompt": "记一笔：Docker 自启已恢复并验证，更新当前状态。原有代理、网卡和内存限制等事实仍然有效。",
+      "trigger_expected": true,
+      "expected_output": "Re-reads CURRENT before constructing the complete state replacement. Changes only Docker's fact, retains other valid facts, includes verification evidence and a change ledger entry, then checks memory.",
+      "files": ["scripts/weplaning-write.cjs", "scripts/check-memory.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-write"},
+        {"type": "contains", "value": "--verification"}
+      ]
+    },
+    {
+      "id": "repair-refuses-unrecognized-state",
+      "prompt": "修一下记忆：CURRENT 缺少 schema 和 Current State 标题，但还有一段重要的排错记录。",
+      "trigger_expected": true,
+      "expected_output": "Checks memory and reports the malformed structure. Does not replace unrecognized facts with unknown or reinitialize memory. Uses evidence or asks for clarification before proposing a repair.",
+      "files": ["scripts/repair-memory.cjs", "scripts/check-memory.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "check-memory"},
+        {"type": "not_contains", "value": "--reinit"}
       ]
     },
     {

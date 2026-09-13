@@ -498,6 +498,214 @@ function testAuditMixedBlockers() {
   run([script("check-memory.cjs"), root, "--audit", "--strict"], { expectFail: true });
 }
 
+function memorySnapshot(root) {
+  const base = path.join(root, ".agent-memory");
+  const files = [];
+  (function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else files.push([path.relative(base, full), fs.readFileSync(full, "utf8")]);
+    }
+  })(base);
+  return JSON.stringify(files.sort((a, b) => a[0].localeCompare(b[0])));
+}
+
+function testWritePreservesWhitespaceAndExtraContent() {
+  const root = tempRoot("preserve");
+  init(root);
+  writeCmd(root, ["--changed", "seed", "--state", "FACT_A;;FACT_B", "--understanding", "CHECK_PORT_FIRST"]);
+  const original = read(root, "CURRENT.md")
+    .replace("## Current State\n", "## Current State  \n")
+    .replace("## Current Understanding\n", "##\tCurrent Understanding\t\n")
+    .replace("# Current Mainline\n", "# Current Mainline\nCustom metadata: keep me\n") + "\n## Extra Notes\nCUSTOM_FACT_KEEP_ME\n";
+  write(root, "CURRENT.md", original);
+  run([script("check-memory.cjs"), root]);
+  const before = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
+  assert(before.currentState.includes("FACT_B"), "reader lost a whitespace-suffixed section");
+  assert(before.understanding === "CHECK_PORT_FIRST", "reader lost a tab-separated section");
+  writeCmd(root, ["--changed", "ledger-only"]);
+  const after = read(root, "CURRENT.md");
+  for (const value of ["FACT_A", "FACT_B", "CHECK_PORT_FIRST", "CUSTOM_FACT_KEEP_ME", "Custom metadata: keep me", "## Current State  "]) {
+    assert(after.includes(value), `write lost ${value}`);
+  }
+}
+
+function testInvalidStructureCannotBeReadOrWritten() {
+  for (const kind of ["missing", "empty", "duplicate"]) {
+    const root = tempRoot(`structure-${kind}`);
+    init(root);
+    let current = read(root, "CURRENT.md");
+    if (kind === "missing") current = current.replace(/^## Current State\n[\s\S]*?(?=\n## )/m, "");
+    if (kind === "empty") current = current.replace(/^## Current State\n[\s\S]*?(?=\n## )/m, "## Current State\n");
+    if (kind === "duplicate") current += "\n## Current State\n- conflicting duplicate\n";
+    write(root, "CURRENT.md", current);
+    const before = memorySnapshot(root);
+    run([script("check-memory.cjs"), root], { expectFail: true });
+    run([script("weplaning-read.cjs"), root, "--json"], { expectFail: true });
+    run([script("weplaning-write.cjs"), root, "--agent", "CI", "--changed", "do not write"], { expectFail: true });
+    assert(memorySnapshot(root) === before, `invalid ${kind} structure was mutated`);
+  }
+}
+
+function testStateOnlyWriteHasLedgerAndUnchangedIsNoop() {
+  const root = tempRoot("state-only");
+  init(root);
+  const result = JSON.parse(writeCmd(root, ["--state", "STATE_ONLY_FACT", "--verification", "ACTUAL_CHECK", "--json"]).stdout);
+  const ledger = read(root, "CHANGES.md");
+  assert(ledger.includes(result.changeId) && ledger.includes("STATE_ONLY_FACT") && ledger.includes("ACTUAL_CHECK"), "state-only write has no traceable ledger entry");
+  const before = memorySnapshot(root);
+  const repeated = JSON.parse(writeCmd(root, ["--state", "STATE_ONLY_FACT", "--json"]).stdout);
+  assert(repeated.persisted === false && repeated.patched.length === 0, "unchanged state reported a persisted patch");
+  assert(memorySnapshot(root) === before, "unchanged state created writes or backups");
+  const decision = JSON.parse(writeCmd(root, ["--decision", "DECISION_ONLY_FACT", "--json"]).stdout);
+  assert(read(root, "CHANGES.md").includes(decision.changeId), "decision-only write has no change ledger entry");
+}
+
+function testInvalidWriteArgumentsAreNoWrite() {
+  const root = tempRoot("bad-args");
+  init(root);
+  writeCmd(root, ["--blockers", "REAL_BLOCKER"]);
+  const before = memorySnapshot(root);
+  const cases = [
+    ...["state", "next-step", "blockers", "goal", "understanding", "changed", "decision", "verification"].map((flag) => [`--${flag}`]),
+    ["--state", "  "], ["--state", ";;"], ["--state", "Fact", "--state"], ["--sttae", "typo"],
+  ];
+  for (const extra of cases) {
+    run([script("weplaning-write.cjs"), root, "--agent", "CI", ...extra, "--json"], { expectFail: true });
+    assert(memorySnapshot(root) === before, `invalid arguments mutated memory: ${extra.join(" ")}`);
+  }
+}
+
+function testWriteValidatesBeforeAnyMutation() {
+  const root = tempRoot("preflight");
+  init(root);
+  const conflict = "CURRENT.sync-conflict-20260913-100000-OTHER.md";
+  write(root, conflict, read(root, "CURRENT.md"));
+  let before = memorySnapshot(root);
+  run([script("weplaning-write.cjs"), root, "--agent", "CI", "--state", "NEW_FACT"], { expectFail: true });
+  assert(memorySnapshot(root) === before, "write changed memory before rejecting existing sync conflicts");
+  fs.rmSync(path.join(root, ".agent-memory", conflict));
+  before = memorySnapshot(root);
+  run([
+    script("weplaning-write.cjs"), root, "--agent", "CI", "--state", "NEW_FACT",
+    "--decision", "Invalid decision\n<<<<<<< HEAD\n=======\n>>>>>>> branch",
+  ], { expectFail: true });
+  assert(memorySnapshot(root) === before, "invalid proposed decision was rejected after mutating CURRENT/CHANGES");
+}
+
+function testRepairAddsOnlySchema() {
+  const root = tempRoot("repair-local");
+  init(root);
+  const original = {};
+  for (const file of ["CURRENT.md", "CHANGES.md"]) {
+    original[file] = read(root, file).replace(/^Schema version:[^\n]*\n/m, "") + "\n## Extra Notes\nPRESERVE_CUSTOM_CONTENT\n";
+    write(root, file, original[file].replace(/\n/g, "\r\n"));
+  }
+  const before = memorySnapshot(root);
+  run([script("repair-memory.cjs"), root, "--dry-run", "--json"]);
+  assert(memorySnapshot(root) === before, "repair dry-run mutated files");
+  run([script("repair-memory.cjs"), root]);
+  for (const file of Object.keys(original)) {
+    const expected = original[file].replace(/^(#[^\n]*\n)/, "$1Schema version: 3.0\n");
+    assert(read(root, file) === expected, `repair changed more than the missing schema in ${file}`);
+  }
+}
+
+function testRepairRefusesUnparseableOrUnsupportedMemory() {
+  for (const kind of ["malformed", "unsupported", "sync-conflict"]) {
+    const root = tempRoot(`repair-refuse-${kind}`);
+    init(root);
+    if (kind === "malformed") {
+      write(root, "CURRENT.md", "# Current Mainline\n\n## Active Goal\nKeep me\n\n## Custom Notes\nUNPARSED_IMPORTANT_FACT\n");
+      fs.rmSync(path.join(root, ".agent-memory", "CHANGES.md"));
+    }
+    if (kind === "unsupported") write(root, "CURRENT.md", read(root, "CURRENT.md").replace("Schema version: 3.0", "Schema version: 4.0"));
+    if (kind === "sync-conflict") write(root, "CURRENT.sync-conflict-20260913-100000-OTHER.md", read(root, "CURRENT.md"));
+    const before = memorySnapshot(root);
+    run([script("repair-memory.cjs"), root, "--json"], { expectFail: true });
+    assert(memorySnapshot(root) === before, `repair mutated ${kind} memory`);
+  }
+}
+
+function testRepeatedArchivePreservesHistory() {
+  const root = tempRoot("archive-repeat");
+  init(root);
+  writeCmd(root, ["--changed", "FIRST_ARCHIVE_FACT"]);
+  writeCmd(root, ["--changed", "KEEP_AFTER_FIRST"]);
+  const clock = path.join(root, "fixed-clock.cjs");
+  fs.writeFileSync(clock, 'const NativeDate = Date; global.Date = class extends NativeDate { constructor(...args) { super(...(args.length ? args : ["2026-09-13T10:10:00Z"])); } };\n');
+  const first = JSON.parse(run(["--require", clock, script("archive-changes.cjs"), root, "--keep", "1", "--json"]).stdout);
+  writeCmd(root, ["--changed", "NEW_LIVE_FACT"]);
+  const second = JSON.parse(run(["--require", clock, script("archive-changes.cjs"), root, "--keep", "1", "--json"]).stdout);
+  assert(first.archivePath !== second.archivePath, "same-time archives reused a filename");
+  assert(fs.readFileSync(first.archivePath, "utf8").includes("FIRST_ARCHIVE_FACT"), "first archive was overwritten");
+  assert(fs.readFileSync(second.archivePath, "utf8").includes("KEEP_AFTER_FIRST"), "second archive lost its entry");
+  const forcedPath = path.join(root, ".agent-memory", "archive", "CHANGES-forced-collision.md");
+  fs.writeFileSync(forcedPath, "EXISTING_ARCHIVE_MUST_SURVIVE\n");
+  const forceCollision = path.join(root, "force-collision.cjs");
+  fs.writeFileSync(forceCollision, `require(${JSON.stringify(script("weplaning-utils.cjs"))}).uniqueStamp = () => "forced-collision";\n`);
+  writeCmd(root, ["--changed", "ANOTHER_LIVE_FACT"]);
+  const before = memorySnapshot(root);
+  run(["--require", forceCollision, script("archive-changes.cjs"), root, "--keep", "1"], { expectFail: true });
+  assert(memorySnapshot(root) === before, "exclusive archive creation overwrote history or changed the ledger");
+}
+
+function testReadIncludesContextTimeAndVerification() {
+  const root = tempRoot("read-details");
+  init(root);
+  writeCmd(root, ["--changed", "CHECKED_FACT", "--understanding", "CHECK_PORT_FIRST", "--verification", "curl returned 200 at 2026-09-01T00:00:00Z", "--file", "config.yaml", "--time", "2026-09-01T00:00:00Z"]);
+  const plain = run([script("weplaning-read.cjs"), root]).stdout;
+  assert(plain.includes("CHECK_PORT_FIRST") && plain.includes("Memory last updated: 2026-09-01T00:00:00Z"), "briefing omitted accepted context or update time");
+  assert(plain.includes("not a live verification"), "read output treats recorded facts as fresh checks");
+  const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
+  assert(payload.lastUpdated === "2026-09-01T00:00:00Z", "JSON lost lastUpdated");
+  assert(payload.recentChanges[0].verification[0].includes("curl returned 200"), "JSON lost verification");
+  assert(payload.recentChanges[0].files[0] === "config.yaml", "JSON lost file reference");
+  const handoff = run([script("weplaning-read.cjs"), root, "--handoff"]).stdout;
+  assert(handoff.includes("Verification (recorded): curl returned 200"), "handoff omitted verification evidence");
+}
+
+function testNextStepsNoneUnknownAndInvalidNumber() {
+  const root = tempRoot("next-boundary");
+  init(root);
+  writeCmd(root, ["--next-step", "TASK_A;;TASK_B"]);
+  for (const n of ["0", "99", "-1", "1.9", "abc"]) {
+    run([script("weplaning-read.cjs"), root, "--next", n, "--handoff", "--json"], { expectFail: true });
+  }
+  run([script("weplaning-read.cjs"), root, "--next", "--json"], { expectFail: true });
+  const focused = JSON.parse(run([script("weplaning-read.cjs"), root, "--next", "2", "--json"]).stdout);
+  assert(focused.focusNextStep.text === "TASK_B", "valid explicit task selection changed");
+  for (const value of ["none", "无待执行事项", "unknown"]) {
+    writeCmd(root, ["--next-step", value, "--blockers", "unknown"]);
+    const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--handoff", "--json"]).stdout);
+    assert(payload.focusNextStep === null, `handoff focused ${value} as a task`);
+    assert(payload.nextStepsStatus === (value === "unknown" ? "unknown" : "none"), "lost none/unknown distinction");
+    const plain = run([script("weplaning-read.cjs"), root, "--handoff"]).stdout;
+    assert(plain.includes("Blockers:") && plain.includes("unknown"), "unknown blockers were hidden");
+    run([script("weplaning-read.cjs"), root, "--next", "1", "--json"], { expectFail: true });
+  }
+}
+
+function testSearchPrioritizesCurrentTruth() {
+  const root = tempRoot("search-priority");
+  init(root);
+  writeCmd(root, ["--state", "NEEDLE_CURRENT_TRUTH"]);
+  write(root, "CHANGES.md", "# Changes\nSchema version: 3.0\n\n" + Array.from({ length: 45 }, (_, i) => `## historical ${i}\n- Changed:\n  - NEEDLE_OLD_${i}\n`).join("\n"));
+  const result = JSON.parse(run([script("weplaning-find.cjs"), root, "NEEDLE", "--json"]).stdout);
+  assert(result.truncated && result.matches[0].scope === "current", "old history crowded current truth out of search results");
+}
+
+function testDirtyGitErrorIsNotClean() {
+  const root = tempRoot("git-error");
+  init(root);
+  fs.mkdirSync(path.join(root, ".git"));
+  const result = run([script("check-dirty.cjs"), root, "--json", "--strict"], { expectFail: true });
+  const payload = JSON.parse(result.stdout);
+  assert(payload.ok === false && payload.mode === "git-error", "git failure reported success");
+  assert(!payload.message.includes("Workspace clean"), "git failure reported a clean workspace");
+}
+
 for (const test of [
   testInitShape,
   testWritePatchesAndLedger,
@@ -526,6 +734,18 @@ for (const test of [
   testCheckDirtyMtimeFallback,
   testCloseWrapper,
   testAuditMixedBlockers,
+  testWritePreservesWhitespaceAndExtraContent,
+  testInvalidStructureCannotBeReadOrWritten,
+  testStateOnlyWriteHasLedgerAndUnchangedIsNoop,
+  testInvalidWriteArgumentsAreNoWrite,
+  testWriteValidatesBeforeAnyMutation,
+  testRepairAddsOnlySchema,
+  testRepairRefusesUnparseableOrUnsupportedMemory,
+  testRepeatedArchivePreservesHistory,
+  testReadIncludesContextTimeAndVerification,
+  testNextStepsNoneUnknownAndInvalidNumber,
+  testSearchPrioritizesCurrentTruth,
+  testDirtyGitErrorIsNotClean,
 ]) {
   test();
   console.log(`[ok] ${test.name}`);

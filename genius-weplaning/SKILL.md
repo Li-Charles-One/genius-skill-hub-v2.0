@@ -1,12 +1,12 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.0.0"
+  version: "3.0.1"
 description: "Maintain WePlaning 3.0 project memory in .agent-memory. Use for: 查看项目记忆 / 记一笔 / 提交主线 / 查看项目进度 / 修一下记忆 / init. Write patches CURRENT.md. Do not use for ordinary summaries, one-off code edits, or skill self-upgrades."
 ---
 
 # Genius-WePlaning
-_(Skill package v3.0.0; protocol 3.0)_
+_(Skill package v3.0.1; protocol 3.0)_
 
 The planning handoff states and fields are defined in the repository-level [`WORKFLOW.md`](../WORKFLOW.md). Reuse the existing `CURRENT.md` sections; do not create another state file.
 
@@ -36,9 +36,9 @@ Do not use for ordinary summaries, one-off answers, trivial code edits, or **thi
 | User says | Agent does |
 |---|---|
 | "查看项目记忆" / "读取项目记忆" | `weplaning-read.cjs` |
-| "读取记忆接力" | `weplaning-read.cjs --handoff` (report Focus Next Step #1) |
+| "读取记忆接力" | `weplaning-read.cjs --handoff`; report focus, or no pending tasks / unknown |
 | "项目叫什么" / "现在目标是什么" / "查看项目进度" | `weplaning-read.cjs --brief` |
-| "继续干 #N" | `weplaning-read.cjs --next N` → start that work |
+| "继续干 #N" | `weplaning-read.cjs --next N` → start the selected task only after successful selection |
 | "记一笔" / "这件事记下来" / "提交主线" / "close out" | `weplaning-write.cjs` with `--changed` and CURRENT patches when facts changed |
 | "完成了" / "done" / "搞定" | Call write only if there is a durable fact; trivial oral done is a no-op |
 | "修一下记忆" | `check-memory.cjs` first, then `repair-memory.cjs` if the cause is known |
@@ -73,8 +73,10 @@ Full CLI: `references/cli.md`.
 ## Rules
 
 - After writing `.agent-memory/`, run `check-memory.cjs` and do not report success until it passes.
+- Before replacing a section, re-read it and retain still-valid facts. `--state` / `--next-step` replace the entire named section; scripts preserve other sections and extra content.
+- Keep next steps actionable and accepted. Use `none` / `无待执行事项` when there is no pending work, and `unknown` when undecided. Preserve conditional triggers; reading memory does not activate them.
 - Do not store secrets, tokens, passwords, cookies, or private credentials.
-- Keep memory concise: facts, decisions, files, verification, blockers, exact next step.
+- Keep memory concise and factual: one fact per item, concrete file paths, decisions, verification method/time/result, blockers, exact next step. Put durable operating guidance in Current Understanding.
 - Always pass `--agent <persona>`.
 - Never hand-edit `.agent-memory/` when the scripts can do the write.
 - Leftover 2.3 session trees are read-only; do not create new sessions.
@@ -109,11 +111,13 @@ Full CLI: `references/cli.md`.
 
 ## Output
 
-- Read: goal, current state, next steps, blockers (if real), last few ledger lines. Do not dump leftover session notes.
-- Write: whether anything persisted, whether check passed, exact next step.
+- Read: memory update time, goal, key understanding, recorded state, next steps, blockers (including unknown), last few ledger lines. A read is not live verification; update time is not verification time. Handoff also includes recorded verification/file references.
+- Handoff: no pending tasks means stop; unknown means clarify. Invalid task numbers are errors, never a fallback to #1. Do not dump leftover session notes.
+- Write: whether anything persisted, whether check passed, corresponding change ID, exact next step. Unchanged patches are no-ops; state-only changes still create a ledger entry.
 - Trivial done: say nothing was persisted.
 
 ## Gotchas
 
 - CURRENT.md is truth. Do not hand-edit `.agent-memory` files; run the bundled scripts.
+- Failed structural/argument checks must be resolved before writing. Repair adds missing schema lines locally; it refuses malformed state, unsupported schemas and sync conflicts rather than inventing facts.
 - Do not write this skill's own changelog into a project's memory.

@@ -3,7 +3,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 
 const scriptDir = path.resolve(__dirname, "..", "scripts");
 
@@ -19,9 +19,14 @@ function run(args) {
 }
 
 function spawnNode(args) {
-  return spawnSync(process.execPath, args, {
-    cwd: scriptDir,
-    encoding: "utf8",
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args, { cwd: scriptDir, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
   });
 }
 
@@ -41,10 +46,10 @@ function initProject(name) {
   return root;
 }
 
-function concurrentWriteTest() {
+async function concurrentWriteTest() {
   const root = initProject("weplaning-write");
   const workers = [];
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     workers.push(spawnNode([
       path.join(scriptDir, "weplaning-write.cjs"),
       root,
@@ -52,19 +57,23 @@ function concurrentWriteTest() {
       "--changed", `Concurrent write ${index}`,
       "--file", `file-${index}.txt`,
       "--verification", `verification-${index}`,
+      "--time", "2026-09-13T00:00:00Z",
+      "--json",
     ]));
   }
 
-  for (const worker of workers) {
+  const results = await Promise.all(workers);
+  for (const worker of results) {
     assert(worker.status === 0, `write worker failed\n${worker.stdout || ""}${worker.stderr || ""}`);
   }
+  assert(new Set(results.map((worker) => JSON.parse(worker.stdout).changeId)).size === 6, "same-time concurrent writes reused change IDs");
   const changes = fs.readFileSync(path.join(root, ".agent-memory", "CHANGES.md"), "utf8");
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     assert(changes.includes(`Concurrent write ${index}`), `missing CHANGES entry ${index}`);
   }
   run([path.join(scriptDir, "check-memory.cjs"), root]);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-concurrentWriteTest();
-console.log("write concurrency passed");
+concurrentWriteTest().then(() => console.log("write concurrency passed (6 simultaneous workers, unique IDs)"))
+  .catch((error) => { console.error(error); process.exitCode = 1; });

@@ -29,3 +29,15 @@ Put skill changelog in the skill folder. Project memory is for that project's ac
 
 **10. `--prefer current|threads` is gone.**
 3.0 has no mainline session pointer. If leftover THREADS disagrees with an old Mainline session field, ignore the tree.
+
+**11. Section replacement is not item merging.**
+Re-read before `--state` / `--next-step`; include still-valid facts/tasks in the replacement. Other sections and custom content are preserved. Missing/empty/duplicate required sections are rejected rather than filled with `unknown`.
+
+**12. Recorded state is not a live check.**
+Read time and Last updated do not prove a service is currently healthy. Record verification method/time/result with `--verification`; handoff surfaces that evidence. Keep `unknown` distinct from `none`.
+
+**13. No pending task is a valid stopping point.**
+Use `none` / `无待执行事项`, not maintenance slogans. Invalid `--next N` must fail instead of silently selecting #1. Conditional tasks retain their trigger conditions.
+
+**14. Preserve data when repairing and archiving.**
+Repair only inserts missing schema lines into otherwise valid content and refuses unsupported/malformed input. Archives use unique names and exclusive creation; repeated runs must retain every previous archive.

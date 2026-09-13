@@ -8,6 +8,7 @@ const {
   parseArgs,
   readMemory,
   runCheck,
+  uniqueStamp,
   usage,
   utcNow,
   withMemoryLock,
@@ -61,27 +62,28 @@ withMemoryLock(root, () => {
     console.error("CHANGES.md has no recognizable schema header; refusing to rewrite it.");
     process.exit(1);
   }
+  if (!args["no-check"]) runCheck(root, __dirname);
   kept = Math.min(keep, blocks.length);
   archived = Math.max(0, blocks.length - keep);
   if (archived === 0) return;
 
   const toArchive = blocks.slice(0, blocks.length - keep);
   const toKeep = blocks.slice(blocks.length - keep);
-  const stamp = now.replace(/[:.]/g, "").slice(0, 15);
+  const stamp = uniqueStamp();
   archivePath = path.join(root, ".agent-memory", "archive", `CHANGES-${stamp}.md`);
 
   if (args["dry-run"]) return;
 
   fs.mkdirSync(path.dirname(archivePath), { recursive: true });
   const archiveBody = `# Archived Changes
-Schema version: 2.3
+Schema version: 3.0
 Archived at: ${now}
 Source: CHANGES.md
 Blocks: ${toArchive.length}
 
 ${toArchive.join("\n").replace(/\s*$/, "")}
 `;
-  fs.writeFileSync(archivePath, archiveBody.replace(/\r?\n/g, "\n"), "utf8");
+  fs.writeFileSync(archivePath, archiveBody.replace(/\r?\n/g, "\n"), { encoding: "utf8", flag: "wx" });
 
   const breadcrumb = `Archived: archive/${path.basename(archivePath)} (${toArchive.length} blocks)`;
   const nextChanges = `${header}\n${breadcrumb}\n\n${toKeep.join("\n").replace(/\s*$/, "")}\n`;

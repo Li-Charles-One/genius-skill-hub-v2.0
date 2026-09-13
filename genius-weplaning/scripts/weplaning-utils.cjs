@@ -188,7 +188,7 @@ function generateSessionId({ iso, agent, shortId }) {
 
 function section(text, heading) {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = normalizeNewlines(text).match(new RegExp(`^## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$(?![\\s\\S]))`, "m"));
+  const match = normalizeNewlines(text).match(new RegExp(`^##[ \\t]+${escaped}[ \\t]*\\n([\\s\\S]*?)(?=\\n##[ \\t]+|$(?![\\s\\S]))`, "m"));
   return match ? match[1].trimEnd() : "";
 }
 
@@ -201,6 +201,47 @@ function schemaVersionOf(text) {
 
 function hasSupportedSchema(text) {
   return SCHEMA_PATTERN.test(schemaVersionOf(text));
+}
+
+function markdownErrors(relativePath, text) {
+  if (!["CURRENT.md", "CHANGES.md", "DECISIONS.md"].includes(relativePath)) return [];
+  const errors = [];
+  const normalized = normalizeNewlines(text);
+  const schemas = normalized.match(/^Schema version:[^\n]*$/gm) || [];
+  if (schemas.length !== 1 || !hasSupportedSchema(normalized)) {
+    errors.push(`${relativePath} must have one supported schema version (2.2, 2.3, or 3.0)`);
+  }
+  if (/^<<<<<<<(?: |$)/m.test(normalized) || /^>>>>>>>(?: |$)/m.test(normalized) || /^=======[ \t]*$/m.test(normalized)) {
+    errors.push(`${relativePath} contains merge conflict markers`);
+  }
+  if (relativePath === "CURRENT.md") {
+    const required = ["Active Goal", "Current State", "Accepted Next Steps", "Open Blockers"];
+    for (const heading of [...required, "Current Understanding", "Project Config", "Based On"]) {
+      const count = (normalized.match(new RegExp(`^##[ \\t]+${heading}[ \\t]*$`, "gm")) || []).length;
+      if (count > 1) errors.push(`CURRENT.md has duplicate section: ${heading}`);
+      if (required.includes(heading) && (count !== 1 || !section(normalized, heading).trim())) {
+        errors.push(`CURRENT.md missing or empty section: ${heading}`);
+      }
+    }
+  }
+  return errors;
+}
+
+function findMemoryConflicts(root) {
+  const dir = memoryDir(root);
+  const found = [];
+  function walk(currentDir) {
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      if (entry.name === BACKUP_DIR_NAME || entry.name === LOCK_DIR_NAME) continue;
+      const fullPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) walk(fullPath);
+      else if (/\.sync-conflict-\d{8}-\d{6}/i.test(entry.name)) {
+        found.push(path.relative(dir, fullPath).replace(/\\/g, "/"));
+      }
+    }
+  }
+  walk(dir);
+  return found.sort();
 }
 
 function isTrivialNote(text) {
@@ -373,10 +414,12 @@ ${state.exactNextStep}
 
 function validateKnownMarkdown(relativePath, text) {
   try {
+    const errors = markdownErrors(relativePath, text);
+    if (errors.length) throw new Error(errors.join("; "));
     if (relativePath === "CURRENT.md") {
       const before = parseCurrentMd(text);
       const after = parseCurrentMd(renderCurrentMd(before));
-      for (const key of ["lastUpdated", "activeGoal", "currentState", "acceptedNextSteps", "openBlockers"]) {
+      for (const key of ["lastUpdated", "activeGoal", "currentUnderstanding", "currentState", "acceptedNextSteps", "openBlockers", "projectConfig", "basedOn"]) {
         if (before[key] !== after[key]) throw new Error(`CURRENT.md round-trip changed ${key}`);
       }
     } else if (relativePath === "THREADS.md") {
@@ -634,14 +677,14 @@ function writeSession(root, sessionId, text) {
   writeMemory(root, relativePath, text);
 }
 
-function runCheck(root, scriptDir) {
+function runCheck(root, scriptDir, { quiet = false } = {}) {
   const checker = path.join(scriptDir, "check-memory.cjs");
   const result = spawnSync(process.execPath, [checker, root], {
     cwd: root,
     encoding: "utf8",
   });
   // Keep machine-readable primary output on stdout; checks go to stderr.
-  if (result.stdout) process.stderr.write(result.stdout);
+  if (result.stdout && (!quiet || result.status !== 0)) process.stderr.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   if (result.status !== 0) {
     process.exit(result.status || 1);
@@ -667,6 +710,7 @@ module.exports = {
   detectProjectConfig,
   emitResult,
   extractField,
+  findMemoryConflicts,
   formatSectionItems,
   hasSupportedSchema,
   isTransientPath,
@@ -675,6 +719,7 @@ module.exports = {
   generateSessionId,
   memoryExists,
   memoryPath,
+  markdownErrors,
   normalizeNewlines,
   osToken,
   parseArgs,
@@ -701,6 +746,7 @@ module.exports = {
   usage,
   utcNow,
   uniqueStamp,
+  validateKnownMarkdown,
   withMemoryLock,
   writeFile,
   writeMemory,
