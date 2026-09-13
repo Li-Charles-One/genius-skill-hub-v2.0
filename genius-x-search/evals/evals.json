@@ -1,11 +1,11 @@
 {
-  "skill_name": "x-search-grok",
+  "skill_name": "genius-x-search",
   "evals": [
     {
       "id": "keyword-trigger",
       "prompt": "帮我在 X 上搜一下最近大家怎么看 Grok 4.5",
       "trigger_expected": true,
-      "expected_output": "Triggers x-search-grok, chooses keyword mode, runs scripts/x_search.py keyword, and returns a sourced post list without inventing URLs.",
+      "expected_output": "Triggers genius-x-search, chooses keyword mode, runs scripts/x_search.py keyword, and returns a sourced post list without inventing URLs.",
       "files": ["scripts/x_search.py"],
       "assertions": [
         {"type": "contains", "value": "keyword"},
@@ -17,7 +17,7 @@
       "id": "account-trigger",
       "prompt": "看看马斯克最近发了什么",
       "trigger_expected": true,
-      "expected_output": "Triggers x-search-grok, chooses account mode for elonmusk, runs scripts/x_search.py account, and summarizes recent posts with links.",
+      "expected_output": "Triggers genius-x-search, chooses account mode for elonmusk, runs scripts/x_search.py account, and summarizes recent posts with links.",
       "files": ["scripts/x_search.py"],
       "assertions": [
         {"type": "contains", "value": "account"},
@@ -29,7 +29,7 @@
       "id": "heat-trigger",
       "prompt": "Grok 4.5 在 X 上的热度和情绪怎么样，给我一个简报",
       "trigger_expected": true,
-      "expected_output": "Triggers x-search-grok, chooses heat mode, runs scripts/x_search.py heat, and returns heat/sentiment briefing with representative posts.",
+      "expected_output": "Triggers genius-x-search, chooses heat mode, runs scripts/x_search.py heat, and returns heat/sentiment briefing with representative posts.",
       "files": ["scripts/x_search.py"],
       "assertions": [
         {"type": "contains", "value": "heat"},
@@ -39,7 +39,7 @@
     },
     {
       "id": "channel-list",
-      "prompt": "看看 x-search-grok 现在有哪些渠道和优先级",
+      "prompt": "看看 genius-x-search 现在有哪些渠道和优先级",
       "trigger_expected": true,
       "expected_output": "Runs scripts/x_search.py --list-channels and reports cpa readiness without printing API keys.",
       "files": ["channels.json", "scripts/x_search.py"],
@@ -53,7 +53,7 @@
       "id": "no-posting",
       "prompt": "帮我发一条推文夸 Grok 4.5",
       "trigger_expected": false,
-      "expected_output": "Does not trigger x-search-grok for posting or account management tasks.",
+      "expected_output": "Does not trigger genius-x-search for posting or account management tasks.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "x_search.py"},
@@ -64,7 +64,7 @@
       "id": "no-pure-web",
       "prompt": "用网页搜索总结 Transformer 论文要点",
       "trigger_expected": false,
-      "expected_output": "Does not trigger x-search-grok for pure web research with no X intent.",
+      "expected_output": "Does not trigger genius-x-search for pure web research with no X intent.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "x_search.py"},

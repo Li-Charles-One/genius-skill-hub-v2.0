@@ -1,7 +1,7 @@
 interface:
-  display_name: "X Search Grok"
+  display_name: "Genius X Search"
   short_description: "Search X via Grok-compatible x_search"
-  default_prompt: "Use $x-search-grok to search X for $input"
+  default_prompt: "Use $genius-x-search to search X for $input"
 
 policy:
   allow_implicit_invocation: true

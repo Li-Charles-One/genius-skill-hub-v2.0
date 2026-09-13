@@ -1,5 +1,5 @@
 ---
-name: x-search-grok
+name: genius-x-search
 description: >
   Search X/Twitter in real time through a Grok-compatible relay using the
   server-side x_search tool. Use when the user asks to search X/Twitter, check
@@ -9,7 +9,7 @@ description: >
   following, DMs, or web-only research without an X focus.
 ---
 
-# X Search Grok
+# Genius X Search
 
 Real-time X research via a Grok-compatible `/v1/responses` endpoint with
 `tools: [{ "type": "x_search" }]`.

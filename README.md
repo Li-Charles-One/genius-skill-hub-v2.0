@@ -40,7 +40,7 @@
 |:--|:--|
 | [genius-github-usage](./genius-github-usage/) | Genius GitHub usage via `gh` |
 | [lark](./lark/) | Lark/Feishu CLI: docs, wiki, IM, calendar, mail… |
-| [x-search-grok](./x-search-grok/) | Real-time X/Twitter search via Grok-compatible relay |
+| [genius-x-search](./genius-x-search/) | Real-time X/Twitter search via Grok-compatible relay |
 | [genius-skill-creator](./genius-skill-creator/) | Create, repair, validate, evaluate, port skills |
 
 ## Skill pipeline
@@ -70,7 +70,7 @@ genius-skill-hub-v2.0/
 ├── genius-github-usage/
 ├── lark/
 ├── genius-impl-plans/
-└── x-search-grok/
+└── genius-x-search/
 ```
 
 每个 skill 根目录含 `SKILL.md`。

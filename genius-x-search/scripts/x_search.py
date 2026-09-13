@@ -682,7 +682,7 @@ def request_responses(
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
-            "User-Agent": "x-search-grok-skill/1.1",
+            "User-Agent": "genius-x-search-skill/1.1",
         },
     )
     try:
