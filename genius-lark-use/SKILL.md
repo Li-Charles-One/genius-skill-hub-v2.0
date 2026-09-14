@@ -1,5 +1,5 @@
 ---
-name: lark
+name: genius-lark-use
 description: Unified Lark/Feishu agent skill for operating the official lark-cli. Use when the user asks to check Lark/Feishu CLI status, configure or verify auth, read or write Feishu Docs/Wiki/Drive/Base/Sheets/Slides/Markdown, send or search IM messages, manage calendars/tasks/mail/approvals/meetings/OKR/attendance, or route any Lark OpenAPI task. Do not use for non-Lark services or local-only document editing unless the user wants to publish/import it into Lark/Feishu.
 ---
 

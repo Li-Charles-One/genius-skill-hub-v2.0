@@ -39,7 +39,7 @@
 | Skill | Purpose |
 |:--|:--|
 | [genius-github-usage](./genius-github-usage/) | Genius GitHub usage via `gh` |
-| [lark](./lark/) | Lark/Feishu CLI: docs, wiki, IM, calendar, mail… |
+| [genius-lark-use](./genius-lark-use/) | Lark/Feishu CLI: docs, wiki, IM, calendar, mail… |
 | [genius-x-search](./genius-x-search/) | Real-time X/Twitter search via Grok-compatible relay |
 | [genius-skill-creator](./genius-skill-creator/) | Create, repair, validate, evaluate, port skills |
 
@@ -68,7 +68,7 @@ genius-skill-hub-v2.0/
 ├── genius-skill-creator/
 ├── genius-weplaning/
 ├── genius-github-usage/
-├── lark/
+├── genius-lark-use/
 ├── genius-impl-plans/
 └── genius-x-search/
 ```
