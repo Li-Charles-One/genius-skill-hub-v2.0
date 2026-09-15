@@ -2,7 +2,7 @@
 name: genius-omni
 description: "Analyze images, analyze video/audio, and OCR (Genius 视听). Use when the user wants to understand a picture, extract text, transcribe speech, or summarize a video/audio/YouTube file. Triggers: 看图, 这张图是什么, 分析图片, 描述图片, 识图, OCR, 识别文字, 提取文字, 截图里的字, 读这个PDF, 对比这两张图, 看看这个界面, 分析视频, 这个视频讲了什么, 视频总结, YouTube, 转写, 听写, 录音转文字, 分析音频, 听这段, 视听. Do not use for generating images or video (genius-cpa-image / dreamina-cli), DESIGN.md, or shotlists."
 metadata:
-  version: "2.6.0"
+  version: "2.6.1"
 ---
 
 # Genius Omni（视听）

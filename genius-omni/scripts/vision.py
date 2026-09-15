@@ -657,6 +657,8 @@ def make_video_proxy(
 
     if scale > 720:
         return make_video_proxy(src, scale=720)
+    elif scale > 480:
+        return make_video_proxy(src, scale=480)
 
     raise RuntimeError(
         f"Failed to build video proxy (HEVC/H.264 GPU → libx264). Last error: {last_err[:400]}"
@@ -683,21 +685,36 @@ def _make_video_proxy_h264_only(src: str, scale: int | None = None) -> tuple[str
             str(out),
         ]
         try:
+            t0 = time.perf_counter()
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            elapsed = time.perf_counter() - t0
             if proc.returncode == 0 and out.is_file() and out.stat().st_size > 0:
+                size = out.stat().st_size
                 print(
                     f"[genius-omni] video proxy via {name}: "
-                    f"{out.stat().st_size / 1024 / 1024:.1f}MB → {out}",
+                    f"{size / 1024 / 1024:.1f}MB in {elapsed:.1f}s → {out}",
                     file=sys.stderr,
                 )
+                if size > MAX_RAW_BYTES:
+                    print(
+                        f"[genius-omni] proxy still {size / 1024 / 1024:.1f}MB "
+                        f"(>{MAX_RAW_BYTES / 1024 / 1024:.0f}MB), trying next encoder…",
+                        file=sys.stderr,
+                    )
+                    continue
                 return str(out), name
             last_err = (proc.stderr or f"exit {proc.returncode}").strip()
             if out.exists():
                 out.unlink(missing_ok=True)
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             last_err = str(e)
+            if out.exists():
+                out.unlink(missing_ok=True)
+            continue
     if scale > 720:
         return _make_video_proxy_h264_only(src, scale=720)
+    elif scale > 480:
+        return _make_video_proxy_h264_only(src, scale=480)
     raise RuntimeError(f"H.264 proxy failed: {last_err[:400]}")
 
 
