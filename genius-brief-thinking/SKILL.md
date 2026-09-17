@@ -1,6 +1,6 @@
 ---
 name: genius-brief-thinking
-description: Explore intent and produce a design brief before implementing complex features. Use for genius-brief-thinking, brainstorm, plan, or ambiguous multi-approach tasks. Outputs a brief/spec, then hands off to genius-impl-plans. Do not use for clear-scope work such as renames, bugfixes, or one obvious approach.
+description: "在开发复杂功能前探索用户真实意图、头脑风暴并输出设计简报（Brief/Spec），为实现计划做准备。不要用于范围清晰的微小改动、重命名或已有明确解法的 Bug 修复。"
 license: MIT
 metadata:
   version: "2.0.0"

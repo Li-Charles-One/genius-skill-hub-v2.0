@@ -1,6 +1,6 @@
 ---
 name: genius-design
-description: "Generate production-grade DESIGN.md brand design systems with deep anti-slop rules. Three workflows: (A) pick from 73 brand templates, (B) reverse-engineer a live website, or (C) let the agent infer a design direction from your product type. Trigger keywords: 逆向, 品牌, UI设计, 设计规范, DESIGN.md, reverse engineer, brand, design system, 风格. Do not use for marketing copy or image/video generation."
+description: "生成工业级 DESIGN.md 品牌设计规范与 UI 系统：支持反审美疲劳规则、主流网站逆向推演及品牌模板推断。不要用于营销文案撰写或图片/视频资产生成（生成用 dreamina-cli）。"
 license: Apache-2.0
 metadata:
   version: "2.1.1"

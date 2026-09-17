@@ -1,6 +1,6 @@
 ---
 name: genius-github-usage
-description: "Genius GitHub usage via the GitHub CLI (`gh`). Use when the user wants to look up a repo, open or review a PR, check issues, fork, search GitHub, manage Actions/releases, or push/work on GitHub.com. Triggers: 查仓库, 提PR, 看issue, fork, 搜GitHub, 推远端, gh, GitHub. Do not use for non-GitHub remotes or local-only git (status/commit/diff) that never touches GitHub."
+description: "通过 GitHub CLI (gh) 操作 GitHub 远端：管理仓库、Issue、审查 PR、Fork、Release 与检索开源项目。不要用于不涉及 GitHub 远端的纯本地 Git 操作（如本地 status/commit/diff）。"
 ---
 
 # Genius GitHub Usage

@@ -1,12 +1,6 @@
 ---
 name: genius-x-search
-description: >
-  Search X/Twitter in real time through a Grok-compatible relay using the
-  server-side x_search tool. Use when the user asks to search X/Twitter, check
-  what someone posted recently, review discussion heat or sentiment on X, or
-  produce a sourced X briefing. Supports only three V1 modes: keyword search,
-  account updates, and heat/sentiment briefing. Not for posting, liking,
-  following, DMs, or web-only research without an X focus.
+description: "基于 Grok 代理的 X/Twitter 实时搜索与情报分析：关键词检索、特定账号动态跟踪、全网讨论热度与舆情简报。不要用于发帖点赞等社交互动，或与 X 无关的通用网页搜索。"
 ---
 
 # Genius X Search

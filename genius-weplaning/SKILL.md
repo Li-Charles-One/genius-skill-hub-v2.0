@@ -2,7 +2,7 @@
 name: genius-weplaning
 metadata:
   version: "3.0.1"
-description: "Maintain WePlaning 3.0 project memory in .agent-memory. Use for: 查看项目记忆 / 记一笔 / 提交主线 / 查看项目进度 / 修一下记忆 / init. Write patches CURRENT.md. Do not use for ordinary summaries, one-off code edits, or skill self-upgrades."
+description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
 # Genius-WePlaning

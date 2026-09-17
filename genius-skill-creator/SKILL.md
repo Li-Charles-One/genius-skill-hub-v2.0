@@ -1,6 +1,6 @@
 ---
 name: genius-skill-creator
-description: Create, repair, audit, evaluate, optimize, port, or merge SKILL.md skill packages. Use whenever the user wants to turn a workflow, conversation, or folder into a skill, or to fix, audit, eval, or port an existing SKILL.md package — including frontmatter, Skill Hub audits, adapters, trigger tuning, and scaffolding. Do not use for ordinary app code, README writing, product debugging, or code translation.
+description: "创建、修复、审计、评测与优化 SKILL.md 技能包及多平台适配器：支持工作流脚手架生成、规范审计与安全扫描。不要用于普通业务代码编写、应用排错或通用文本翻译。"
 ---
 
 # Genius Skill Creator

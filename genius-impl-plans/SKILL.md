@@ -1,6 +1,6 @@
 ---
 name: genius-impl-plans
-description: "Turn an approved brief or spec into a task-by-task implementation plan before coding. Use after genius-brief-thinking, or when the user already has a spec and asks for a plan. Triggers: genius-impl-plans, writing-plans, implementation plan. Do not use while already writing code, and do not use when what to build is still unclear — that is genius-brief-thinking."
+description: "在编写代码前，将已确认的设计简报（Brief/Spec）转化为逐项可执行的代码实现计划。不要在已进入编码阶段使用，且不要在需求目标仍不明确时使用（需求阶段用 genius-brief-thinking）。"
 ---
 
 # Genius Impl Plans
