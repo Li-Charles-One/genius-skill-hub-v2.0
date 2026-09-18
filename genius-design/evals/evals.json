@@ -172,6 +172,16 @@
       ]
     },
     {
+      "id": "fetch-store-fallback",
+      "prompt": "按 GitHub 风格出 DESIGN.md，VoltAgent 没有就用 designmd-store",
+      "trigger_expected": true,
+      "expected_output": "Runs fetch_design_md.py github ./DESIGN.md; VoltAgent miss falls back to Design.md Store pack download.",
+      "files": ["scripts/fetch_design_md.py"],
+      "assertions": [
+        {"type": "contains", "value": "designmd-store"}
+      ]
+    },
+    {
       "id": "anti-slop-structure-honesty",
       "prompt": "给这个新 SaaS 出 DESIGN.md，不要写成 AI 默认落地页",
       "trigger_expected": true,

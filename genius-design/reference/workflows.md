@@ -27,9 +27,11 @@ python scripts/fetch_design_md.py <brand> ./DESIGN.md
 python3 scripts/fetch_design_md.py <brand> ./DESIGN.md
 ```
 
-`python scripts/fetch_design_md.py --list` prints all 73 slugs plus aliases (`linear` -> `linear.app`, `xai` -> `x.ai`, `opencode` -> `opencode.ai`).
+`python scripts/fetch_design_md.py --list` prints VoltAgent slugs plus live Design.md Store pack slugs. Aliases: `linear` -> `linear.app`, `xai` -> `x.ai`, `opencode` -> `opencode.ai`.
 
-Do not hand-curl unless the script cannot run. Templates: `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/<slug>/DESIGN.md`.
+Default fetch order: VoltAgent, then Design.md Store pack page -> `/api/download/<uuid>`. Pin with `--source voltagent` or `--source store`. Store-only brands (GitHub, Netflix, IKEA, ...) skip VoltAgent and come from the store.
+
+Do not hand-curl unless the script cannot run. Templates: `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/<slug>/DESIGN.md` and `https://designmd-store.com/packs/<slug>`.
 
 ### Step A3: Infer Customizations
 

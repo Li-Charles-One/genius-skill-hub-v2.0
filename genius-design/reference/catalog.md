@@ -59,5 +59,9 @@ Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alter
 
 ## Fallback Strategy
 
-Source: `python scripts/fetch_design_md.py <brand> ./DESIGN.md` pulls from `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md`. `fetch_design_md.py --list` is the slug source of truth (73). Aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Once a DESIGN.md is in the project root, it has zero external dependencies.
+Primary: `python scripts/fetch_design_md.py <brand> ./DESIGN.md` pulls from `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md`.
+
+Second source: the same script falls back to [Design.md Store](https://designmd-store.com/packs) (unofficial inspired packs, not brand-official). `fetch_design_md.py --list` prints both catalogs. Pin with `--source voltagent` or `--source store`.
+
+VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Once a DESIGN.md is in the project root, it has zero external dependencies. Both sources are snapshots; they can lag the live brand site.
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fetch a DESIGN.md from VoltAgent/awesome-design-md."""
+"""Fetch a DESIGN.md from VoltAgent/awesome-design-md, with Design.md Store as fallback."""
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -7,6 +8,13 @@ from pathlib import Path
 from typing import Optional
 
 SOURCE_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md"
+STORE_PACK_URL = "https://designmd-store.com/packs"
+STORE_SITEMAP_URL = "https://designmd-store.com/sitemap.xml"
+USER_AGENT = "genius-design/2.3"
+DOWNLOAD_RE = re.compile(r"/api/download/([0-9a-f-]{36})", re.I)
+SITEMAP_PACK_RE = re.compile(
+    r"https://designmd-store\.com/packs/([a-z0-9-]+)", re.I
+)
 
 SLUGS = {
     "airbnb",
@@ -105,6 +113,19 @@ ALIASES = {
     "xiai": "x.ai",
 }
 
+STORE_ALIASES = {
+    "booking.com": "booking",
+    "bookingcom": "booking",
+    "disney+": "disneyplus",
+    "disney-plus": "disneyplus",
+    "new-york-times": "nytimes",
+    "ny-times": "nytimes",
+    "next.js": "nextjs",
+    "next-js": "nextjs",
+    "tailwind": "tailwindcss",
+    "the-verge": "theverge",
+}
+
 
 def normalize(brand: str) -> str:
     return brand.strip().lower().replace(" ", "-").replace("_", "-")
@@ -119,6 +140,19 @@ def resolve_slug(brand: str) -> str:
     return key
 
 
+def store_slug(brand: str) -> str:
+    key = normalize(brand)
+    if key in STORE_ALIASES:
+        return STORE_ALIASES[key]
+    if key in ALIASES:
+        key = ALIASES[key]
+    for suffix in (".app", ".ai", ".com"):
+        if key.endswith(suffix):
+            key = key[: -len(suffix)]
+            break
+    return key
+
+
 def looks_like_design_md(text: str) -> bool:
     start = text.lstrip()
     if start.startswith("<!DOCTYPE") or start[:20].lower().startswith("<html"):
@@ -126,17 +160,41 @@ def looks_like_design_md(text: str) -> bool:
     return start.startswith("---") or start.startswith("#")
 
 
-def download(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "genius-design/2.1"})
+def http_get(url: str) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=20) as response:
         status = getattr(response, "status", 200)
         if status >= 400:
             raise OSError(f"HTTP {status}")
-        data = response.read()
+        return response.read()
+
+
+def download_design_md(url: str) -> bytes:
+    data = http_get(url)
     text = data.decode("utf-8", errors="replace")
     if not looks_like_design_md(text):
         raise OSError("response is not a DESIGN.md")
     return data
+
+
+def fetch_voltagent(slug: str) -> bytes:
+    return download_design_md(f"{SOURCE_URL}/{slug}/DESIGN.md")
+
+
+def fetch_store(slug: str) -> bytes:
+    html = http_get(f"{STORE_PACK_URL}/{slug}").decode("utf-8", errors="replace")
+    match = DOWNLOAD_RE.search(html)
+    if not match:
+        raise OSError("pack page has no /api/download UUID")
+    return download_design_md(
+        f"https://designmd-store.com/api/download/{match.group(1)}"
+    )
+
+
+def list_store_packs() -> list[str]:
+    xml = http_get(STORE_SITEMAP_URL).decode("utf-8", errors="replace")
+    slugs = sorted(set(SITEMAP_PACK_RE.findall(xml)))
+    return slugs
 
 
 def backup_if_exists(path: Path) -> Optional[Path]:
@@ -147,38 +205,89 @@ def backup_if_exists(path: Path) -> Optional[Path]:
     return backup
 
 
-def fetch(brand: str, output: str = "DESIGN.md") -> None:
-    slug = resolve_slug(brand)
-    url = f"{SOURCE_URL}/{slug}/DESIGN.md"
-    try:
-        data = download(url)
-    except (OSError, urllib.error.URLError, TimeoutError) as error:
-        print(f"Failed to fetch '{brand}' (slug={slug}) from {url}: {error}")
+def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
+    vt_slug = resolve_slug(brand)
+    st_slug = store_slug(brand)
+    errors = []
+    data = None
+    used = None
+    used_slug = None
+
+    try_voltagent = source in ("auto", "voltagent")
+    try_store = source in ("auto", "store")
+
+    if try_voltagent:
+        try:
+            data = fetch_voltagent(vt_slug)
+            used = "voltagent"
+            used_slug = vt_slug
+        except (OSError, urllib.error.URLError, TimeoutError) as error:
+            errors.append(f"voltagent {vt_slug}: {error}")
+            if source == "voltagent":
+                print(f"Failed to fetch '{brand}' from VoltAgent: {error}")
+                sys.exit(1)
+
+    if data is None and try_store:
+        try:
+            data = fetch_store(st_slug)
+            used = "designmd-store"
+            used_slug = st_slug
+        except (OSError, urllib.error.URLError, TimeoutError) as error:
+            errors.append(f"store {st_slug}: {error}")
+
+    if data is None:
+        detail = "; ".join(errors) if errors else "unknown error"
+        print(f"Failed to fetch '{brand}': {detail}")
         sys.exit(1)
+
     dest = Path(output)
     dest.parent.mkdir(parents=True, exist_ok=True)
     backup = backup_if_exists(dest)
     dest.write_bytes(data)
     extra = f"; backed up {backup}" if backup else ""
-    print(f"Downloaded {brand} ({slug}) -> {dest} ({len(data)} bytes){extra}")
+    print(
+        f"Downloaded {brand} ({used_slug}) from {used} -> {dest} "
+        f"({len(data)} bytes){extra}"
+    )
 
 
 def list_brands() -> None:
-    print(f"Available brands ({len(SLUGS)}):")
+    print(f"VoltAgent brands ({len(SLUGS)}):")
     for slug in sorted(SLUGS):
         print(f"  - {slug}")
-    print("Aliases:")
+    print("VoltAgent aliases:")
     for alias, slug in sorted(ALIASES.items()):
         if alias != slug:
             print(f"  - {alias} -> {slug}")
+    try:
+        store = list_store_packs()
+    except (OSError, urllib.error.URLError, TimeoutError) as error:
+        print(f"Design.md Store packs: unavailable ({error})")
+        return
+    print(f"Design.md Store packs ({len(store)}):")
+    for slug in store:
+        print(f"  - {slug}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help"):
         print("Usage: fetch_design_md.py <brand> [output_path]")
+        print("       fetch_design_md.py --source voltagent|store <brand> [output_path]")
         print("       fetch_design_md.py --list")
         sys.exit(0)
-    if sys.argv[1] == "--list":
+    source = "auto"
+    if "--source" in args:
+        index = args.index("--source")
+        if index + 1 >= len(args) or args[index + 1] not in ("auto", "voltagent", "store"):
+            print("Usage: --source voltagent|store")
+            sys.exit(2)
+        source = args[index + 1]
+        del args[index : index + 2]
+    if not args:
+        print("Usage: fetch_design_md.py <brand> [output_path]")
+        sys.exit(2)
+    if args[0] == "--list":
         list_brands()
     else:
-        fetch(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "DESIGN.md")
+        fetch(args[0], args[1] if len(args) > 1 else "DESIGN.md", source=source)
