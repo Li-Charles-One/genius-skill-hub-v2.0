@@ -196,6 +196,19 @@ def main(argv: list[str] | None = None) -> int:
         proc = run(io_script, [str(VALID), str(VALID)], cwd=foreign)
         ok("commit same path", proc.returncode != 0, proc.stderr)
 
+        dest_dir = workspace / "as-dir" / "DESIGN.md"
+        dest_dir.parent.mkdir(parents=True, exist_ok=True)
+        dest_dir.mkdir()
+        proc = run(io_script, [str(VALID), str(dest_dir)], cwd=foreign)
+        dest_dir_err = proc.stderr + proc.stdout
+        ok(
+            "commit dest is directory",
+            proc.returncode != 0
+            and "not a file" in dest_dir_err.lower()
+            and "Traceback" not in dest_dir_err,
+            dest_dir_err,
+        )
+
         dest.write_text("ORIGINAL", encoding="utf-8")
         proc = run(io_script, [str(INVALID), str(dest)], cwd=foreign)
         ok(
@@ -254,10 +267,16 @@ def main(argv: list[str] | None = None) -> int:
             and row.get("selector") == "main h1"
             and row.get("state") == "default"
         ]
+        counts = cap.get("color_counts", {})
         ok(
             "extract computed capture",
             proc.returncode == 0 and computed and isinstance(computed[0].get("viewport"), dict),
             proc.stdout[:500],
+        )
+        ok(
+            "extract computed color_counts",
+            "rgb(35, 32, 28)" in counts and "rgb(47, 92, 246)" in counts,
+            str(counts),
         )
 
         html = workspace / "page.html"
@@ -307,6 +326,24 @@ def main(argv: list[str] | None = None) -> int:
 
         proc = run(extract, [str(workspace / "nope.css")], cwd=foreign)
         ok("extract missing file", proc.returncode == 1, proc.stderr)
+
+        dup_h2 = workspace / "dup-h2.md"
+        dup_h2.write_text(
+            MINIMAL.read_text(encoding="utf-8").replace(
+                "## Components",
+                "## Colors\n"
+                + ("Duplicate color heading content " * 8)
+                + "\n\n## Components",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        proc = run(lint, [str(dup_h2)], cwd=foreign)
+        ok(
+            "lint duplicate H2",
+            proc.returncode == 1 and "duplicate heading ## Colors" in proc.stdout,
+            proc.stdout + proc.stderr,
+        )
 
         hyphen = workspace / "hyphen-placeholder.md"
         hyphen.write_text(

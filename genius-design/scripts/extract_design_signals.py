@@ -455,7 +455,7 @@ def scan_computed(scan: Scan, data: dict[str, Any], *, file: str) -> None:
                 state=el_state,
             )
             if prop in COLOR_PROPS or COLOR_TOKEN.search(value):
-                scan.add_colors_from(value, count=False)
+                scan.add_colors_from(value, count=True)
 
 
 def looks_like_html(text: str) -> bool:
@@ -525,7 +525,8 @@ def limitations(scan: Scan) -> list[str]:
         "Unresolved var(...) values are not expanded.",
         "External stylesheets are listed but not fetched unless passed as another file argument.",
         "Cascade, specificity, and media/container queries are not resolved.",
-        "Color frequencies count candidate occurrences, not visual prominence.",
+        "Color frequencies count candidate occurrences from CSS, HTML, and computed-style inputs, not visual prominence.",
+        "Passing both CSS/HTML source and computed-style captures may double-count the same color.",
     ]
     if not scan.saw_hover:
         notes.append("No hover/focus/active state was present in the input.")

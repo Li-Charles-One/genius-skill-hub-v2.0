@@ -39,11 +39,13 @@ When an available browser tool can collect computed styles, save this JSON struc
 
 Record additional states/viewport captures separately. Never fabricate captures to fill missing data. `evals/fixtures/capture.json` is synthetic test data, not a real-site observation.
 
+If a browser tool can evaluate computed styles, write this JSON yourself: pick real selectors from the page, record `getComputedStyle` values plus viewport and state, save as a staging file, then run the extractor. Do not install extra page-readers. If that JSON cannot be produced, extract HTML/CSS only and list unmeasured visual tokens in `unknowns`.
+
 ## Source Extraction
 
 The bundled extractor reads CSS, inline/style-block HTML, and page exports with `rawHtml`, `html`, `markdown` or a nested `data` object. It excludes script bodies and unrelated JSON metadata. Markdown/prose alone does not become CSS evidence.
 
-Output is structured JSON with source-labelled signals, external stylesheet references, candidate color counts and limitations. Signals include typography, layout, spacing, radius, shadows, motion and custom properties where present. Modern color syntax and unresolved `var(...)` values remain intact.
+Output is structured JSON with source-labelled signals, external stylesheet references, candidate color counts and limitations. Computed-style colors are included in `color_counts`; passing both CSS/HTML source and computed captures may double-count the same color. Signals include typography, layout, spacing, radius, shadows, motion and custom properties where present. Modern color syntax and unresolved `var(...)` values remain intact.
 
 This is deliberately a lightweight declaration scanner, not a full CSS parser. It does not resolve cascade, specificity, media/container queries, imports or variable values. Color frequencies count candidate occurrences, not visual prominence. Nested functional colors may require direct inspection. Follow external CSS only when useful and permitted; do not claim all styles were captured.
 

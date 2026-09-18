@@ -59,7 +59,7 @@ Each of these exact level-two headings needs substantive content. This is the su
 5. Layout
 6. Components
 
-A core-only document with these six headings can pass lint. Missing or empty required sections FAIL.
+A core-only document with these six headings can pass lint. Missing, empty, or duplicate required sections FAIL. Duplicate level-two headings FAIL.
 
 ## Optional Markdown Sections
 
@@ -97,7 +97,7 @@ Notes:
 
 ## Validation Boundary
 
-FAIL: malformed/duplicate-key YAML, unsupported schema, missing or wrongly typed required fields, illegal dial values, unresolved required markers, incomplete required tokens/components/evidence/required sections, or an incomplete Pre-Ship Checklist *if that section is present*. Missing optional sections are not FAILs. Do not treat all 14 headings as mandatory.
+FAIL: malformed/duplicate-key YAML, unsupported schema, missing or wrongly typed required fields, illegal dial values, unresolved required markers, incomplete required tokens/components/evidence/required sections, duplicate level-two headings, or an incomplete Pre-Ship Checklist *if that section is present*. Missing optional sections are not FAILs. Do not treat all 14 headings as mandatory.
 
 WARN: explicit unknown tokens/evidence, unresolved checklist items, omitted Accessibility, or high `MOTION_INTENSITY` without a Motion section. Review and disclose these; do not silently treat them as completed work.
 

@@ -1,6 +1,6 @@
 # DESIGN.md Template
 
-Copy the skeleton into a staged candidate. Replace active `TODO` fields. The template does not pass lint until filled. Prose may use the user's language; keep contract keys and H2 names stable. Working fixture: `evals/fixtures/valid-design.md`.
+Copy the skeleton into a staged candidate. Replace every `TODO`, including dial integers, with values from this brief. The template does not pass lint until filled. Prose may use the user's language; keep contract keys and H2 names stable. `evals/fixtures/valid-design.md` is a linter gold file for a literary-press brief — do not copy its voice or palette unless this project is that product.
 
 Required H2s: Design Read, Colors, Typography, Spacing and Shape, Layout, Components. Omit optional H2s when they have nothing to add. YAML rules: `references/output-contract.md`.
 
@@ -15,9 +15,9 @@ scope:
   audience: TODO
   themes: [light] # Only requested/justified themes
 dial_values:
-  DESIGN_VARIANCE: 4
-  MOTION_INTENSITY: 2
-  VISUAL_DENSITY: 5
+  DESIGN_VARIANCE: TODO # integer 1-10 from this brief
+  MOTION_INTENSITY: TODO
+  VISUAL_DENSITY: TODO
 layout:
   rhythm: TODO
   regions: [TODO, TODO]
@@ -46,7 +46,7 @@ tokens:
 components:
   button:
     interactive: true
-    states: [default, hover, focus-visible, active, disabled]
+    states: [default, focus-visible] # add hover/disabled/etc only if they apply
 evidence:
   - id: direction
     kind: Recommended

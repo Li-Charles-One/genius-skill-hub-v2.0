@@ -99,13 +99,29 @@ def main(argv: list[str] | None = None) -> int:
     if not candidate.is_file():
         print(f"Candidate not found: {candidate}", file=sys.stderr)
         return 1
+    if destination.exists() and not destination.is_file():
+        print(
+            f"Destination exists and is not a file: {destination}",
+            file=sys.stderr,
+        )
+        return 1
 
     lint_code = _lint_candidate(candidate)
     if lint_code != 0:
         return lint_code if lint_code > 0 else 1
 
-    backup = unique_backup(destination)
-    atomic_replace(candidate, destination)
+    backup = None
+    try:
+        backup = unique_backup(destination)
+        atomic_replace(candidate, destination)
+    except OSError as exc:
+        if backup is not None:
+            try:
+                backup.unlink(missing_ok=True)
+            except OSError:
+                pass
+        print(f"Failed to write destination: {exc}", file=sys.stderr)
+        return 1
     print(destination.resolve())
     if backup is not None:
         print(backup.resolve())

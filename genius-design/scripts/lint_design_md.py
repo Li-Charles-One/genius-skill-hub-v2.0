@@ -163,15 +163,20 @@ def split_frontmatter(text: str) -> tuple[str | None, str]:
     return None, text
 
 
-def _h2_sections(body: str) -> dict[str, str]:
+def _h2_sections(body: str) -> tuple[dict[str, str], list[str]]:
     matches = list(H2_RE.finditer(body))
     sections: dict[str, str] = {}
+    duplicates: list[str] = []
     for index, match in enumerate(matches):
         title = match.group(1).strip()
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
-        sections.setdefault(title, body[start:end])
-    return sections
+        if title in sections:
+            if title not in duplicates:
+                duplicates.append(title)
+            continue
+        sections[title] = body[start:end]
+    return sections, duplicates
 
 
 def _is_unknown_token(value) -> bool:
@@ -422,7 +427,9 @@ def _check_frontmatter(data, fails, warns) -> int | None:
 
 
 def _check_sections(body: str, fails, warns, motion_intensity: int | None = None) -> None:
-    sections = _h2_sections(body)
+    sections, duplicates = _h2_sections(body)
+    for title in duplicates:
+        fails.append(f"duplicate heading ## {title}")
     for title in REQUIRED_H2:
         if title not in sections:
             fails.append(f"missing required heading ## {title}")

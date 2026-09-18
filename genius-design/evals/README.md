@@ -8,9 +8,13 @@ Two layers. Do not treat one as the other.
 python -B "<skill-root>/scripts/test_design_tools.py"
 ```
 
+```bash
+python3 -B "<skill-root>/scripts/test_design_tools.py"
+```
+
 Offline. Also runs `evals/evals.json` corpus assertions. A green suite does **not** prove a generated DESIGN.md is good.
 
-Covered: contract lint (including cream/serif/Inter allowed), `design_io.py` backups, staging safety, core-only H2s, extractor vs script/metadata.
+Covered: contract lint (including cream/serif/Inter allowed, duplicate H2 fail), `design_io.py` backups and non-file destination, staging safety, core-only H2s, extractor vs script/metadata, computed-style `color_counts`.
 
 ## Trigger corpus
 

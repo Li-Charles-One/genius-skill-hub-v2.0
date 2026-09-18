@@ -8,9 +8,9 @@ scope:
   audience: TODO
   themes: [light]
 dial_values:
-  DESIGN_VARIANCE: 4
-  MOTION_INTENSITY: 2
-  VISUAL_DENSITY: 5
+  DESIGN_VARIANCE: TODO
+  MOTION_INTENSITY: TODO
+  VISUAL_DENSITY: TODO
 layout:
   rhythm: TODO
   regions: [TODO, TODO]
@@ -39,7 +39,7 @@ tokens:
 components:
   button:
     interactive: true
-    states: [default, hover, focus-visible, active, disabled]
+    states: [default, focus-visible]
 evidence:
   - id: direction
     kind: Recommended

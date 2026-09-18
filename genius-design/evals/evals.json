@@ -15,7 +15,7 @@
       "id": "trigger-reverse-url",
       "prompt": "逆向 https://stripe.com 的设计规范",
       "trigger_expected": true,
-      "expected_output": "Workflow B: collect URL evidence, run extract_design_signals.py (not grep -P), stage, then commit via design_io.py. Do not draft directly onto DESIGN.md.",
+      "expected_output": "Workflow B: collect URL evidence per evidence.md, run extract_design_signals.py (not grep -P), stage, then commit via design_io.py. Do not draft directly onto DESIGN.md.",
       "files": ["SKILL.md", "scripts/extract_design_signals.py"],
       "assertions": [
         {"type": "contains", "value": "Reverse-Engineer"},
@@ -27,20 +27,12 @@
       "id": "trigger-linear-style",
       "prompt": "按 Linear 风格做品牌设计系统",
       "trigger_expected": true,
-      "expected_output": "Workflow A: lookup 73 brands catalog (references/brands.md), read Linear reference via webfetch or infer directly, stage candidate, then commit via design_io.py.",
+      "expected_output": "Workflow A: lookup brand catalog (references/brands.md). Fetch Linear snapshot as catalog evidence, not the candidate. Translate into contract v1, or infer if fetch fails. The catalog is an index, not a mandatory style.",
       "files": ["references/brands.md"],
       "assertions": [
-        {"type": "contains", "value": "linear.app"}
-      ]
-    },
-    {
-      "id": "trigger-catalog-pick",
-      "prompt": "从目录里推荐一个品牌风格",
-      "trigger_expected": true,
-      "expected_output": "Treat 73-brand list as reference index, not a mandatory constraint. If comparing 2-3 brand traits, explain why each trait fits THIS brief. Brand identity is not the design answer.",
-      "files": ["references/brands.md"],
-      "assertions": [
-        {"type": "contains", "value": "VoltAgent"}
+        {"type": "contains", "value": "linear.app"},
+        {"type": "contains", "value": "not the candidate"},
+        {"type": "not_contains", "value": "webfetch"}
       ]
     },
     {
@@ -117,14 +109,16 @@
       ]
     },
     {
-      "id": "staging-safe",
-      "prompt": "把 Linear 规范直接写到 destination 还是 staging",
+      "id": "overwrite-backup",
+      "prompt": "覆盖现有 DESIGN.md，换成 Notion 风",
       "trigger_expected": true,
-      "expected_output": "Refuse direct destination overwrite. Staged drafting must never draft directly over destination DESIGN.md. Commit only via design_io.py.",
-      "files": ["SKILL.md"],
+      "expected_output": "Warn about replacing DESIGN.md. Staged drafting must never draft directly over the destination. Commit only through design_io.py with unique .bak/.bak.1 backups.",
+      "files": ["SKILL.md", "scripts/design_io.py"],
       "assertions": [
         {"type": "contains", "value": "staging"},
-        {"type": "contains", "value": "never draft directly over the destination"}
+        {"type": "contains", "value": "never draft directly over the destination"},
+        {"type": "contains", "value": ".bak"},
+        {"type": "contains", "value": "design_io.py"}
       ]
     },
     {
@@ -138,53 +132,24 @@
       ]
     },
     {
-      "id": "lint-core-only",
-      "prompt": "DESIGN.md 能不能只写 tokens、节奏和组件状态",
-      "trigger_expected": true,
-      "expected_output": "Required H2 are Design Read, Colors, Typography, Spacing and Shape, Layout, Components. Motion, Imagery, and the checklist are optional when they do not apply. Lint the staged candidate and resolve every FAIL before design_io.py.",
-      "files": ["scripts/lint_design_md.py"],
-      "assertions": [
-        {"type": "contains", "value": "Lint DESIGN.md"},
-        {"type": "contains", "value": "REQUIRED_H2"},
-        {"type": "contains", "value": "Design Read"},
-        {"type": "contains", "value": "Spacing and Shape"},
-        {"type": "contains", "value": "Components"},
-        {"type": "contains", "value": "OPTIONAL_H2"}
-      ]
-    },
-    {
-      "id": "overwrite-backup",
-      "prompt": "覆盖现有 DESIGN.md，换成 Notion 风",
-      "trigger_expected": true,
-      "expected_output": "Warn about replacing DESIGN.md. Never overwrite directly without staging. Commit only through design_io.py with unique .bak/.bak.1 backups. Do not copy over the destination by hand.",
-      "files": ["SKILL.md", "scripts/design_io.py", "scripts/test_design_tools.py"],
-      "assertions": [
-        {"type": "contains", "value": ".bak"},
-        {"type": "contains", "value": "design_io.py"},
-        {"type": "file_exists", "path": "scripts/design_io.py"},
-        {"type": "file_exists", "path": "scripts/test_design_tools.py"}
-      ]
-    },
-    {
       "id": "brand-fidelity-heritage",
       "prompt": "我们是文学出版社，品牌是米色纸、衬线标题、酒红和黄铜两个强调色、刊名居中。出一份 DESIGN.md。",
       "trigger_expected": true,
       "expected_output": "Preserve cream paper, serif headings, two accents, and a centered masthead. Do not rewrite to Inter/cool gray.",
       "files": ["SKILL.md", "references/refusals.md", "evals/fixtures/valid-design.md"],
       "assertions": [
-        {"type": "contains", "value": "#f5f1ea"},
-        {"type": "file_exists", "path": "evals/fixtures/valid-design.md"}
+        {"type": "contains", "value": "#f5f1ea"}
       ]
     },
     {
       "id": "reverse-evidence-labels",
       "prompt": "根据这段 HTML/CSS 和一份 computed-style JSON 逆向 DESIGN.md。hover 和移动端没测到。",
       "trigger_expected": true,
-      "expected_output": "Run extract_design_signals.py. Label Observed/Inferred/Recommended. Unknown hover/mobile/motion stay unknown.",
+      "expected_output": "Run extract_design_signals.py. Label Observed/Inferred/Recommended. Unknown hover/mobile/motion stay unknown. Do not invent a capture.json.",
       "files": ["references/evidence.md", "scripts/extract_design_signals.py", "evals/fixtures/capture.json"],
       "assertions": [
         {"type": "contains", "value": "Observed"},
-        {"type": "file_exists", "path": "evals/fixtures/capture.json"}
+        {"type": "contains", "value": "color_counts"}
       ]
     }
   ]
