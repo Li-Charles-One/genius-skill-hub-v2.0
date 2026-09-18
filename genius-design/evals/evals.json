@@ -172,6 +172,16 @@
       ]
     },
     {
+      "id": "anti-slop-structure-honesty",
+      "prompt": "给这个新 SaaS 出 DESIGN.md，不要写成 AI 默认落地页",
+      "trigger_expected": true,
+      "expected_output": "Names a page rhythm/macrostructure other than hero-3-cards-CTA-footer; includes honesty rules against invented metrics and hanging headers.",
+      "files": ["reference/refusals.md", "reference/anti-patterns.md"],
+      "assertions": [
+        {"type": "contains", "value": "macrostructure"}
+      ]
+    },
+    {
       "id": "lint-before-deliver",
       "prompt": "DESIGN.md 写好了，可以直接用了吗",
       "trigger_expected": true,

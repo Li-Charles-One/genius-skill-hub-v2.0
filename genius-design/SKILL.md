@@ -3,15 +3,15 @@ name: genius-design
 description: "生成工业级 DESIGN.md 品牌设计规范与 UI 系统：支持反审美疲劳规则、主流网站逆向推演及品牌模板推断。不要用于营销文案撰写或图片/视频资产生成（生成用 dreamina-cli）。"
 license: Apache-2.0
 metadata:
-  version: "2.1.1"
+  version: "2.2.0"
   hermes:
     tags: [design-system, brand, DESIGN.md, anti-slop, frontend, UI, landing-page, template, reverse-engineer]
-    related_skills: [taste-skill, impeccable]
+    related_skills: [taste-skill, impeccable, hallmark]
 ---
 
 # Genius Design
 
-Produce a rich, anti-slop `DESIGN.md` an agent can follow. Every file needs: brief inference, three-dial values, semantic tokens, category anti-patterns, refusal rules, and the 12-item pre-ship checklist.
+Produce a rich, anti-slop `DESIGN.md` an agent can follow. Every file needs: brief inference, three-dial values, a named page rhythm, semantic tokens, honesty rules (no invented metrics), category anti-patterns, refusal rules, and the 12-item pre-ship checklist.
 
 ## Brief Inference (all workflows)
 
@@ -49,7 +49,7 @@ Brand list, font substitutions, selection guide: `reference/catalog.md`. Refusal
 
 ## Delivery
 
-A delivered `DESIGN.md` must include: Design Read, the three dials, semantic color/type/spacing tokens, component guidance, category anti-patterns, refusal rules, accessibility constraints, the 12-item pre-ship checklist, and source/inference notes. For reverse-engineering, label claims as `Observed`, `Inferred`, or `Recommended`; never present inference as a site fact.
+A delivered `DESIGN.md` must include: Design Read, the three dials, a named page rhythm (not the unnamed hero / 3-cards / CTA / footer default), semantic color/type/spacing tokens, component guidance, honesty rules, category anti-patterns, refusal rules, accessibility constraints, the 12-item pre-ship checklist, and source/inference notes. For reverse-engineering, label claims as `Observed`, `Inferred`, or `Recommended`; never present inference as a site fact.
 
 Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. If `./DESIGN.md` already exists, never silently overwrite an existing `.bak`; use a distinct backup path or stop for confirmation. If lint still fails, report the failure and do not claim delivery. Then tell the user: key decisions (color, type, vibe, dials), save path `./DESIGN.md`, what was inferred, what they may override.
 
@@ -57,7 +57,8 @@ Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. If `./DES
 
 - One official design system per project. Do not mix Fluent with Carbon.
 - Do not invent DESIGN.md tokens that recreate a system you should have installed.
-- This skill writes DESIGN.md. It does not write marketing copy or generate images.
+- This skill writes DESIGN.md. It does not write marketing copy, generate images, or build UI. Use Hallmark only when the user asked to implement a page.
+- Two pages that share this system may share tokens. They must not share the same unnamed section order.
 - Use the bundled Python scripts. Do not use `grep -P` (not portable on Windows).
 - Fetch talks to https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md
 

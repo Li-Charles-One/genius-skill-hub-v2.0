@@ -48,6 +48,14 @@ def lint(text: str):
         fails.append("missing Pre-Ship Checklist")
     if not re.search(r"DESIGN_VARIANCE|dial_values", text):
         fails.append("missing dial values")
+    if not re.search(r"macrostructure|page[_ ]rhythm", text, re.I):
+        fails.append("missing named page rhythm / macrostructure")
+    if not re.search(
+        r"invented metric|fake testimonial|honest copy|fabricated (stat|metric|proof)|metric to confirm",
+        text,
+        re.I,
+    ):
+        fails.append("missing honesty / no-invented-metrics rule")
     lower = text.lower()
     cream = [hex_value for hex_value in CREAM_HEX if hex_value in lower]
     if cream:

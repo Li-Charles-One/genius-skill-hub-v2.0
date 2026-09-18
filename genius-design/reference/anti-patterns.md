@@ -1,8 +1,17 @@
 # Anti-Patterns by Brand Category
 
-When generating a DESIGN.md, inject 3-5 category-specific warnings into the "Anti-Patterns for This Brand" section. Each warning follows the format:
+When generating a DESIGN.md, inject the Universal warnings first, then 3-5 category-specific warnings into the "Anti-Patterns for This Brand" section. Each warning follows the format:
 
 `**<title>**: <what the AI does wrong> → <what to do instead>.`
+
+## Universal (every DESIGN.md)
+
+Inject all four. These are the highest-frequency AI tells; category warnings do not replace them.
+
+1. **Default landing rhythm**: Hero, then three equal feature cards, then logos, then a CTA band, then footer. Name a page rhythm and use a different section order unless that sequence is the named rhythm.
+2. **Invented social proof**: "+47% conversion", "trusted by 50,000+ teams", fake testimonials, fake logos. Use user-supplied numbers, a labelled placeholder, or drop the proof slot.
+3. **Italic headers / hanging tags**: Italic display headings, or `01 THE TOUR` in a left column beside the title. Headings stay roman; eyebrows stack above the heading in one column, default OFF.
+4. **Re-drawn chrome**: Fake browser bars, phone notches, IDE title dots around a mockup. Real screenshot in a figure, or no frame.
 
 ## Category: AI & LLM (Claude, OpenAI-style, ElevenLabs, Mistral, xAI...)
 

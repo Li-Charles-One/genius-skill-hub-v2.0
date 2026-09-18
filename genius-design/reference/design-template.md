@@ -68,8 +68,9 @@ typography:
   serif_discipline:
     allowed_only_when: "brand brief names a serif OR genuinely editorial/luxury/heritage"
     default_choice: "sans-serif display (Geist Display, Söhne Breit, Cabinet Grotesk Display)"
-    emphasis_rule: "italic or bold of SAME font. Never mixed-family emphasis."
-  italic_descender_rule: "leading-[1.1] min + pb-1 reserve for y/g/j/p/q in display italic"
+    emphasis_rule: "weight, accent color, or underline of SAME font. Never mixed-family emphasis. Never italic inside a heading."
+  heading_style: "roman (font-style: normal). Italic only in body copy."
+  italic_descender_rule: "if body italic is used: leading-[1.1] min + pb-1 reserve for y/g/j/p/q"
   no_all_caps_body: true
 
 # ── SHAPE & ELEVATION ───────────────────────────────
@@ -106,9 +107,15 @@ layout:
     text_elements: "max 4 (eyebrow OR brand strip + headline + subtext + CTAs)"
     cta_visible: "without scroll"
     font_scale: "text-4xl md:text-5xl lg:text-6xl for most heroes"
+  page_rhythm:
+    named_macrostructure: "<one named structure; never leave unnamed>"
+    forbidden_default: "hero then 3-feature grid then logo wall then CTA band then footer"
+    variety_rule: "pages may share tokens; they must not share the same unnamed section order"
   forbidden:
     - "centered hero when DESIGN_VARIANCE > 4"
     - "3 equal feature cards in a row"
+    - "unnamed hero / 3-cards / CTA / footer landing rhythm"
+    - "hanging header (tag-left, heading-right)"
     - "zigzag image+text alternation beyond 2 consecutive sections"
     - "eyebrow on more than ceil(sections/3) sections"
     - "split-header (left headline + right explainer) as default"
@@ -121,6 +128,7 @@ components:
     padding: "px-6 py-3"
     label_rule: "verb + object, max 3 words, fits one line"
     contrast: "WCAG AA 4.5:1 text vs bg"
+    states: "default, hover, focus-visible, active, disabled, loading, error, success"
     active: "scale-[0.98] or -translate-y-[1px]"
     no_duplicate_intent: "one label per CTA intent across the page"
   inputs:
@@ -152,11 +160,16 @@ imagery:
   priority: "gen-tool → Picsum seed → explicit placeholder slots"
   minimum: "2-3 real images even for minimalist sites"
   logo_source: "Simple Icons CDN (https://cdn.simpleicons.org/{slug}/ffffff)"
+  honesty:
+    metrics: "user-supplied or labelled placeholder; never invent conversion %, user counts, or speed-up multiples"
+    social_proof: "no fake testimonials, logos, or case-study counts"
   forbidden:
     - "div-based fake screenshots"
+    - "re-drawn browser / phone / IDE chrome"
     - "hand-rolled decorative SVGs"
     - "text + gradient blob as hero"
-    - "fake-engineering-precise numbers (92%, 4.1×, 48k without real data)"
+    - "fake-engineering-precise numbers (92%, 4.1x, 48k without real data)"
+    - "invented testimonials or logo walls"
 
 # ── DARK MODE ────────────────────────────────────────
 dark_mode:
@@ -198,22 +211,22 @@ Document the corner-radius scale and shadow scale. Include the shape consistency
 Document the spacing scale. Include hero top padding cap.
 
 ### Layout
-Document max-width container, breakpoints, and specific layout constraints. Include the hero discipline rules.
+Document max-width container, breakpoints, the named page rhythm / macrostructure, and specific layout constraints. Include the hero discipline rules and the ban on hanging section heads.
 
 ### Components
-For each component family (buttons, inputs, cards, nav, logo wall): states, variants, constraints, and common mistakes.
+For each component family (buttons, inputs, cards, nav, logo wall): the eight interactive states, variants, constraints, and common mistakes.
 
 ### Motion
 Document the motion intensity, easing curve, reduced-motion policy, and forbidden animation patterns.
 
 ### Imagery
-Document the image strategy, logo sources, placeholder URLs, and banned visual patterns.
+Document the image strategy, logo sources, placeholder URLs, honesty rules for metrics, and banned visual patterns (including re-drawn chrome).
 
 ### Do's and Don'ts
 5-10 concrete guardrails derived from this specific brand's patterns, not generic advice.
 
 ### Anti-Patterns for This Brand
-3-5 brand-specific warnings about what AI most commonly gets wrong with this style. These vary by brand category. See `reference/anti-patterns.md` for mappings.
+Universal slop warnings first (default landing rhythm, invented social proof, italic/hanging headers, re-drawn chrome), then 3-5 brand-specific warnings. See `reference/anti-patterns.md`.
 
 ### Pre-Ship Checklist
 The 12-item quality gate that must pass before the design is considered done.
