@@ -61,7 +61,7 @@ Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alter
 
 Primary: `python scripts/fetch_design_md.py <brand> ./DESIGN.md` pulls from `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md`.
 
-Second source: the same script falls back to [Design.md Store](https://designmd-store.com/packs) (unofficial inspired packs, not brand-official). `fetch_design_md.py --list` prints both catalogs. Pin with `--source voltagent` or `--source store`.
+Second source: [Design.md Store](https://designmd-store.com/packs). Third source: [Refero Styles](https://styles.refero.design) (`/api/styles`; the script writes a DESIGN.md from JSON because Refero has no file download). `fetch_design_md.py --list` prints all three. Pin with `--source voltagent`, `--source store`, or `--source refero`.
 
-VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Once a DESIGN.md is in the project root, it has zero external dependencies. Both sources are snapshots; they can lag the live brand site.
+VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Once a DESIGN.md is in the project root, it has zero external dependencies. All three sources are unofficial snapshots; they can lag the live brand site.
 

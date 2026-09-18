@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Fetch a DESIGN.md from VoltAgent/awesome-design-md, with Design.md Store as fallback."""
+"""Fetch a DESIGN.md from VoltAgent, Design.md Store, or Refero Styles."""
+import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 SOURCE_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md"
 STORE_PACK_URL = "https://designmd-store.com/packs"
 STORE_SITEMAP_URL = "https://designmd-store.com/sitemap.xml"
-USER_AGENT = "genius-design/2.3"
+REFERO_API = "https://styles.refero.design/api/styles"
+USER_AGENT = "genius-design/2.4"
+REFERO_PAGE_DELAY = 0.25
 DOWNLOAD_RE = re.compile(r"/api/download/([0-9a-f-]{36})", re.I)
 SITEMAP_PACK_RE = re.compile(
     r"https://designmd-store\.com/packs/([a-z0-9-]+)", re.I
@@ -197,6 +202,153 @@ def list_store_packs() -> list[str]:
     return slugs
 
 
+def scrub(text: str) -> str:
+    return (text or "").replace("\u2014", " - ").replace("\u2013", "-").strip()
+
+
+def hostname(url: str) -> str:
+    host = urlparse(url or "").netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def refero_catalog() -> list[dict]:
+    page = 1
+    items: list[dict] = []
+    while True:
+        payload = json.loads(http_get(f"{REFERO_API}?page={page}").decode("utf-8"))
+        items.extend(payload.get("styles") or [])
+        nxt = payload.get("nextPage")
+        if not nxt:
+            break
+        page = int(nxt)
+        time.sleep(REFERO_PAGE_DELAY)
+    return items
+
+
+def refero_match(brand: str, items: list[dict]) -> Optional[dict]:
+    key = normalize(brand)
+    for item in items:
+        if normalize(item.get("siteName") or "") == key:
+            return item
+    for item in items:
+        host = hostname(item.get("url") or "")
+        if host == key or host.startswith(key + ".") or host.split(".")[0] == key:
+            return item
+    if len(key) < 4:
+        return None
+    for item in items:
+        if key in normalize(item.get("siteName") or ""):
+            return item
+    return None
+
+
+def yaml_quote(value: str) -> str:
+    return json.dumps(scrub(value), ensure_ascii=False)
+
+
+def synthesize_refero_md(detail: dict) -> bytes:
+    style = detail.get("style") or {}
+    full = style.get("fullResult") or {}
+    ds = full.get("designSystem") or {}
+    meta = full.get("meta") or {}
+    site = scrub(style.get("siteName") or "Unknown")
+    url = scrub(style.get("url") or meta.get("url") or "")
+    north = scrub(style.get("northStar") or "")
+    extracted = scrub(meta.get("extractedAt") or style.get("createdAt") or "")
+    theme = scrub(ds.get("theme") or style.get("colorScheme") or "")
+    fonts = ds.get("fonts") or style.get("fonts") or []
+    colors = ds.get("colors") or []
+    dos = ds.get("dos") or []
+    donts = ds.get("donts") or []
+    tags = ds.get("tags") or []
+    slug = normalize(site) or hostname(url).split(".")[0] or "refero"
+
+    color_yaml = []
+    color_rows = []
+    for color in colors:
+        name = scrub(color.get("name") or color.get("role") or "unnamed")
+        hex_value = scrub(color.get("hex") or "")
+        role = scrub(color.get("role") or "")
+        group = scrub(color.get("group") or "")
+        key = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "color"
+        color_yaml.append(
+            f"  {key}:\n    hex: {yaml_quote(hex_value)}\n    role: {yaml_quote(role or group or name)}"
+        )
+        color_rows.append(f"| {name} | {hex_value} | {role} | {group} |")
+
+    font_list = ", ".join(scrub(font) for font in fonts if font) or "unspecified"
+    do_lines = "\n".join(f"- {scrub(item)}" for item in dos) or "- (none listed)"
+    dont_lines = "\n".join(f"- {scrub(item)}" for item in donts) or "- (none listed)"
+    tag_line = ", ".join(scrub(tag) for tag in tags) or "none"
+
+    body = f"""---
+version: alpha
+name: {yaml_quote(site)}
+slug: {yaml_quote(slug)}
+source: {yaml_quote(url)}
+extractedAt: {yaml_quote(extracted)}
+refero_id: {yaml_quote(style.get("id") or "")}
+description: {yaml_quote(north)}
+theme: {yaml_quote(theme)}
+tags: {yaml_quote(tag_line)}
+colors:
+{chr(10).join(color_yaml) if color_yaml else "  none: {{}}"}
+typography:
+  families: {yaml_quote(font_list)}
+---
+
+# {site}
+
+Observed from Refero Styles extraction. Not an official brand design system.
+
+**Source:** {url}
+
+**North star (Refero):** {north}
+
+## Colors
+
+| Name | Hex | Role | Group |
+|---|---|---|---|
+{chr(10).join(color_rows) if color_rows else "| (none) | | | |"}
+
+## Typography
+
+Families observed: {font_list}
+
+## Do's
+
+{do_lines}
+
+## Don'ts
+
+{dont_lines}
+
+## Provenance
+
+- Catalog: Refero Styles (https://styles.refero.design)
+- Style id: {style.get("id") or "unknown"}
+- Claims above are Observed from Refero's `designSystem` JSON, not live-site facts.
+"""
+    return body.encode("utf-8")
+
+
+def fetch_refero(brand: str) -> tuple[bytes, str]:
+    items = refero_catalog()
+    match = refero_match(brand, items)
+    if not match:
+        raise OSError(f"no Refero style named '{brand}'")
+    detail = json.loads(http_get(f"{REFERO_API}/{match['id']}").decode("utf-8"))
+    style = detail.get("style") or {}
+    if not style.get("northStar"):
+        style["northStar"] = match.get("northStar")
+    if not style.get("url"):
+        style["url"] = match.get("url")
+    detail["style"] = style
+    return synthesize_refero_md(detail), scrub(match.get("siteName") or match["id"])
+
+
 def backup_if_exists(path: Path) -> Optional[Path]:
     if not path.exists() or path.stat().st_size == 0:
         return None
@@ -215,6 +367,7 @@ def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
 
     try_voltagent = source in ("auto", "voltagent")
     try_store = source in ("auto", "store")
+    try_refero = source in ("auto", "refero")
 
     if try_voltagent:
         try:
@@ -234,6 +387,19 @@ def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
             used_slug = st_slug
         except (OSError, urllib.error.URLError, TimeoutError) as error:
             errors.append(f"store {st_slug}: {error}")
+            if source == "store":
+                print(f"Failed to fetch '{brand}' from Design.md Store: {error}")
+                sys.exit(1)
+
+    if data is None and try_refero:
+        try:
+            data, used_slug = fetch_refero(brand)
+            used = "refero"
+        except (OSError, urllib.error.URLError, TimeoutError, ValueError, KeyError) as error:
+            errors.append(f"refero {brand}: {error}")
+            if source == "refero":
+                print(f"Failed to fetch '{brand}' from Refero: {error}")
+                sys.exit(1)
 
     if data is None:
         detail = "; ".join(errors) if errors else "unknown error"
@@ -261,26 +427,38 @@ def list_brands() -> None:
             print(f"  - {alias} -> {slug}")
     try:
         store = list_store_packs()
+        print(f"Design.md Store packs ({len(store)}):")
+        for slug in store:
+            print(f"  - {slug}")
     except (OSError, urllib.error.URLError, TimeoutError) as error:
         print(f"Design.md Store packs: unavailable ({error})")
-        return
-    print(f"Design.md Store packs ({len(store)}):")
-    for slug in store:
-        print(f"  - {slug}")
+    try:
+        refero = refero_catalog()
+        print(f"Refero Styles ({len(refero)}):")
+        for item in sorted(refero, key=lambda row: (row.get("siteName") or "").lower()):
+            host = hostname(item.get("url") or "")
+            print(f"  - {item.get('siteName')} ({host})")
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError) as error:
+        print(f"Refero Styles: unavailable ({error})")
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help"):
         print("Usage: fetch_design_md.py <brand> [output_path]")
-        print("       fetch_design_md.py --source voltagent|store <brand> [output_path]")
+        print("       fetch_design_md.py --source voltagent|store|refero <brand> [output_path]")
         print("       fetch_design_md.py --list")
         sys.exit(0)
     source = "auto"
     if "--source" in args:
         index = args.index("--source")
-        if index + 1 >= len(args) or args[index + 1] not in ("auto", "voltagent", "store"):
-            print("Usage: --source voltagent|store")
+        if index + 1 >= len(args) or args[index + 1] not in (
+            "auto",
+            "voltagent",
+            "store",
+            "refero",
+        ):
+            print("Usage: --source voltagent|store|refero")
             sys.exit(2)
         source = args[index + 1]
         del args[index : index + 2]

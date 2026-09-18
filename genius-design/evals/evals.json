@@ -172,6 +172,16 @@
       ]
     },
     {
+      "id": "fetch-refero-fallback",
+      "prompt": "按 Authkit 风格出 DESIGN.md，VoltAgent 和 store 没有就用 Refero",
+      "trigger_expected": true,
+      "expected_output": "Runs fetch_design_md.py Authkit ./DESIGN.md; falls through to Refero Styles API and synthesizes DESIGN.md.",
+      "files": ["scripts/fetch_design_md.py"],
+      "assertions": [
+        {"type": "contains", "value": "refero"}
+      ]
+    },
+    {
       "id": "fetch-store-fallback",
       "prompt": "按 GitHub 风格出 DESIGN.md，VoltAgent 没有就用 designmd-store",
       "trigger_expected": true,

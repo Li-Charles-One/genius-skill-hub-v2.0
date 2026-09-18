@@ -3,7 +3,7 @@ name: genius-design
 description: "生成工业级 DESIGN.md 品牌设计规范与 UI 系统：支持反审美疲劳规则、主流网站逆向推演及品牌模板推断。不要用于营销文案撰写或图片/视频资产生成（生成用 dreamina-cli）。"
 license: Apache-2.0
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
   hermes:
     tags: [design-system, brand, DESIGN.md, anti-slop, frontend, UI, landing-page, template, reverse-engineer]
     related_skills: [taste-skill, impeccable]
@@ -39,7 +39,7 @@ Honesty map (official package vs aesthetic-only) and code-stack defaults live in
 
 Details: `reference/workflows.md`. After the base file exists, run `reference/enrichment.md`.
 
-- **A:** recommend 2-3 catalog brands from the Design Read, fetch with `python scripts/fetch_design_md.py <brand> ./DESIGN.md` (VoltAgent first, Design.md Store if missing), then enrich.
+- **A:** recommend 2-3 catalog brands from the Design Read, fetch with `python scripts/fetch_design_md.py <brand> ./DESIGN.md` (VoltAgent, then Design.md Store, then Refero Styles), then enrich.
 - **B:** fetch the page (Firecrawl if available), run `python scripts/extract_design_signals.py` on the scrape, write from `reference/design-template.md`, then enrich.
 - **C:** reason register / vibe / dials / system / closest brands, then fetch-and-adapt or generate from the template, then enrich.
 
@@ -60,7 +60,7 @@ Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. If `./DES
 - This skill writes DESIGN.md. It does not write marketing copy, generate images, or build UI.
 - Two pages that share this system may share tokens. They must not share the same unnamed section order.
 - Use the bundled Python scripts. Do not use `grep -P` (not portable on Windows).
-- Fetch talks to https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md then https://designmd-store.com (unofficial snapshots, not live brand sites). Use `--source store` or `--source voltagent` to pin.
+- Fetch talks to https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md, then https://designmd-store.com, then https://styles.refero.design (unofficial snapshots, not live brand sites). Pin with `--source voltagent|store|refero`. Refero has no DESIGN.md file; the script synthesizes one from `/api/styles`.
 
 ## Resource Map
 
@@ -78,3 +78,4 @@ Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. If `./DES
 - `evals/evals.json`
 - Templates: https://github.com/VoltAgent/awesome-design-md
 - Store: https://designmd-store.com
+- Refero: https://styles.refero.design
