@@ -65,39 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sys.path.insert(0, str(SCRIPTS))
         from design_io import unique_backup, unique_backup_path
-        from fetch_design_md import staging_output_or_exit
 
         lint = SCRIPTS / "lint_design_md.py"
-        fetch_script = SCRIPTS / "fetch_design_md.py"
         io_script = SCRIPTS / "design_io.py"
         extract = SCRIPTS / "extract_design_signals.py"
 
         proc = run(lint, [str(VALID)], cwd=foreign)
         ok("lint valid fixture", proc.returncode == 0, proc.stdout + proc.stderr)
-
-        staged = staging_output_or_exit("stage/base.md")
-        ok(
-            "staging_output_or_exit returns Path",
-            isinstance(staged, Path) and staged.name == "base.md" and "stage" in staged.parts,
-            repr(staged),
-        )
-
-        proc = run(fetch_script, ["stripe"], cwd=foreign)
-        combined = proc.stdout + proc.stderr
-        ok(
-            "fetch missing output",
-            proc.returncode == 2 and "base.md" in combined and "DESIGN.md" in combined,
-            combined,
-        )
-
-        design_dest = workspace / "DESIGN.md"
-        marker_existed = design_dest.exists()
-        proc = run(fetch_script, ["stripe", str(design_dest)], cwd=foreign)
-        ok(
-            "fetch refuses DESIGN.md",
-            proc.returncode == 2 and design_dest.exists() is marker_existed,
-            proc.stdout + proc.stderr,
-        )
 
         proc = run(lint, [str(MINIMAL), "--json"], cwd=foreign)
         minimal_payload = {}

@@ -10,7 +10,7 @@ python -B "<skill-root>/scripts/test_design_tools.py"
 
 Offline. Also runs `evals/evals.json` corpus assertions. A green suite does **not** prove a generated DESIGN.md is good.
 
-Covered: contract lint (including cream/serif/Inter allowed), `design_io.py` backups, fetch refuses `DESIGN.md`, core-only H2s, extractor vs script/metadata.
+Covered: contract lint (including cream/serif/Inter allowed), `design_io.py` backups, staging safety, core-only H2s, extractor vs script/metadata.
 
 ## Trigger corpus
 

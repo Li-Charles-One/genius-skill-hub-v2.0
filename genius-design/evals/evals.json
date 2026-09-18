@@ -15,7 +15,7 @@
       "id": "trigger-reverse-url",
       "prompt": "逆向 https://stripe.com 的设计规范",
       "trigger_expected": true,
-      "expected_output": "Workflow B: collect URL evidence, run extract_design_signals.py (not grep -P), stage, then commit via design_io.py. Do not fetch a catalog snapshot onto DESIGN.md.",
+      "expected_output": "Workflow B: collect URL evidence, run extract_design_signals.py (not grep -P), stage, then commit via design_io.py. Do not draft directly onto DESIGN.md.",
       "files": ["SKILL.md", "scripts/extract_design_signals.py"],
       "assertions": [
         {"type": "contains", "value": "Reverse-Engineer"},
@@ -27,20 +27,20 @@
       "id": "trigger-linear-style",
       "prompt": "按 Linear 风格做品牌设计系统",
       "trigger_expected": true,
-      "expected_output": "Workflow A: run fetch_design_md.py linear <staging>/base.md (never DESIGN.md, never curl), enrich the staged candidate, then commit via design_io.py.",
-      "files": ["scripts/fetch_design_md.py"],
+      "expected_output": "Workflow A: lookup 73 brands catalog (references/brands.md), read Linear reference via webfetch or infer directly, stage candidate, then commit via design_io.py.",
+      "files": ["references/brands.md"],
       "assertions": [
-        {"type": "contains", "value": "fetch_design_md"}
+        {"type": "contains", "value": "linear.app"}
       ]
     },
     {
       "id": "trigger-catalog-pick",
       "prompt": "从目录里推荐一个品牌风格",
       "trigger_expected": true,
-      "expected_output": "Treat catalog lists as inventory via fetch --list, not a picker menu. If comparing 2-3 catalog traits, explain why each trait fits THIS brief. Catalog identity is not the design answer. Fetch any chosen snapshot to <staging>/base.md, never DESIGN.md.",
-      "files": ["references/catalog.md"],
+      "expected_output": "Treat 73-brand list as reference index, not a mandatory constraint. If comparing 2-3 brand traits, explain why each trait fits THIS brief. Brand identity is not the design answer.",
+      "files": ["references/brands.md"],
       "assertions": [
-        {"type": "contains", "value": "catalog"}
+        {"type": "contains", "value": "VoltAgent"}
       ]
     },
     {
@@ -117,20 +117,14 @@
       ]
     },
     {
-      "id": "fetch-staging",
-      "prompt": "用 fetch 把 Linear 规范直接写到 DESIGN.md",
+      "id": "staging-safe",
+      "prompt": "把 Linear 规范直接写到 destination 还是 staging",
       "trigger_expected": true,
-      "expected_output": "Refuse. Fetch requires <staging>/base.md and rejects DESIGN.md. Auto order is Refero → Design.md Store → VoltAgent. Never curl. The snapshot is not a delivered spec.",
-      "files": ["scripts/fetch_design_md.py"],
+      "expected_output": "Refuse direct destination overwrite. Staged drafting must never draft directly over destination DESIGN.md. Commit only via design_io.py.",
+      "files": ["SKILL.md"],
       "assertions": [
         {"type": "contains", "value": "staging"},
-        {"type": "contains", "value": "base.md"},
-        {"type": "contains", "value": "Never DESIGN.md"},
-        {"type": "contains", "value": "Refusing to write a catalog snapshot to DESIGN.md"},
-        {"type": "contains", "value": "refero"},
-        {"type": "contains", "value": "designmd-store"},
-        {"type": "not_contains", "value": "else \"DESIGN.md\""},
-        {"type": "not_contains", "value": "output: str = \"DESIGN.md\""}
+        {"type": "contains", "value": "never draft directly over the destination"}
       ]
     },
     {
@@ -162,8 +156,8 @@
       "id": "overwrite-backup",
       "prompt": "覆盖现有 DESIGN.md，换成 Notion 风",
       "trigger_expected": true,
-      "expected_output": "Warn about replacing DESIGN.md. Fetch Notion to <staging>/base.md, never onto DESIGN.md. Commit only through design_io.py with unique .bak/.bak.1 backups. Do not copy over the destination by hand.",
-      "files": ["SKILL.md", "scripts/design_io.py", "scripts/fetch_design_md.py", "scripts/test_design_tools.py"],
+      "expected_output": "Warn about replacing DESIGN.md. Never overwrite directly without staging. Commit only through design_io.py with unique .bak/.bak.1 backups. Do not copy over the destination by hand.",
+      "files": ["SKILL.md", "scripts/design_io.py", "scripts/test_design_tools.py"],
       "assertions": [
         {"type": "contains", "value": ".bak"},
         {"type": "contains", "value": "design_io.py"},
