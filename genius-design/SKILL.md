@@ -6,7 +6,7 @@ metadata:
   version: "2.2.0"
   hermes:
     tags: [design-system, brand, DESIGN.md, anti-slop, frontend, UI, landing-page, template, reverse-engineer]
-    related_skills: [taste-skill, impeccable, hallmark]
+    related_skills: [taste-skill, impeccable]
 ---
 
 # Genius Design
@@ -57,7 +57,7 @@ Run `python scripts/lint_design_md.py ./DESIGN.md` and fix every FAIL. If `./DES
 
 - One official design system per project. Do not mix Fluent with Carbon.
 - Do not invent DESIGN.md tokens that recreate a system you should have installed.
-- This skill writes DESIGN.md. It does not write marketing copy, generate images, or build UI. Use Hallmark only when the user asked to implement a page.
+- This skill writes DESIGN.md. It does not write marketing copy, generate images, or build UI.
 - Two pages that share this system may share tokens. They must not share the same unnamed section order.
 - Use the bundled Python scripts. Do not use `grep -P` (not portable on Windows).
 - Fetch talks to https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md
