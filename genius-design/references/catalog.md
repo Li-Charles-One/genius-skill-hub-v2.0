@@ -1,6 +1,6 @@
 # Brand Catalog, Fonts, Selection, Fallback
 
-Workflow A is not a 73-brand menu. Fetch order: Refero Styles, then Design.md Store, then the VoltAgent static list below. The 73 names are the last-resort snapshot. `python scripts/fetch_design_md.py --list` prints all three catalogs.
+Supplied brand evidence comes first. When a catalog is useful, fetch order is Refero Styles, then Design.md Store, then VoltAgent. This is not a fixed 73-brand menu; the list below is a bundled snapshot. `scripts/fetch_design_md.py --list` prints available inventories. Resolve commands as described in `references/runtime-mapping.md`.
 
 ## VoltAgent static catalog (73 brands)
 
@@ -35,9 +35,9 @@ BMW, BMW M, Bugatti, Ferrari, Lamborghini, Renault, Tesla
 
 ## Font Substitutions
 
-Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alternatives:
+Catalogs may reference proprietary fonts. These are possible substitutes, not equivalent metrics or verified brand facts. Confirm availability, license, glyph coverage and visual fit; preserve a supplied licensed font when appropriate.
 
-| Original Font | CDN Alternative | Character |
+| Reference Font | Possible Alternative | Character |
 |:--|:--|:--|
 | Geist | Geist (Google Fonts) | Geometric, compact |
 | sohne-var (Stripe) | Source Sans 3 | Light, elegant |
@@ -61,9 +61,8 @@ Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alter
 
 ## Fallback Strategy
 
-Primary: `python scripts/fetch_design_md.py <brand> ./DESIGN.md` pulls from `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md`.
+Fetch to a staged `base.md`, not directly over the final DESIGN.md. A catalog base must be adapted to the output contract, enriched and validated before safe commit.
 
 First source: [Refero Styles](https://styles.refero.design) (`/api/styles`; the script writes a DESIGN.md from JSON because Refero has no file download). Second: [Design.md Store](https://designmd-store.com/packs). Third: VoltAgent static list. `fetch_design_md.py --list` prints all three. Pin with `--source refero`, `--source store`, or `--source voltagent`.
 
-VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Once a DESIGN.md is in the project root, it has zero external dependencies. All three sources are unofficial snapshots; they can lag the live brand site.
-
+VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Reading a delivered DESIGN.md is offline; validating it requires the documented local parser. All three catalogs are unofficial snapshots and can lag a live brand site. Inspect provenance rather than presenting their claims as direct observation.

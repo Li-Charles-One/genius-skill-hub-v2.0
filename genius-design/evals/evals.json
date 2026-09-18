@@ -16,7 +16,7 @@
       "prompt": "逆向 https://stripe.com 的设计规范",
       "trigger_expected": true,
       "expected_output": "Workflow B: scrape the URL, run extract_design_signals.py, write DESIGN.md.",
-      "files": ["scripts/extract_design_signals.py", "reference/workflows.md"],
+      "files": ["scripts/extract_design_signals.py", "references/workflows.md"],
       "assertions": [
         {"type": "contains", "value": "extract_design_signals"}
       ]
@@ -46,7 +46,7 @@
       "prompt": "reverse engineer this landing page into DESIGN.md",
       "trigger_expected": true,
       "expected_output": "Workflow B without asking A/B/C if a URL is already present.",
-      "files": ["reference/workflows.md"],
+      "files": ["references/workflows.md"],
       "assertions": [
         {"type": "contains", "value": "Workflow B"}
       ]
@@ -56,7 +56,7 @@
       "prompt": "从 73 个品牌里推荐一个",
       "trigger_expected": true,
       "expected_output": "Treat 73 as the VoltAgent snapshot only. Recommend 2-3 from all three catalogs (VoltAgent, Store, Refero), then fetch.",
-      "files": ["reference/catalog.md"],
+      "files": ["references/catalog.md"],
       "assertions": [
         {"type": "contains", "value": "catalog"}
       ]
@@ -65,10 +65,10 @@
       "id": "trigger-product-direction",
       "prompt": "这个医疗后台产品该用什么设计方向",
       "trigger_expected": true,
-      "expected_output": "Workflow C: register, vibe, dials, honesty map, then DESIGN.md.",
-      "files": ["reference/dials-and-stack.md"],
+      "expected_output": "Workflow C: operations layout, tables and status. Do not force a marketing hero, image quota, or dark mode.",
+      "files": ["SKILL.md", "references/dials-and-stack.md"],
       "assertions": [
-        {"type": "contains", "value": "Honesty"}
+        {"type": "contains", "value": "clinical"}
       ]
     },
     {
@@ -195,10 +195,10 @@
       "id": "anti-slop-structure-honesty",
       "prompt": "给这个新 SaaS 出 DESIGN.md，不要写成 AI 默认落地页",
       "trigger_expected": true,
-      "expected_output": "Names a page rhythm/macrostructure other than hero-3-cards-CTA-footer; includes honesty rules against invented metrics and hanging headers.",
-      "files": ["reference/refusals.md", "reference/anti-patterns.md"],
+      "expected_output": "Names a page rhythm other than hero-3-cards-CTA-footer; includes honesty rules against invented metrics.",
+      "files": ["references/refusals.md", "references/anti-patterns.md"],
       "assertions": [
-        {"type": "contains", "value": "macrostructure"}
+        {"type": "contains", "value": "page rhythm"}
       ]
     },
     {
@@ -226,10 +226,44 @@
       "id": "overwrite-backup",
       "prompt": "覆盖现有 DESIGN.md，换成 Notion 风",
       "trigger_expected": true,
-      "expected_output": "Warns about existing DESIGN.md; fetch script writes DESIGN.md.bak.",
-      "files": ["scripts/fetch_design_md.py", "reference/workflows.md"],
+      "expected_output": "Warns about replacing DESIGN.md. Commit through design_io.py with unique .bak/.bak.1 backups. Fetch writes a staged catalog snapshot, not a delivered spec.",
+      "files": ["scripts/design_io.py", "scripts/fetch_design_md.py", "references/workflows.md"],
       "assertions": [
-        {"type": "contains", "value": ".bak"}
+        {"type": "contains", "value": ".bak"},
+        {"type": "file_exists", "path": "scripts/design_io.py"}
+      ]
+    },
+    {
+      "id": "brand-fidelity-heritage",
+      "prompt": "我们是文学出版社，品牌是米色纸、衬线标题、酒红和黄铜两个强调色、刊名居中。出一份 DESIGN.md。",
+      "trigger_expected": true,
+      "expected_output": "Preserve cream paper, serif headings, two accents, and a centered masthead. Do not rewrite to Inter/cool gray.",
+      "files": ["SKILL.md", "references/refusals.md", "evals/fixtures/valid-design.md"],
+      "assertions": [
+        {"type": "contains", "value": "#f5f1ea"},
+        {"type": "file_exists", "path": "evals/fixtures/valid-design.md"}
+      ]
+    },
+    {
+      "id": "reverse-evidence-labels",
+      "prompt": "根据这段 HTML/CSS 和一份 computed-style JSON 逆向 DESIGN.md。hover 和移动端没测到。",
+      "trigger_expected": true,
+      "expected_output": "Run extract_design_signals.py. Label Observed/Inferred/Recommended. Unknown hover/mobile/motion stay unknown.",
+      "files": ["references/evidence.md", "scripts/extract_design_signals.py", "evals/fixtures/capture.json"],
+      "assertions": [
+        {"type": "contains", "value": "Observed"},
+        {"type": "file_exists", "path": "evals/fixtures/capture.json"}
+      ]
+    },
+    {
+      "id": "commit-via-design-io",
+      "prompt": "候选稿 lint 过了，写进项目的 DESIGN.md。",
+      "trigger_expected": true,
+      "expected_output": "Commit only with scripts/design_io.py <candidate> <destination>. Do not copy over the destination by hand.",
+      "files": ["SKILL.md", "scripts/design_io.py", "scripts/test_design_tools.py"],
+      "assertions": [
+        {"type": "contains", "value": "design_io.py"},
+        {"type": "file_exists", "path": "scripts/test_design_tools.py"}
       ]
     }
   ]

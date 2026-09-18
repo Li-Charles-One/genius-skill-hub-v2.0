@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "url": "https://example.com/",
+  "viewport": {"width": 1280, "height": 800},
+  "state": "default",
+  "elements": [
+    {
+      "selector": "main h1",
+      "properties": {
+        "font-family": "Source Serif 4, serif",
+        "font-size": "64px",
+        "color": "rgb(35, 32, 28)",
+        "text-align": "center"
+      }
+    },
+    {
+      "selector": "button.primary",
+      "properties": {
+        "background-color": "rgb(47, 92, 246)",
+        "font-family": "Inter, sans-serif",
+        "border-radius": "8px",
+        "text-align": "left"
+      }
+    }
+  ]
+}

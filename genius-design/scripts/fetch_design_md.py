@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+from design_io import atomic_write_bytes, unique_backup
+
 SOURCE_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md"
 STORE_PACK_URL = "https://designmd-store.com/packs"
 STORE_SITEMAP_URL = "https://designmd-store.com/sitemap.xml"
@@ -349,14 +354,6 @@ def fetch_refero(brand: str) -> tuple[bytes, str]:
     return synthesize_refero_md(detail), scrub(match.get("siteName") or match["id"])
 
 
-def backup_if_exists(path: Path) -> Optional[Path]:
-    if not path.exists() or path.stat().st_size == 0:
-        return None
-    backup = path.with_name(path.name + ".bak")
-    backup.write_bytes(path.read_bytes())
-    return backup
-
-
 def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
     vt_slug = resolve_slug(brand)
     st_slug = store_slug(brand)
@@ -408,12 +405,12 @@ def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
 
     dest = Path(output)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    backup = backup_if_exists(dest)
-    dest.write_bytes(data)
-    extra = f"; backed up {backup}" if backup else ""
+    backup = unique_backup(dest)
+    atomic_write_bytes(dest, data)
+    extra = f"; backup {backup}" if backup else ""
     print(
-        f"Downloaded {brand} ({used_slug}) from {used} -> {dest} "
-        f"({len(data)} bytes){extra}"
+        f"Wrote staged catalog snapshot of {brand} ({used_slug}) from {used} -> {dest} "
+        f"({len(data)} bytes){extra}. Not a delivered DESIGN.md."
     )
 
 

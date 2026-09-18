@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius Design"
-  short_description: "Produce anti-slop DESIGN.md brand systems"
-  default_prompt: "Use $genius-design to produce a DESIGN.md brand system for this project, then follow it while updating the UI."
+  short_description: "Create evidence-aware DESIGN.md specifications"
+  default_prompt: "Use $genius-design to create or review this project's DESIGN.md, preserving its brief and brand evidence. Validate the staged specification and safely deliver it with source notes and any remaining gaps."
