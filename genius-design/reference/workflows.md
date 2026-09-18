@@ -7,11 +7,11 @@ Pointers (this file is steps only):
 - Shared Enrichment Pipeline: `reference/enrichment.md`
 - Output skeleton: `reference/design-template.md`
 
-## Workflow A: Brand Template (73 brands => deep DESIGN.md)
+## Workflow A: Brand Template (three catalogs => deep DESIGN.md)
 
 ### Step A1: User Picks a Brand
 
-Use the Selection Guide in `reference/catalog.md` to help the user choose. Or they can name any brand from that catalog. The Brief Inference already produced a Design Read -- use it to recommend 2-3 best-fit brands before asking the user to pick.
+The user can name any brand. Do not tell them they must pick from 73. Recommend 2-3 fits from the Design Read using `reference/catalog.md` (VoltAgent list plus Store/Refero when the brief is not in those 73). Then fetch. `fetch_design_md.py --list` is the live inventory.
 
 ### Step A2: Fetch the Base DESIGN.md
 
@@ -129,7 +129,7 @@ Based on the product description and Brief Inference, systematically reason:
 2. **Vibe**: What aesthetic family fits? Pick from: minimalist/Linear-style, premium-consumer/Apple-y, playful/creative, editorial/luxury, dark-tech, trust-first/public-sector, brutalist/industrial, soft/warm-consumer.
 3. **Dial values**: Set DESIGN_VARIANCE, MOTION_INTENSITY, VISUAL_DENSITY using the Dial Inference Table in `reference/dials-and-stack.md`. Justify each value in one sentence tied to the product audience.
 4. **Design system**: Does the product map to a real design system (Honesty Map in `reference/dials-and-stack.md`)? If the brief reads "enterprise B2B dashboard," reach for Carbon or Fluent. If "modern SaaS," shadcn/ui or Tailwind v4. If "creative agency landing page," native CSS + aesthetic direction.
-5. **Closest brand match**: Which brand(s) from the 73-brand catalog are closest in spirit? Name 2-3 with one-line justifications.
+5. **Closest brand match**: Which brand(s) from the three fetch catalogs (VoltAgent, Design.md Store, Refero) are closest in spirit? Name 2-3 with one-line justifications. Do not limit this to the 73 VoltAgent slugs.
 
 ### Step C3: Generate the DESIGN.md
 

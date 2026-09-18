@@ -55,7 +55,7 @@
       "id": "trigger-catalog-pick",
       "prompt": "从 73 个品牌里推荐一个",
       "trigger_expected": true,
-      "expected_output": "Read catalog.md, recommend 2-3 brands from the Design Read, then fetch.",
+      "expected_output": "Treat 73 as the VoltAgent snapshot only. Recommend 2-3 from all three catalogs (VoltAgent, Store, Refero), then fetch.",
       "files": ["reference/catalog.md"],
       "assertions": [
         {"type": "contains", "value": "catalog"}

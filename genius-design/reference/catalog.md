@@ -1,6 +1,8 @@
 # Brand Catalog, Fonts, Selection, Fallback
 
-## Brand Catalog (73 brands)
+Workflow A is not a 73-brand menu. Fetch order: VoltAgent static list below, then Design.md Store, then Refero Styles. The 73 names are only the VoltAgent snapshot. `python scripts/fetch_design_md.py --list` prints all three catalogs.
+
+## VoltAgent static catalog (73 brands)
 
 ### AI & LLM
 Claude, Cohere, ElevenLabs, Minimax, Mistral AI, Ollama, OpenCode AI, Replicate, RunwayML, Together AI, VoltAgent, xAI

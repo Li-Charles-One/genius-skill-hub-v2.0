@@ -3,7 +3,7 @@ name: genius-design
 description: "生成工业级 DESIGN.md 品牌设计规范与 UI 系统：支持反审美疲劳规则、主流网站逆向推演及品牌模板推断。不要用于营销文案撰写或图片/视频资产生成（生成用 dreamina-cli）。"
 license: Apache-2.0
 metadata:
-  version: "2.4.0"
+  version: "2.4.1"
   hermes:
     tags: [design-system, brand, DESIGN.md, anti-slop, frontend, UI, landing-page, template, reverse-engineer]
     related_skills: [taste-skill, impeccable]
@@ -25,7 +25,7 @@ Ask at most one clarifying question, and only if the read genuinely forks. If th
 
 Otherwise ask A / B / C:
 
-- **A. Brand template** — pick from 73 brands
+- **A. Brand template** — name a brand; fetch tries VoltAgent (73 static), then Design.md Store, then Refero Styles. 73 is only the first catalog.
 - **B. Reverse-engineer** — URL in, DESIGN.md out
 - **C. AI recommendation** — product type in, direction out
 
