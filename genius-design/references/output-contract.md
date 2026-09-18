@@ -42,35 +42,48 @@ A reverse-engineering document needs at least one Observed record or explicit un
 
 ### Unfinished versus Unknown
 
-Required active values cannot be empty, `TODO`, `TBD`, `FIXME`, `REPLACE_ME`, `#xxxxxx` or template markers like `<brand-name>`. Do not use these as unresolved implementation decisions.
+Required active values cannot be empty, `TODO`, `TBD`, `FIXME`, `REPLACE_ME`, `#xxxxxx` or hyphenated template markers like `<brand-name>`. Do not use these as unresolved implementation decisions.
+
+YAML string fields may contain HTML such as `<button>`; those tags are allowed. Only hyphenated placeholders such as `<brand-name>` are unfinished markers.
 
 Honest unknown records with a reason are valid. A labelled future content slot is also valid prose: for example, “Metric to confirm with the user; do not invent it.” Discussing prohibited colors, fonts, placeholders or punctuation is never itself a violation.
 
 ## Required Markdown Sections
 
-Each exact level-two heading needs substantive content:
+Each of these exact level-two headings needs substantive content. This is the surface a downstream implementer actually reads: Design Read, color/type/spacing tokens, named layout rhythm, and component states.
 
 1. Design Read
-2. Decisions and Overrides
-3. Colors
-4. Typography
-5. Spacing and Shape
-6. Layout
-7. Components
-8. Motion
-9. Imagery
-10. Accessibility
-11. Honesty and Refusals
-12. Anti-Patterns
-13. Sources and Inference
-14. Pre-Ship Checklist
+2. Colors
+3. Typography
+4. Spacing and Shape
+5. Layout
+6. Components
 
-Pre-Ship Checklist has exactly the 12 distinct named checkbox items from `references/preflight-checklist.md`. `[x]` records a specification review; `[ ]` records an unresolved check with an explanation. `N/A` needs a reason. The linter checks item identity/count and warns on unchecked items, but semantic review decides if an actual blocker remains.
+A core-only document with these six headings can pass lint. Missing or empty required sections FAIL.
+
+## Optional Markdown Sections
+
+Include the following exact level-two headings when they apply. If present, each needs the same substantive content as a required section. Lint does not FAIL when they are absent.
+
+- Decisions and Overrides
+- Motion
+- Imagery
+- Accessibility
+- Honesty and Refusals
+- Anti-Patterns
+- Sources and Inference
+- Pre-Ship Checklist
+
+Notes:
+
+- If Accessibility is omitted, still place contrast targets in Colors and visible focus in Components. The linter WARNs; it does not FAIL.
+- Omitting Motion is fine for a static page. If `MOTION_INTENSITY` is high, include a Motion section or accept a WARN.
+- If Pre-Ship Checklist is present, it must contain exactly the 12 distinct named checkbox items from `references/preflight-checklist.md`. `[x]` records a specification review; `[ ]` records an unresolved check with an explanation. `N/A` needs a reason. The linter checks item identity/count and warns on unchecked items, but semantic review decides if an actual blocker remains. An omitted checklist is not a FAIL.
 
 ## Validation Boundary
 
-FAIL: malformed/duplicate-key YAML, unsupported schema, missing or wrongly typed required fields, illegal dial values, unresolved required markers, incomplete required tokens/components/evidence/sections/checklist.
+FAIL: malformed/duplicate-key YAML, unsupported schema, missing or wrongly typed required fields, illegal dial values, unresolved required markers, incomplete required tokens/components/evidence/required sections, or an incomplete Pre-Ship Checklist *if that section is present*. Missing optional sections are not FAILs. Do not treat all 14 headings as mandatory.
 
-WARN: explicit unknown tokens/evidence or unresolved checklist items. Review and disclose these; do not silently treat them as completed work.
+WARN: explicit unknown tokens/evidence, unresolved checklist items, omitted Accessibility, or high `MOTION_INTENSITY` without a Motion section. Review and disclose these; do not silently treat them as completed work.
 
 Not mechanically certified: brand fidelity, correctness of evidence claims, taste, accessible implementation, actual contrast, responsive fit, font licenses, motion behavior. These require source review or testing the eventual UI. A hand-authored passing fixture tests the validator, not generation quality.

@@ -1,6 +1,6 @@
 # Twelve Specification Checks
 
-Copy these 12 items into Pre-Ship Checklist, adding concrete results. `[x]` means the **specification** was checked, not that a UI passed tests. Leave unresolved items `[ ]` with a reason; lint warns and delivery must disclose them. An inapplicable requirement gets `N/A: <reason>`, never an unexplained tick.
+Including this checklist in DESIGN.md is optional. If included, copy all 12 items into Pre-Ship Checklist, adding concrete results. `[x]` is a specification review, not UI tests. Leave unresolved items `[ ]` with a reason; lint warns and delivery must disclose them. An inapplicable requirement gets `N/A: <reason>`, never an unexplained tick. An omitted checklist is not a structural FAIL.
 
 - [ ] **Brief fidelity:** audience, page/screen type, language, stack and explicit user constraints are reflected.
 - [ ] **Rule priority:** brand observations and requirements are preserved; departures and aesthetic preferences have reasons.

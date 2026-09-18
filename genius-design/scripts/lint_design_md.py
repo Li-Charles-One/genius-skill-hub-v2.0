@@ -35,12 +35,14 @@ OBSERVED_METHODS = frozenset(
 )
 REQUIRED_H2 = (
     "Design Read",
-    "Decisions and Overrides",
     "Colors",
     "Typography",
     "Spacing and Shape",
     "Layout",
     "Components",
+)
+OPTIONAL_H2 = (
+    "Decisions and Overrides",
     "Motion",
     "Imagery",
     "Accessibility",
@@ -49,6 +51,7 @@ REQUIRED_H2 = (
     "Sources and Inference",
     "Pre-Ship Checklist",
 )
+SUBSTANTIVE_MIN = 80
 CHECKLIST_ITEMS = (
     "Brief fidelity",
     "Rule priority",
@@ -65,7 +68,8 @@ CHECKLIST_ITEMS = (
 )
 UNKNOWN_TOKEN_KEYS = frozenset({"value", "status", "reason"})
 UNFINISHED_RE = re.compile(
-    r"(?i)(?:^|(?<=\s))(?:TODO|TBD|FIXME|REPLACE_ME)\b|#xxxxxx\b|<[A-Za-z][A-Za-z0-9_-]*>"
+    r"(?:^|(?<=\s))(?:TODO|TBD|FIXME|REPLACE_ME)\b|#xxxxxx\b|<[a-z]+-[a-z0-9-]+>",
+    re.I,
 )
 KEBAB_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 H2_RE = re.compile(r"(?m)^##(?!#)[ \t]+(.+?)\s*$")
@@ -334,10 +338,10 @@ def _check_pair_list(value, label: str, first: str, second: str, fails) -> list:
     return valid
 
 
-def _check_frontmatter(data, fails, warns) -> None:
+def _check_frontmatter(data, fails, warns) -> int | None:
     if not isinstance(data, dict):
         fails.append("YAML frontmatter must be a mapping")
-        return
+        return None
     version = data.get("schema_version", None)
     if not _is_int(version) or version != 1:
         fails.append("schema_version must be integer 1 (booleans are not integers)")
@@ -369,6 +373,7 @@ def _check_frontmatter(data, fails, warns) -> None:
                     seen.append(theme)
             themes = seen
 
+    motion_intensity = None
     dials = _need_map(data.get("dial_values"), "dial_values", fails)
     if dials is not None:
         for key in DIAL_KEYS:
@@ -378,6 +383,8 @@ def _check_frontmatter(data, fails, warns) -> None:
                     f"dial_values.{key} must be an integer from 1 to 10 "
                     "(booleans are not integers)"
                 )
+            elif key == "MOTION_INTENSITY":
+                motion_intensity = value
 
     layout = _need_map(data.get("layout"), "layout", fails)
     if layout is not None:
@@ -411,17 +418,34 @@ def _check_frontmatter(data, fails, warns) -> None:
             "reverse-engineer mode needs at least one Observed evidence record, "
             "or unknown records explaining why no observation was available"
         )
+    return motion_intensity
 
 
-def _check_sections(body: str, fails, warns) -> None:
+def _check_sections(body: str, fails, warns, motion_intensity: int | None = None) -> None:
     sections = _h2_sections(body)
     for title in REQUIRED_H2:
         if title not in sections:
             fails.append(f"missing required heading ## {title}")
             continue
         content = re.sub(r"\s+", " ", sections[title]).strip()
-        if len(content) < 24:
+        if len(content) < SUBSTANTIVE_MIN:
             fails.append(f"## {title} needs substantive content")
+    for title in OPTIONAL_H2:
+        if title not in sections:
+            continue
+        content = re.sub(r"\s+", " ", sections[title]).strip()
+        if len(content) < SUBSTANTIVE_MIN:
+            fails.append(f"## {title} needs substantive content")
+    if "Accessibility" not in sections:
+        warns.append("## Accessibility absent")
+    if (
+        motion_intensity is not None
+        and motion_intensity >= 4
+        and "Motion" not in sections
+    ):
+        warns.append(
+            f"MOTION_INTENSITY is {motion_intensity} (>= 4) but ## Motion is absent"
+        )
     checklist = sections.get("Pre-Ship Checklist", "")
     if not checklist:
         return
@@ -470,8 +494,8 @@ def lint_text(text: str) -> tuple[list[str], list[str]]:
         fails.append(f"malformed YAML frontmatter: {exc}")
         _check_sections(body, fails, warns)
         return fails, warns
-    _check_frontmatter(data, fails, warns)
-    _check_sections(body, fails, warns)
+    motion_intensity = _check_frontmatter(data, fails, warns)
+    _check_sections(body, fails, warns, motion_intensity)
     return fails, warns
 
 

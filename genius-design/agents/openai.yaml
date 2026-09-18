@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius Design"
-  short_description: "Create evidence-aware DESIGN.md specifications"
-  default_prompt: "Use $genius-design to create or review this project's DESIGN.md, preserving its brief and brand evidence. Validate the staged specification and safely deliver it with source notes and any remaining gaps."
+  short_description: "Evidence-aware DESIGN.md: tokens, rhythm, components"
+  default_prompt: "Use $genius-design to create or review this project's DESIGN.md. Preserve brief and brand evidence. Deliver color/type/spacing tokens, named layout rhythm, and component states; add optional sections only when they apply. Validate the staged specification and note remaining gaps."

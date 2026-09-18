@@ -6,13 +6,13 @@ Shared instructions describe capabilities, not universal tool names. Use the too
 
 | Neutral action | This OpenCode environment | Other runtimes |
 | --- | --- | --- |
-| Read/search files | `functions.read`, `functions.glob`, `functions.grep` | Native file tools |
-| Edit staged document | `functions.patch` | Native edit/write tools |
-| Run Python | `functions.shell` (PowerShell on Windows) | Native command tool |
-| Load a needed skill | `functions.skill` | Verified native skill mechanism |
+| Read/search files | `Read`, `Glob`, `Grep` | Native file tools |
+| Edit staged document | `Edit`, `Write` | Native edit/write tools |
+| Run Python | `Bash` (PowerShell on Windows) | Native command tool |
+| Load a needed skill | `Skill` | Verified native skill mechanism |
 | Capture a page | Discover available browser tools and their schemas | Verified browser/screenshot tooling |
 
-`agents/openai.yaml` is Codex/UI metadata. OpenCode uses native SKILL.md discovery; no custom adapter YAML is needed to load this skill. Tool names vary across host versions. Do not copy these names into other runtimes or assume an optional browser is installed.
+`agents/openai.yaml` is Codex/UI metadata. OpenCode uses native SKILL.md discovery; no custom adapter YAML is needed to load this skill. Do not invent `functions.read` / `functions.patch` names. Tool names vary across host versions. Do not copy these names into other runtimes or assume an optional browser is installed.
 
 ## Dependencies
 
@@ -55,7 +55,9 @@ python3 -B "$skill/scripts/lint_design_md.py" "$stage/candidate.md"
 python3 -B "$skill/scripts/design_io.py" "$stage/candidate.md" "$destination"
 ```
 
-Fetch and extraction are optional per workflow, not commands to run against nonexistent files. Do not bypass failed validation by directly copying a candidate over the destination.
+Fetch requires the output path. A destination named `DESIGN.md` is rejected; use `"$stage/base.md"`. Fetch and extraction are optional per workflow, not commands to run against nonexistent files. Do not bypass failed validation by directly copying a candidate over the destination.
+
+`design_io.py` writes `.bak`, `.bak.1`, … beside the destination. Tell the user they exist; they may want those backups gitignored. Do not create a gitignore file as part of this workflow.
 
 ## Evaluation Commands
 
@@ -70,4 +72,4 @@ Use `python3 -B` on macOS/Linux. Tests are offline and create temporary files on
 
 ## Verification Status
 
-Version 3.0.0 is exercised on Windows/Python 3.12. macOS/Linux paths and standard-library operations are designed to be portable but runtime execution there remains unverified. Catalog transport uses per-request timeouts; remote service availability is independent of local regression results.
+Version 3.1.0 is exercised on Windows/Python 3.12. macOS/Linux paths and standard-library operations are designed to be portable but runtime execution there remains unverified. Catalog transport uses per-request timeouts; remote service availability is independent of local regression results.

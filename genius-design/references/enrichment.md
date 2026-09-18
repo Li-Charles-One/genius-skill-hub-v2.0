@@ -29,7 +29,7 @@ A conventional solution with a clear reason is acceptable. Do not endlessly rewo
 
 ## 4. Check the Contract and Human Checklist
 
-Fill the versioned frontmatter and readable sections. Record evidence and honest unknowns. Complete the 12 specification checks, distinguishing pending implementation validation from missing design decisions.
+Fill the versioned frontmatter and the six required H2s always (Design Read, Colors, Typography, Spacing and Shape, Layout, Components). Record evidence and honest unknowns. Add optional sections when they have something to say: a motion plan, imagery slots, 3–5 anti-patterns, sources. The Pre-Ship Checklist is recommended but not a structural FAIL if omitted; if included, complete all 12 items with honest ticks, distinguishing pending implementation validation from missing design decisions.
 
 Run the bundled linter against the candidate. Fix structural errors, inspect warnings and read the whole document for contradictions. Do not claim that lint verifies contrast or visual quality.
 

@@ -19,7 +19,7 @@ SOURCE_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main
 STORE_PACK_URL = "https://designmd-store.com/packs"
 STORE_SITEMAP_URL = "https://designmd-store.com/sitemap.xml"
 REFERO_API = "https://styles.refero.design/api/styles"
-USER_AGENT = "genius-design/2.5"
+USER_AGENT = "genius-design/3.1.0"
 REFERO_PAGE_DELAY = 0.25
 DOWNLOAD_RE = re.compile(r"/api/download/([0-9a-f-]{36})", re.I)
 SITEMAP_PACK_RE = re.compile(
@@ -354,7 +354,30 @@ def fetch_refero(brand: str) -> tuple[bytes, str]:
     return synthesize_refero_md(detail), scrub(match.get("siteName") or match["id"])
 
 
-def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
+USAGE = (
+    "Usage: fetch_design_md.py <brand> <staging_output>\n"
+    "       fetch_design_md.py --source voltagent|store|refero <brand> <staging_output>\n"
+    "       fetch_design_md.py --list"
+)
+
+
+def staging_output_or_exit(output: str | None) -> Path:
+    if output is None or not str(output).strip():
+        print(USAGE)
+        print("Write a staged snapshot such as <stage>/base.md. Never DESIGN.md.")
+        sys.exit(2)
+    dest = Path(output)
+    if dest.name.lower() == "design.md":
+        print(
+            "Refusing to write a catalog snapshot to DESIGN.md; "
+            "use a staging path such as <stage>/base.md."
+        )
+        sys.exit(2)
+    return dest
+
+
+def fetch(brand: str, output: str | None, source: str = "auto") -> None:
+    dest = staging_output_or_exit(output)
     vt_slug = resolve_slug(brand)
     st_slug = store_slug(brand)
     errors = []
@@ -403,7 +426,6 @@ def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
         print(f"Failed to fetch '{brand}': {detail}")
         sys.exit(1)
 
-    dest = Path(output)
     dest.parent.mkdir(parents=True, exist_ok=True)
     backup = unique_backup(dest)
     atomic_write_bytes(dest, data)
@@ -442,9 +464,7 @@ def list_brands() -> None:
 if __name__ == "__main__":
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help"):
-        print("Usage: fetch_design_md.py <brand> [output_path]")
-        print("       fetch_design_md.py --source voltagent|store|refero <brand> [output_path]")
-        print("       fetch_design_md.py --list")
+        print(USAGE)
         sys.exit(0)
     source = "auto"
     if "--source" in args:
@@ -460,9 +480,11 @@ if __name__ == "__main__":
         source = args[index + 1]
         del args[index : index + 2]
     if not args:
-        print("Usage: fetch_design_md.py <brand> [output_path]")
+        print(USAGE)
         sys.exit(2)
     if args[0] == "--list":
         list_brands()
     else:
-        fetch(args[0], args[1] if len(args) > 1 else "DESIGN.md", source=source)
+        if len(args) < 2:
+            staging_output_or_exit(None)
+        fetch(args[0], args[1], source=source)

@@ -17,6 +17,7 @@ FIXTURES = ROOT / "evals" / "fixtures"
 PY = sys.executable
 VALID = FIXTURES / "valid-design.md"
 INVALID = FIXTURES / "invalid-unfilled.md"
+MINIMAL = FIXTURES / "minimal-core.md"
 CAPTURE = FIXTURES / "capture.json"
 
 
@@ -64,13 +65,54 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sys.path.insert(0, str(SCRIPTS))
         from design_io import unique_backup, unique_backup_path
+        from fetch_design_md import staging_output_or_exit
 
         lint = SCRIPTS / "lint_design_md.py"
+        fetch_script = SCRIPTS / "fetch_design_md.py"
         io_script = SCRIPTS / "design_io.py"
         extract = SCRIPTS / "extract_design_signals.py"
 
         proc = run(lint, [str(VALID)], cwd=foreign)
         ok("lint valid fixture", proc.returncode == 0, proc.stdout + proc.stderr)
+
+        staged = staging_output_or_exit("stage/base.md")
+        ok(
+            "staging_output_or_exit returns Path",
+            isinstance(staged, Path) and staged.name == "base.md" and "stage" in staged.parts,
+            repr(staged),
+        )
+
+        proc = run(fetch_script, ["stripe"], cwd=foreign)
+        combined = proc.stdout + proc.stderr
+        ok(
+            "fetch missing output",
+            proc.returncode == 2 and "base.md" in combined and "DESIGN.md" in combined,
+            combined,
+        )
+
+        design_dest = workspace / "DESIGN.md"
+        marker_existed = design_dest.exists()
+        proc = run(fetch_script, ["stripe", str(design_dest)], cwd=foreign)
+        ok(
+            "fetch refuses DESIGN.md",
+            proc.returncode == 2 and design_dest.exists() is marker_existed,
+            proc.stdout + proc.stderr,
+        )
+
+        proc = run(lint, [str(MINIMAL), "--json"], cwd=foreign)
+        minimal_payload = {}
+        try:
+            minimal_payload = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            minimal_payload = {"_error": str(exc)}
+        ok(
+            "lint minimal-core",
+            proc.returncode == 0
+            and minimal_payload.get("ok") is True
+            and minimal_payload.get("fails") == []
+            and any("Accessibility" in item for item in minimal_payload.get("warns", [])),
+            proc.stdout,
+        )
 
         proc = run(lint, [str(VALID), "--json"], cwd=foreign)
         payload = {}
@@ -134,6 +176,34 @@ def main(argv: list[str] | None = None) -> int:
         proc = run(lint, [str(cream)], cwd=foreign)
         ok(
             "lint cream dash Inter allowed",
+            proc.returncode == 0,
+            proc.stdout + proc.stderr,
+        )
+
+        button = workspace / "button-claim.md"
+        button.write_text(
+            VALID.read_text(encoding="utf-8").replace(
+                "Use a cream paper field with wine and brass inks rather than a cool-gray software palette.",
+                "Primary CTA is a <button> with wine fill on cream paper.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        proc = run(lint, [str(button)], cwd=foreign)
+        ok(
+            "lint allows HTML button in evidence",
+            proc.returncode == 0,
+            proc.stdout + proc.stderr,
+        )
+
+        motionless = workspace / "no-motion.md"
+        valid_text = VALID.read_text(encoding="utf-8")
+        motion_at = valid_text.index("## Motion")
+        imagery_at = valid_text.index("## Imagery")
+        motionless.write_text(valid_text[:motion_at] + valid_text[imagery_at:], encoding="utf-8")
+        proc = run(lint, [str(motionless)], cwd=foreign)
+        ok(
+            "lint optional Motion absent",
             proc.returncode == 0,
             proc.stdout + proc.stderr,
         )
@@ -263,6 +333,65 @@ def main(argv: list[str] | None = None) -> int:
 
         proc = run(extract, [str(workspace / "nope.css")], cwd=foreign)
         ok("extract missing file", proc.returncode == 1, proc.stderr)
+
+        hyphen = workspace / "hyphen-placeholder.md"
+        hyphen.write_text(
+            VALID.read_text(encoding="utf-8").replace(
+                "Use a cream paper field with wine and brass inks rather than a cool-gray software palette.",
+                "Replace tokens with <brand-name> before shipping.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        proc = run(lint, [str(hyphen)], cwd=foreign)
+        ok(
+            "lint hyphenated placeholder fails",
+            proc.returncode == 1,
+            proc.stdout + proc.stderr,
+        )
+
+        evals_path = ROOT / "evals" / "evals.json"
+        evals_data = json.loads(evals_path.read_text(encoding="utf-8"))
+        eval_items = evals_data.get("evals")
+        ok(
+            "evals.json shape",
+            isinstance(eval_items, list) and bool(eval_items),
+            "evals missing",
+        )
+        corpus_fails = 0
+        for item in eval_items or []:
+            eval_id = item.get("id", "?")
+            blobs = []
+            missing = False
+            for rel in item.get("files") or []:
+                path = ROOT / rel
+                if not path.is_file():
+                    ok(f"eval {eval_id} file {rel}", False, "missing")
+                    missing = True
+                    corpus_fails += 1
+                    continue
+                blobs.append(path.read_text(encoding="utf-8"))
+            if missing:
+                continue
+            blob = "\n".join(blobs)
+            for assertion in item.get("assertions") or []:
+                kind = assertion.get("type")
+                if kind == "contains":
+                    value = assertion.get("value", "")
+                    if value not in blob:
+                        ok(f"eval {eval_id} contains {value!r}", False, "not found")
+                        corpus_fails += 1
+                elif kind == "not_contains":
+                    value = assertion.get("value", "")
+                    if value in blob:
+                        ok(f"eval {eval_id} not_contains {value!r}", False, "found")
+                        corpus_fails += 1
+                elif kind == "file_exists":
+                    path = ROOT / assertion.get("path", "")
+                    if not path.is_file():
+                        ok(f"eval {eval_id} file_exists", False, str(path))
+                        corpus_fails += 1
+        ok("evals.json corpus assertions", corpus_fails == 0, f"{corpus_fails} assertion(s) failed")
     except Exception as exc:  # noqa: BLE001 — report and fail the suite
         fails.append(f"suite exception: {exc}")
         print(f"FAIL  suite exception  {exc}")

@@ -35,11 +35,11 @@ BMW, BMW M, Bugatti, Ferrari, Lamborghini, Renault, Tesla
 
 ## Font Substitutions
 
-Catalogs may reference proprietary fonts. These are possible substitutes, not equivalent metrics or verified brand facts. Confirm availability, license, glyph coverage and visual fit; preserve a supplied licensed font when appropriate.
+Catalogs may reference proprietary fonts. The table is a reminder that a licensed substitute may be needed — not equivalent metrics, not a visual match, and not a mandate. Confirm the actual available cut, license, glyph coverage and fit; preserve a supplied licensed font when appropriate. Do not assume a webfont host carries the same family.
 
 | Reference Font | Possible Alternative | Character |
 |:--|:--|:--|
-| Geist | Geist (Google Fonts) | Geometric, compact |
+| Geist | A licensed geometric sans after confirming the actual cut and license; do not assume Google Fonts hosts an equivalent Geist | Geometric, compact |
 | sohne-var (Stripe) | Source Sans 3 | Light, elegant |
 | Airbnb Cereal | DM Sans | Rounded, friendly |
 | Circular (Spotify) | DM Sans | Geometric, warm |
@@ -49,20 +49,16 @@ Catalogs may reference proprietary fonts. These are possible substitutes, not eq
 
 ## Selection Guide
 
-- **Developer tools / dashboards**: Linear, Vercel, Supabase, Raycast, Sentry
-- **Documentation / content sites**: Mintlify, Notion, Sanity, MongoDB
-- **Marketing / landing pages**: Stripe, Framer, Apple, SpaceX
-- **Dark mode**: Linear, Cursor, ElevenLabs, Warp, Superhuman
-- **Light / clean**: Vercel, Stripe, Notion, Cal.com
-- **Playful / friendly**: PostHog, Figma, Lovable, Zapier, Miro
-- **Premium / luxury**: Apple, BMW, Stripe, Superhuman, Revolut
+The lists above are inventory, not a picker menu. Catalog identity is not the design answer.
+
+If you compare two or three catalog traits, explain why each trait (contrast, density, type character, motion restraint) fits THIS brief. Do not default developer tools to Linear, documentation to Mintlify, or marketing to Stripe. A named brand is a source of traits to evaluate, not a template to copy, and category membership is not a recommendation.
 
 ---
 
 ## Fallback Strategy
 
-Fetch to a staged `base.md`, not directly over the final DESIGN.md. A catalog base must be adapted to the output contract, enriched and validated before safe commit.
+Fetch a catalog snapshot to a staged `base.md` only. The fetch CLI requires that output path; a destination whose filename is `DESIGN.md` is refused. Never fetch onto the delivered spec. Adapt the staged base to the output contract, enrich, lint, then commit with `design_io.py`.
 
-First source: [Refero Styles](https://styles.refero.design) (`/api/styles`; the script writes a DESIGN.md from JSON because Refero has no file download). Second: [Design.md Store](https://designmd-store.com/packs). Third: VoltAgent static list. `fetch_design_md.py --list` prints all three. Pin with `--source refero`, `--source store`, or `--source voltagent`.
+Auto source order: [Refero Styles](https://styles.refero.design) first (`/api/styles`; the script synthesizes Markdown from JSON because Refero has no file download), then [Design.md Store](https://designmd-store.com/packs), then VoltAgent. VoltAgent is last, not first. `fetch_design_md.py --list` prints all three. Pin with `--source refero`, `--source store`, or `--source voltagent`.
 
 VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Reading a delivered DESIGN.md is offline; validating it requires the documented local parser. All three catalogs are unofficial snapshots and can lag a live brand site. Inspect provenance rather than presenting their claims as direct observation.
