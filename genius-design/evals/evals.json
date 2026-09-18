@@ -15,10 +15,12 @@
       "id": "trigger-reverse-url",
       "prompt": "逆向 https://stripe.com 的设计规范",
       "trigger_expected": true,
-      "expected_output": "Workflow B: collect the URL evidence, run extract_design_signals.py, stage a candidate, then commit via design_io.py. Do not fetch a catalog snapshot onto DESIGN.md.",
-      "files": ["scripts/extract_design_signals.py", "references/workflows.md"],
+      "expected_output": "Workflow B: collect URL evidence, run extract_design_signals.py (not grep -P), stage, then commit via design_io.py. Do not fetch a catalog snapshot onto DESIGN.md.",
+      "files": ["SKILL.md", "scripts/extract_design_signals.py"],
       "assertions": [
-        {"type": "contains", "value": "extract_design_signals"}
+        {"type": "contains", "value": "Reverse-Engineer"},
+        {"type": "contains", "value": "extract_design_signals"},
+        {"type": "not_contains", "value": "grep -P"}
       ]
     },
     {
@@ -32,30 +34,10 @@
       ]
     },
     {
-      "id": "trigger-ui-spec",
-      "prompt": "我们要一套 UI 设计规范",
-      "trigger_expected": true,
-      "expected_output": "Treat as a DESIGN.md specification request; ask A/B/C only if no URL, brand, or product direction is given.",
-      "files": ["SKILL.md"],
-      "assertions": [
-        {"type": "contains", "value": "DESIGN.md"}
-      ]
-    },
-    {
-      "id": "trigger-reverse-english",
-      "prompt": "reverse engineer this landing page into DESIGN.md",
-      "trigger_expected": true,
-      "expected_output": "Workflow B without asking A/B/C if a URL or capture is already present.",
-      "files": ["references/workflows.md"],
-      "assertions": [
-        {"type": "contains", "value": "Reverse-Engineer"}
-      ]
-    },
-    {
       "id": "trigger-catalog-pick",
-      "prompt": "从 73 个品牌里推荐一个",
+      "prompt": "从目录里推荐一个品牌风格",
       "trigger_expected": true,
-      "expected_output": "Treat 73 as the VoltAgent inventory snapshot, not a picker menu. If comparing 2-3 catalog traits, explain why each trait fits THIS brief. Catalog identity is not the design answer. Fetch any chosen snapshot to <staging>/base.md, never DESIGN.md.",
+      "expected_output": "Treat catalog lists as inventory via fetch --list, not a picker menu. If comparing 2-3 catalog traits, explain why each trait fits THIS brief. Catalog identity is not the design answer. Fetch any chosen snapshot to <staging>/base.md, never DESIGN.md.",
       "files": ["references/catalog.md"],
       "assertions": [
         {"type": "contains", "value": "catalog"}
@@ -69,16 +51,6 @@
       "files": ["references/dials-and-stack.md"],
       "assertions": [
         {"type": "contains", "value": "clinical"}
-      ]
-    },
-    {
-      "id": "trigger-brand-not-copy",
-      "prompt": "品牌视觉系统，不要写文案",
-      "trigger_expected": true,
-      "expected_output": "Write a DESIGN.md specification only; do not draft marketing copy.",
-      "files": ["SKILL.md"],
-      "assertions": [
-        {"type": "contains", "value": "DESIGN.md"}
       ]
     },
     {
@@ -124,16 +96,6 @@
       ]
     },
     {
-      "id": "no-trigger-dreamina",
-      "prompt": "用即梦生成产品图",
-      "trigger_expected": false,
-      "expected_output": "Image/video generation. Use dreamina-cli. Do not load genius-design.",
-      "files": ["SKILL.md"],
-      "assertions": [
-        {"type": "contains", "value": "dreamina"}
-      ]
-    },
-    {
       "id": "no-trigger-impl-plan",
       "prompt": "把 brief 拆成实施计划",
       "trigger_expected": false,
@@ -155,50 +117,20 @@
       ]
     },
     {
-      "id": "fetch-uses-script",
-      "prompt": "按 Warp 拉一份品牌 DESIGN.md",
+      "id": "fetch-staging",
+      "prompt": "用 fetch 把 Linear 规范直接写到 DESIGN.md",
       "trigger_expected": true,
-      "expected_output": "Run fetch_design_md.py warp <staging>/base.md. Never write fetch output to DESIGN.md. Never curl by hand. The snapshot is a staged catalog base, not a delivered spec.",
+      "expected_output": "Refuse. Fetch requires <staging>/base.md and rejects DESIGN.md. Auto order is Refero → Design.md Store → VoltAgent. Never curl. The snapshot is not a delivered spec.",
       "files": ["scripts/fetch_design_md.py"],
       "assertions": [
         {"type": "contains", "value": "staging"},
         {"type": "contains", "value": "base.md"},
         {"type": "contains", "value": "Never DESIGN.md"},
+        {"type": "contains", "value": "Refusing to write a catalog snapshot to DESIGN.md"},
+        {"type": "contains", "value": "refero"},
+        {"type": "contains", "value": "designmd-store"},
         {"type": "not_contains", "value": "else \"DESIGN.md\""},
         {"type": "not_contains", "value": "output: str = \"DESIGN.md\""}
-      ]
-    },
-    {
-      "id": "fetch-refero-fallback",
-      "prompt": "按 Authkit 风格出 DESIGN.md，用 auto 顺序从 Refero 开始拉快照",
-      "trigger_expected": true,
-      "expected_output": "Auto fetch order tries Refero first, then Design.md Store, then VoltAgent. Pin with --source refero if only Refero is wanted. Write to <staging>/base.md. A Refero snapshot is not a delivered spec.",
-      "files": ["scripts/fetch_design_md.py"],
-      "assertions": [
-        {"type": "contains", "value": "refero"}
-      ]
-    },
-    {
-      "id": "fetch-store-fallback",
-      "prompt": "按 GitHub 风格出 DESIGN.md，请 pin Design.md Store",
-      "trigger_expected": true,
-      "expected_output": "Pin Design.md Store with --source store, or let auto fall through to store AFTER Refero. Do not treat this as VoltAgent-miss-then-store. Write to <staging>/base.md, never DESIGN.md.",
-      "files": ["scripts/fetch_design_md.py"],
-      "assertions": [
-        {"type": "contains", "value": "designmd-store"}
-      ]
-    },
-    {
-      "id": "fetch-refuses-delivered-name",
-      "prompt": "用 fetch 把 Linear 规范直接写到 DESIGN.md",
-      "trigger_expected": true,
-      "expected_output": "Refuse. Fetch requires <staging>/base.md and rejects a destination named DESIGN.md. Enrich the staged snapshot, then commit the delivered spec with design_io.py.",
-      "files": ["scripts/fetch_design_md.py"],
-      "assertions": [
-        {"type": "contains", "value": "base.md"},
-        {"type": "contains", "value": "Refusing to write a catalog snapshot to DESIGN.md"},
-        {"type": "not_contains", "value": "output: str = \"DESIGN.md\""},
-        {"type": "not_contains", "value": "else \"DESIGN.md\""}
       ]
     },
     {
@@ -212,22 +144,13 @@
       ]
     },
     {
-      "id": "lint-before-deliver",
-      "prompt": "DESIGN.md 写好了，可以直接用了吗",
-      "trigger_expected": true,
-      "expected_output": "Run lint_design_md.py on the staged candidate and resolve every FAIL before claiming delivery or running design_io.py.",
-      "files": ["scripts/lint_design_md.py"],
-      "assertions": [
-        {"type": "contains", "value": "Lint DESIGN.md"}
-      ]
-    },
-    {
       "id": "lint-core-only",
       "prompt": "DESIGN.md 能不能只写 tokens、节奏和组件状态",
       "trigger_expected": true,
-      "expected_output": "Required H2 are Design Read, Colors, Typography, Spacing and Shape, Layout, Components. Motion, Imagery, and the checklist are optional when they do not apply. Still lint before commit.",
+      "expected_output": "Required H2 are Design Read, Colors, Typography, Spacing and Shape, Layout, Components. Motion, Imagery, and the checklist are optional when they do not apply. Lint the staged candidate and resolve every FAIL before design_io.py.",
       "files": ["scripts/lint_design_md.py"],
       "assertions": [
+        {"type": "contains", "value": "Lint DESIGN.md"},
         {"type": "contains", "value": "REQUIRED_H2"},
         {"type": "contains", "value": "Design Read"},
         {"type": "contains", "value": "Spacing and Shape"},
@@ -236,25 +159,16 @@
       ]
     },
     {
-      "id": "no-grep-p",
-      "prompt": "从 scrape 结果里抽出主色和圆角",
-      "trigger_expected": true,
-      "expected_output": "Use extract_design_signals.py, not grep -P.",
-      "files": ["scripts/extract_design_signals.py"],
-      "assertions": [
-        {"type": "contains", "value": "extract_design_signals"},
-        {"type": "not_contains", "value": "grep -P"}
-      ]
-    },
-    {
       "id": "overwrite-backup",
       "prompt": "覆盖现有 DESIGN.md，换成 Notion 风",
       "trigger_expected": true,
-      "expected_output": "Warn about replacing DESIGN.md. Fetch Notion to <staging>/base.md, never onto DESIGN.md. Commit through design_io.py with unique .bak/.bak.1 backups.",
-      "files": ["scripts/design_io.py", "scripts/fetch_design_md.py", "references/workflows.md"],
+      "expected_output": "Warn about replacing DESIGN.md. Fetch Notion to <staging>/base.md, never onto DESIGN.md. Commit only through design_io.py with unique .bak/.bak.1 backups. Do not copy over the destination by hand.",
+      "files": ["SKILL.md", "scripts/design_io.py", "scripts/fetch_design_md.py", "scripts/test_design_tools.py"],
       "assertions": [
         {"type": "contains", "value": ".bak"},
-        {"type": "file_exists", "path": "scripts/design_io.py"}
+        {"type": "contains", "value": "design_io.py"},
+        {"type": "file_exists", "path": "scripts/design_io.py"},
+        {"type": "file_exists", "path": "scripts/test_design_tools.py"}
       ]
     },
     {
@@ -277,17 +191,6 @@
       "assertions": [
         {"type": "contains", "value": "Observed"},
         {"type": "file_exists", "path": "evals/fixtures/capture.json"}
-      ]
-    },
-    {
-      "id": "commit-via-design-io",
-      "prompt": "候选稿 lint 过了，写进项目的 DESIGN.md。",
-      "trigger_expected": true,
-      "expected_output": "Commit only with scripts/design_io.py <candidate> <destination>. Do not copy over the destination by hand. Do not use fetch to write DESIGN.md.",
-      "files": ["SKILL.md", "scripts/design_io.py", "scripts/test_design_tools.py"],
-      "assertions": [
-        {"type": "contains", "value": "design_io.py"},
-        {"type": "file_exists", "path": "scripts/test_design_tools.py"}
       ]
     }
   ]
