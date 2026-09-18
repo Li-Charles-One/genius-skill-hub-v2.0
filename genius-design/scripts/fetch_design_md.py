@@ -14,7 +14,7 @@ SOURCE_URL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main
 STORE_PACK_URL = "https://designmd-store.com/packs"
 STORE_SITEMAP_URL = "https://designmd-store.com/sitemap.xml"
 REFERO_API = "https://styles.refero.design/api/styles"
-USER_AGENT = "genius-design/2.4"
+USER_AGENT = "genius-design/2.5"
 REFERO_PAGE_DELAY = 0.25
 DOWNLOAD_RE = re.compile(r"/api/download/([0-9a-f-]{36})", re.I)
 SITEMAP_PACK_RE = re.compile(
@@ -369,15 +369,14 @@ def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
     try_store = source in ("auto", "store")
     try_refero = source in ("auto", "refero")
 
-    if try_voltagent:
+    if try_refero:
         try:
-            data = fetch_voltagent(vt_slug)
-            used = "voltagent"
-            used_slug = vt_slug
-        except (OSError, urllib.error.URLError, TimeoutError) as error:
-            errors.append(f"voltagent {vt_slug}: {error}")
-            if source == "voltagent":
-                print(f"Failed to fetch '{brand}' from VoltAgent: {error}")
+            data, used_slug = fetch_refero(brand)
+            used = "refero"
+        except (OSError, urllib.error.URLError, TimeoutError, ValueError, KeyError) as error:
+            errors.append(f"refero {brand}: {error}")
+            if source == "refero":
+                print(f"Failed to fetch '{brand}' from Refero: {error}")
                 sys.exit(1)
 
     if data is None and try_store:
@@ -391,14 +390,15 @@ def fetch(brand: str, output: str = "DESIGN.md", source: str = "auto") -> None:
                 print(f"Failed to fetch '{brand}' from Design.md Store: {error}")
                 sys.exit(1)
 
-    if data is None and try_refero:
+    if data is None and try_voltagent:
         try:
-            data, used_slug = fetch_refero(brand)
-            used = "refero"
-        except (OSError, urllib.error.URLError, TimeoutError, ValueError, KeyError) as error:
-            errors.append(f"refero {brand}: {error}")
-            if source == "refero":
-                print(f"Failed to fetch '{brand}' from Refero: {error}")
+            data = fetch_voltagent(vt_slug)
+            used = "voltagent"
+            used_slug = vt_slug
+        except (OSError, urllib.error.URLError, TimeoutError) as error:
+            errors.append(f"voltagent {vt_slug}: {error}")
+            if source == "voltagent":
+                print(f"Failed to fetch '{brand}' from VoltAgent: {error}")
                 sys.exit(1)
 
     if data is None:

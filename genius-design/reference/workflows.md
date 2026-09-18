@@ -29,7 +29,7 @@ python3 scripts/fetch_design_md.py <brand> ./DESIGN.md
 
 `python scripts/fetch_design_md.py --list` prints VoltAgent slugs, Design.md Store packs, and Refero Styles site names. Aliases: `linear` -> `linear.app`, `xai` -> `x.ai`, `opencode` -> `opencode.ai`.
 
-Default fetch order: VoltAgent, then Design.md Store pack page -> `/api/download/<uuid>`, then Refero Styles (`/api/styles` catalog match + synthesized DESIGN.md). Pin with `--source voltagent`, `--source store`, or `--source refero`.
+Default fetch order: Refero Styles (`/api/styles` catalog match + synthesized DESIGN.md), then Design.md Store pack page -> `/api/download/<uuid>`, then VoltAgent. Pin with `--source refero`, `--source store`, or `--source voltagent`.
 
 Do not hand-curl unless the script cannot run. Templates: `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/<slug>/DESIGN.md`, `https://designmd-store.com/packs/<slug>`, `https://styles.refero.design/api/styles`.
 

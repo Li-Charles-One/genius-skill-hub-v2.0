@@ -1,6 +1,6 @@
 # Brand Catalog, Fonts, Selection, Fallback
 
-Workflow A is not a 73-brand menu. Fetch order: VoltAgent static list below, then Design.md Store, then Refero Styles. The 73 names are only the VoltAgent snapshot. `python scripts/fetch_design_md.py --list` prints all three catalogs.
+Workflow A is not a 73-brand menu. Fetch order: Refero Styles, then Design.md Store, then the VoltAgent static list below. The 73 names are the last-resort snapshot. `python scripts/fetch_design_md.py --list` prints all three catalogs.
 
 ## VoltAgent static catalog (73 brands)
 
@@ -63,7 +63,7 @@ Brand DESIGN.md files reference proprietary fonts. Use these CDN-available alter
 
 Primary: `python scripts/fetch_design_md.py <brand> ./DESIGN.md` pulls from `https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md`.
 
-Second source: [Design.md Store](https://designmd-store.com/packs). Third source: [Refero Styles](https://styles.refero.design) (`/api/styles`; the script writes a DESIGN.md from JSON because Refero has no file download). `fetch_design_md.py --list` prints all three. Pin with `--source voltagent`, `--source store`, or `--source refero`.
+First source: [Refero Styles](https://styles.refero.design) (`/api/styles`; the script writes a DESIGN.md from JSON because Refero has no file download). Second: [Design.md Store](https://designmd-store.com/packs). Third: VoltAgent static list. `fetch_design_md.py --list` prints all three. Pin with `--source refero`, `--source store`, or `--source voltagent`.
 
 VoltAgent aliases: `linear` -> `linear.app`, `xai` / `xiai` -> `x.ai`, `opencode` -> `opencode.ai`, `mistral` -> `mistral.ai`, `together` -> `together.ai`, `cal.com` -> `cal`, `dell` -> `dell-1996`. Store aliases: `next.js` -> `nextjs`, `disney+` -> `disneyplus`, `booking.com` -> `booking`. Once a DESIGN.md is in the project root, it has zero external dependencies. All three sources are unofficial snapshots; they can lag the live brand site.
 
