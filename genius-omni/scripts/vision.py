@@ -24,6 +24,8 @@ Audio modes (4):  audio-summary, audio-transcribe, audio-review, audio-scene
 PDF:              ocr / describe (page-by-page)
 """
 
+from __future__ import annotations
+
 import argparse
 import base64
 import hashlib
