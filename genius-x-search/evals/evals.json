@@ -41,7 +41,7 @@
       "id": "channel-list",
       "prompt": "看看 genius-x-search 现在有哪些渠道和优先级",
       "trigger_expected": true,
-      "expected_output": "Runs scripts/x_search.py --list-channels and reports cpa readiness without printing API keys.",
+      "expected_output": "Runs scripts/x_search.py --list-channels and reports cpa-jp readiness without printing API keys.",
       "files": ["channels.json", "scripts/x_search.py"],
       "assertions": [
         {"type": "contains", "value": "--list-channels"},

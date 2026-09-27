@@ -2,215 +2,73 @@
 name: genius-x-search
 description: "基于 Grok 代理的 X/Twitter 实时搜索与情报分析：关键词检索、特定账号动态跟踪、全网讨论热度与舆情简报。不要用于发帖点赞等社交互动，或与 X 无关的通用网页搜索。"
 metadata:
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
 # Genius X Search
 
-Real-time X research via a Grok-compatible `/v1/responses` endpoint with
-`tools: [{ "type": "x_search" }]`.
-
-This skill is intentionally V1-only:
-
-1. **keyword** — search X by query
-2. **account** — recent posts from a handle
-3. **heat** — discussion heat, sentiment, and representative posts
-
-## Requirements
-
-### Channel interface (swappable)
-
-Control plane: `channels.json`  
-Secrets: skill-local `.env`
-
-Built-in slot:
-
-| id | priority | role | key env |
-|---|---|---|---|
-| `cpa` | 1 | `cpa.artistic-genius.vip` Grok relay | `CHANNEL_CPA_KEY` / `CPA_API_KEY` / `GROK_API_KEY` |
-
-Default model: `grok-3-mini-fast` (via `cpa.artistic-genius.vip`; fallback `grok-3-mini`).
-
-**Swap / extend without code changes:**
-
-1. Edit `channels.json` (`base` / `models` / add more channels)
-2. Or set env override: `X_SEARCH_PRIORITY=cpa`
-3. Put keys only in `.env` (`CHANNEL_CPA_KEY`)
-
-```bash
-# inspect registry
-python scripts/x_search.py --list-channels
-
-# force CPA
-python scripts/x_search.py keyword "Grok 4.5" --channel cpa
-```
-
-Config precedence:
-
-1. CLI (`--api-key` / `--base-url` / `--model` / `--channel`)
-2. `channels.json` + `.env` keys
-3. Optional `X_SEARCH_PRIORITY` order override
-4. Legacy `GROK_API_*` (points at CPA)
-
-Failover order:
-
-1. channel by priority
-2. model chain inside that channel
-3. one transient retry on timeout / SSL / 429 / 5xx
-
-Error policy:
-
-- `401/403` → skip current channel, try next provider
-- `400` → stop (bad request, not a channel issue)
-- model/channel unavailable, timeout, SSL, 429/5xx → next model, then next channel
-
-### Supported variables
-
-| 变量 | 作用 | 读取来源 |
-|---|---|---|
-| `channels.json` | 渠道注册表：id / priority / enabled / base / models | 文件 |
-| `X_SEARCH_PRIORITY` | 临时改优先级顺序 | 环境变量 → `.env` |
-| `CHANNEL_CPA_KEY` / `CPA_API_KEY` | CPA API Key | `.env` |
-| `CHANNEL_<ID>_BASE` | 可选覆盖 base | 环境变量 → `.env` |
-| `X_SEARCH_TRANSIENT_RETRIES` | 瞬时错误重试次数（默认 1） | 环境变量 → `.env` |
-| `GROK_API_KEY` | 兼容别名（同 CPA key） | CLI / `.env` |
-| `GROK_TIMEOUT_SECONDS` | 超时秒数 | 环境变量 → `.env` |
-
-Never print the API key.
+Real-time X research through a Grok-compatible `POST {base}/responses` relay with `tools: [{"type": "x_search"}]`. Three modes only: **keyword**, **account**, **heat**.
 
 ## When To Use
 
-Use this skill when the user wants:
+Use for: "search X for …", "what did @handle post recently", X heat/sentiment on a topic, a short sourced briefing from X.
 
-- "search X for ..."
-- "what did @handle post recently"
-- "X discussion / heat / sentiment about ..."
-- a short sourced briefing from X
+Do not use for: posting, liking, following, DMs, or account management; web research with no X intent; watchlists or full-archive search.
 
-Do **not** use it for:
+## Setup
 
-- posting or account management
-- pure web research with no X intent
-- long-term watchlists, archival search, or engagement automation
+- `channels.json` — channel registry: `id`, `priority`, `enabled`, `base`, `models` (tried in order), `key_env`. Default: `cpa-jp` with `grok-4.20-0309-non-reasoning` → `grok-3-mini-fast`.
+- `.env` (skill-local, from `.env.example`) — the key named in `key_env`, e.g. `CHANNEL_CPA_JP_KEY`. Environment variables override `.env`. Never print the key.
+- Check readiness: `python scripts/x_search.py --list-channels`
 
 ## Modes
 
-### 1) keyword
-
-Goal: find recent relevant posts for a topic.
-
 ```bash
-python scripts/x_search.py keyword "Grok 4.5 coding agents" --limit 8
+python scripts/x_search.py keyword "Grok 4.5 coding agents" --since 3d --limit 8
+python scripts/x_search.py account elonmusk --since 7d --limit 8
+python scripts/x_search.py heat "Grok 4.5" --since 3d --limit 10 --lang zh
 ```
 
-Useful options:
+Options: `--since 1h|3h|12h|1d|3d|7d|30d` (default `7d`), `--limit 1-20` (default 8), `--lang zh|en`, `--json`, `--model <id>`, `--channel <id>`, `--timeout <s>` (default 90).
 
-- `--since 1d|3d|7d`
-- `--limit 5-12`
-- `--lang zh|en`
-- `--json`
+Query tips: exact product/version names first, then 1–2 aliases. Handles work with or without `@`. For heat, reaction words help (`love OR hate OR disappointed OR benchmark`). Prefer short windows unless the user asks broader.
 
-### 2) account
+## Workflow
 
-Goal: summarize what one account posted recently.
+1. Pick exactly one mode and build a tight query.
+2. Run `scripts/x_search.py`. Use its output, not model memory.
+3. Answer concisely with sources.
+4. If the script fails (exit code 2), report the error plainly. Do not swap in unrelated queries or invent posts.
 
-```bash
-python scripts/x_search.py account elonmusk --limit 8
-python scripts/x_search.py account @realDonaldTrump --since 7d
-```
+Run at most 2–3 searches in parallel; the relay times out or throws SSL errors beyond that. A single call is the most reliable.
 
-Handle may be with or without `@`.
+## Failover
 
-### 3) heat
+Channel by priority → model chain inside it. 429/5xx/connection resets get one retry on the same model; timeouts, empty 200 answers, and `model_not_found` go straight to the next model; 401/403 skip the channel; any other 400/422 stops.
 
-Goal: produce a sourced heat/sentiment briefing.
+## Evidence Rules
 
-```bash
-python scripts/x_search.py heat "Grok 4.5" --limit 10 --lang zh
-```
-
-Heat mode should return:
-
-- overall heat
-- sentiment split
-- 4-8 representative posts with links
-- main praise points and main complaints
-
-## Agent Workflow
-
-1. Choose exactly one V1 mode.
-2. Build a tight query.
-3. Run `scripts/x_search.py`.
-4. Prefer script output over freeform model memory.
-5. Return a concise sourced answer.
-6. If the script fails, report the error plainly. Do not invent posts.
-7. **并发控制**：一次最多并行跑 2-3 个搜索任务。复杂搜索（需多方对比、多角度信息）跑 3 个；
-   简单搜索（查一个账号、一个关键词）跑 1-2 个。并发过多会导致 SSL 报错或超时。
-   若脚本报错，不得换用无关查询蒙混过关，必须如实报错。
-
-### Query tips
-
-- Keyword: exact product/version names first, then 1-2 aliases
-- Account: always use `from:handle`
-- Heat: include product name + reaction words when useful
-  (`love OR hate OR impressed OR disappointed OR benchmark`)
-- Prefer recent windows (`1d`, `3d`, `7d`) unless user asks broader
-
-## Evidence rules
-
-Keep original-post content, search-result summaries, and agent inference distinct. Include direct post links whenever available. Heat and sentiment conclusions must state the time window and sample size; if the sample is too small, say so explicitly. Merge duplicates from the same post, event, or author and prefer original posts with direct links.
+Keep original post content, search summaries, and your own inference distinct. Link posts directly whenever possible. Heat and sentiment conclusions state the time window and sample size, and say so when the sample is thin. Merge duplicates of the same post or event; prefer originals.
 
 ## Output Contract
 
-Default to concise Chinese unless the user asks for another language.
+Concise Chinese unless the user asks otherwise.
 
-### keyword
+- **keyword** — `## 检索结果`: one-line overview, then 5–10 posts with author, time, and link.
+- **account** — `## @handle 最近动态`: posting frequency/themes in one line, then 3–8 posts with links.
+- **heat** — `## 热度简报`: 热度判断, 情绪判断, 代表性讨论 (with links), 主要好评, 主要争议/差评.
 
-```text
-## 检索结果
-- 一句话总览
-- 5-10 条要点，每条尽量带作者、时间和链接
-```
-
-### account
-
-```text
-## @handle 最近动态
-- 更新频率/主题一句话
-- 3-8 条最近帖子要点 + 链接
-```
-
-### heat
-
-```text
-## 热度简报
-- 热度判断
-- 情绪判断
-- 代表性讨论（带链接）
-- 主要好评
-- 主要争议/差评
-```
-
-If no useful posts are found, say so explicitly.
-
-## Notes
-
-- The reliable path is `POST {BASE}/responses` with `x_search`.
-- Do not rely on `chat/completions` for X search.
-- This skill does not implement posting, watchlists, or full-archive search.
-- **渠道**：默认仅自建 CPA；可用 `channels.json` 再加备用。瞬时错误会同模型重试 1 次，再换 model / 下一渠道。
-- **并发限制**：该 API 端并发能力有限。2 个并发可能导致部分请求 SSL 报错，
-  4 个并发几乎必超时。单次调用稳定。任何时候并行搜索不得超过 3 个。
+If nothing useful is found, say so.
 
 ## Resources
 
-- `references/v1-modes.md` — mode selection examples and non-goals
-- `evals/evals.json` — trigger / non-trigger checks
-- `scripts/x_search.py` — deterministic relay caller
-- `channels.json` — channel registry (default: cpa)
+- `scripts/x_search.py` — relay caller with failover
+- `channels.json` — channel registry
 - `.env.example` — secrets template
+- `evals/evals.json` — trigger / non-trigger checks
 
 ## Gotchas
 
-- One search at a time. Do not run more than 3 parallel X searches.
-- This skill does not post, like, follow, or DM.
+- `chat/completions` does not do X search; only `/responses` with `x_search` works.
+- The relay does not strictly enforce `max_tool_calls`; heat mode may make 6–7 X searches and take ~15 s.
+- Do not run more than 3 X searches in parallel.
