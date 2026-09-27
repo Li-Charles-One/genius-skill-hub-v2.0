@@ -1,6 +1,8 @@
 ---
 name: genius-skill-creator
 description: "创建、修复、审计、评测与优化 SKILL.md 技能包及多平台适配器：支持工作流脚手架生成、规范审计与安全扫描。不要用于普通业务代码编写、应用排错或通用文本翻译。"
+metadata:
+  version: "1.0.0"
 ---
 
 # Genius Skill Creator

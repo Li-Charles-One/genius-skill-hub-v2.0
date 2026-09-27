@@ -1,6 +1,8 @@
 ---
 name: genius-lark-use
 description: "飞书/Lark 统一智能体技能（基于 lark-cli）：处理凭证认证、云文档与多维表格读写、IM 消息收发、日程任务与 OpenAPI 调用。不要用于非飞书第三方服务或纯本地文档编辑。"
+metadata:
+  version: "1.0.0"
 ---
 
 # Lark / Feishu Unified CLI Skill

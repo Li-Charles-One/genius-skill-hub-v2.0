@@ -1,6 +1,8 @@
 ---
 name: genius-impl-plans
 description: "在编写代码前，将已确认的设计简报（Brief/Spec）转化为逐项可执行的代码实现计划。不要在已进入编码阶段使用，且不要在需求目标仍不明确时使用（需求阶段用 genius-brief-thinking）。"
+metadata:
+  version: "1.0.0"
 ---
 
 # Genius Impl Plans

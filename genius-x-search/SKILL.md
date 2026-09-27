@@ -1,6 +1,8 @@
 ---
 name: genius-x-search
 description: "基于 Grok 代理的 X/Twitter 实时搜索与情报分析：关键词检索、特定账号动态跟踪、全网讨论热度与舆情简报。不要用于发帖点赞等社交互动，或与 X 无关的通用网页搜索。"
+metadata:
+  version: "1.0.0"
 ---
 
 # Genius X Search

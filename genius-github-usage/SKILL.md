@@ -1,6 +1,8 @@
 ---
 name: genius-github-usage
 description: "通过 GitHub CLI (gh) 操作 GitHub 远端：管理仓库、Issue、审查 PR、Fork、Release 与检索开源项目。不要用于不涉及 GitHub 远端的纯本地 Git 操作（如本地 status/commit/diff）。"
+metadata:
+  version: "1.0.0"
 ---
 
 # Genius GitHub Usage
