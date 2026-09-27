@@ -2,20 +2,20 @@
 
 Shared instructions describe capabilities, not universal tool names. Use the tools actually exposed by the host:
 
-| Neutral action | This OpenCode environment | Other runtimes |
-| --- | --- | --- |
-| Read/search files | `Read`, `Glob`, `Grep` | Native file tools |
-| Edit staged document | `Edit`, `Write` | Native edit/write tools |
-| Run Python | `Bash` (PowerShell on Windows) | Native command tool |
-| Load a needed skill | `Skill` | Verified native skill mechanism |
-| Fetch HTTP URL | `webfetch` | Native fetch/web tools |
-| Capture a page | Discover available browser tools and their schemas | Verified browser/screenshot tooling |
+| Neutral action | Use |
+| --- | --- |
+| Read/search files | Native file read/search tools |
+| Edit staged document | Native edit/write tools |
+| Run Python | Native shell/command tool (PowerShell on Windows) |
+| Load a needed skill | The host's native skill mechanism |
+| Fetch HTTP URL | The host's native fetch/web tool |
+| Capture a page | Discover available browser tools and their schemas |
 
-`agents/openai.yaml` is Codex/UI metadata. OpenCode uses native SKILL.md discovery. Do not invent `functions.read` / `functions.patch` names. Do not copy `webfetch` into shared workflow text; it is this row only.
+`agents/openai.yaml` is Codex/UI metadata; other hosts use native SKILL.md discovery. Do not invent tool names the host does not expose.
 
 ## Dependencies
 
-- Python 3.10+.
+- Python 3.9+.
 - Fetch and extraction use the standard library.
 - Lint and validated commit require **PyYAML**. If absent, the command exits unsuccessfully with an actionable message before touching the destination. Do not install it automatically.
 - If the user chooses to install it: Windows `python -m pip install PyYAML`; macOS/Linux `python3 -m pip install PyYAML`, using the same interpreter as the commands.
@@ -52,7 +52,7 @@ python3 -B "$skill/scripts/lint_design_md.py" "$stage/candidate.md"
 python3 -B "$skill/scripts/design_io.py" "$stage/candidate.md" "$destination"
 ```
 
-Path B capture: if a browser tool can evaluate computed styles, write `references/evidence.md` JSON to `$stage/capture.json`. Do not install page-readers. If that JSON cannot be produced, extract HTML/CSS only and record visual tokens as unknown.
+Path B capture format and HTML/CSS-only fallback: `references/evidence.md`.
 
 Extraction is optional per workflow. Do not bypass failed validation by copying a candidate over the destination.
 
@@ -74,4 +74,4 @@ Tests are offline and create temporary files only. Optional test-workspace: `tes
 
 ## Verification Status
 
-Version 3.4.0 is exercised on Windows/Python 3.12. macOS/Linux command variants are written to the portable standard but remain unverified there. Reference snapshots use the host HTTP tool when requested.
+Version 3.4.1 is exercised on Windows/Python 3.12 and macOS/Python 3.9 (test suite, extractor, lint, safe commit). Linux variants follow the same POSIX commands but are unverified. Reference snapshots use the host HTTP tool when requested.

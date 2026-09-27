@@ -14,14 +14,14 @@ The table is a reference index, not a mandatory style. If comparing two or three
 
 ## Available Brands
 
-Counted from the table below (73 slugs).
+Counted from the table below (74 slugs).
 
 | Category | Brand Slugs |
 | --- | --- |
 | **Dev & AI Tools** | `claude`, `cursor`, `elevenlabs`, `linear.app`, `minimax`, `mistral.ai`, `ollama`, `opencode.ai`, `posthog`, `raycast`, `replicate`, `resend`, `sentry`, `supabase`, `superhuman`, `together.ai`, `vercel`, `warp`, `x.ai` |
 | **Design & Creative** | `figma`, `framer`, `lovable`, `miro`, `runwayml`, `sanity`, `webflow` |
 | **Cloud & Infrastructure** | `airtable`, `clickhouse`, `cohere`, `composio`, `expo`, `hashicorp`, `mongodb`, `notion`, `slack`, `zapier` |
-| **Tech Giants & Hardware** | `apple`, `dell-1996`, `hp`, `ibm`, `meta`, `nvidia`, `playstation`, `spacex`, `tesla` |
+| **Tech Giants & Hardware** | `apple`, `dell-1996`, `hp`, `ibm`, `meta`, `nvidia`, `nintendo-2001`, `playstation`, `spacex`, `tesla` |
 | **Commerce, Travel & Media** | `airbnb`, `intercom`, `mastercard`, `mintlify`, `nike`, `pinterest`, `revolut`, `shopify`, `spotify`, `starbucks`, `stripe`, `theverge`, `uber`, `vodafone`, `voltagent`, `wired`, `wise` |
 | **Automotive** | `bmw`, `bmw-m`, `bugatti`, `ferrari`, `lamborghini`, `renault` |
 | **Fintech & Crypto** | `binance`, `coinbase`, `kraken` |
@@ -36,6 +36,7 @@ Counted from the table below (73 slugs).
 - `together` → `together.ai`
 - `cal.com` → `cal`
 - `dell` → `dell-1996`
+- `nintendo` → `nintendo-2001`
 
 ## External Brand Inspiration Websites (User-Curated)
 
