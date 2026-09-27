@@ -33,69 +33,34 @@
     },
     {
       "id": "multi-agent-adapter",
-      "prompt": "Port this skill so Reasonix can use it too.",
+      "prompt": "Port this skill so Claude Code can use it too.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md and runtime-mapping.md, keeps runtime metadata in agents/reasonix.yaml, lists only verified tools, and keeps shared instructions in SKILL.md and references.",
+      "expected_output": "Classifies the request as Port, checks runtime-mapping.md and agent-adapter-standard.md, maps neutral actions to verified Claude Code tools, adds an agents/<runtime>.yaml only if SKILL.md cannot carry the facts, and keeps shared instructions in SKILL.md and references.",
       "files": [
-        "agents/reasonix.yaml",
         "references/agent-adapter-standard.md",
         "references/runtime-mapping.md"
       ],
       "assertions": [
         {"type": "contains", "value": "Port"},
-        {"type": "contains", "value": "agents/reasonix.yaml"},
+        {"type": "contains", "value": "runtime-mapping.md"},
         {"type": "contains", "value": "agent-adapter-standard.md"},
         {"type": "contains", "value": "verified"}
       ]
     },
     {
-      "id": "create-with-adapters",
-      "prompt": "Create a new skill and scaffold OpenAI, Reasonix, and Trae adapter metadata for it.",
+      "id": "create-with-resources",
+      "prompt": "Create a new skill with a helper script and trigger evals.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Create, uses init_skill.py with --adapters, generates agents/openai.yaml, agents/reasonix.yaml, and agents/trae-solo.yaml, and explains that generated fill markers must be replaced before final validation of content quality.",
+      "expected_output": "Classifies the request as Create, uses init_skill.py with --resources scripts,evals, generates SKILL.md, agents/openai.yaml, and a starter evals/evals.json, replaces (fill: ...) markers, and runs quick_validate.py and validate_evals.py.",
       "files": [
         "scripts/init_skill.py",
-        "agents/openai.yaml",
-        "agents/reasonix.yaml",
-        "agents/trae-solo.yaml"
+        "scripts/validate_evals.py"
       ],
       "assertions": [
         {"type": "contains", "value": "Create"},
-        {"type": "contains", "value": "--adapters"},
-        {"type": "contains", "value": "agents/reasonix.yaml"},
-        {"type": "contains", "value": "agents/trae-solo.yaml"}
-      ]
-    },
-    {
-      "id": "trae-solo-adapter",
-      "prompt": "Port this skill for Trae Solo and make sure SOLO Coder can use it.",
-      "trigger_expected": true,
-      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats Trae as native SKILL.md-compatible support, and reports the project/global deployment paths plus validation gaps.",
-      "files": [
-        "agents/trae-solo.yaml",
-        "references/agent-adapter-standard.md"
-      ],
-      "assertions": [
-        {"type": "contains", "value": "Port"},
-        {"type": "contains", "value": "agents/trae-solo.yaml"},
-        {"type": "contains", "value": "native"},
-        {"type": "contains", "value": ".trae/skills"}
-      ]
-    },
-    {
-      "id": "cherrystudio-adapter",
-      "prompt": "Make this skill work in CherryStudio for Code Tool and Agent workflows.",
-      "trigger_expected": true,
-      "expected_output": "Classifies the request as Port, checks agent-adapter-standard.md, treats CherryStudio as Code Tool, Agent, MCP, or custom assistant guidance, avoids assuming a native skill package format, and reports code-agent or MCP assumptions.",
-      "files": [
-        "agents/cherrystudio.yaml",
-        "references/agent-adapter-standard.md"
-      ],
-      "assertions": [
-        {"type": "contains", "value": "Port"},
-        {"type": "contains", "value": "agents/cherrystudio.yaml"},
-        {"type": "contains", "value": "Code Tool"},
-        {"type": "contains", "value": "MCP"}
+        {"type": "contains", "value": "--resources"},
+        {"type": "contains", "value": "agents/openai.yaml"},
+        {"type": "contains", "value": "validate_evals.py"}
       ]
     },
     {
@@ -126,22 +91,6 @@
         {"type": "contains", "value": "should-not-trigger"},
         {"type": "contains", "value": "description"},
         {"type": "contains", "value": "evals/evals.json"}
-      ]
-    },
-    {
-      "id": "reasonix-model-override",
-      "prompt": "Audit the Reasonix adapter and make sure its model choice is safe for different projects.",
-      "trigger_expected": true,
-      "expected_output": "Classifies the request as Repair or Port, checks agents/reasonix.yaml and agent-adapter-standard.md, treats model as a default runtime choice, and documents that projects may override it when Reasonix supports a different policy.",
-      "files": [
-        "agents/reasonix.yaml",
-        "references/agent-adapter-standard.md"
-      ],
-      "assertions": [
-        {"type": "contains", "value": "Reasonix"},
-        {"type": "contains", "value": "model"},
-        {"type": "contains", "value": "default"},
-        {"type": "contains", "value": "override"}
       ]
     },
     {
@@ -296,7 +245,7 @@
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "init_skill.py"},
-        {"type": "not_contains", "value": "agents/reasonix.yaml"}
+        {"type": "not_contains", "value": "agents/openai.yaml"}
       ]
     },
     {

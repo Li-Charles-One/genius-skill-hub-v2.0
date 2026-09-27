@@ -26,10 +26,7 @@ Target shape:
 +-- SKILL.md                 Thin entrypoint: trigger, mode routing, workflow, resource map
 +-- agents/
 |   +-- openai.yaml          Codex/UI metadata
-|   +-- reasonix.yaml        Reasonix adapter when supported
-|   +-- opencode.yaml        OpenCode adapter when supported
-|   +-- trae-solo.yaml       Trae SOLO adapter when supported
-|   +-- cherrystudio.yaml    CherryStudio adapter when supported
+|   +-- <runtime>.yaml       Only when a runtime needs extra verified metadata
 +-- references/              Detailed reusable guidance, loaded only when needed
 |   +-- runtime-mapping.md
 |   +-- cross-platform-command-standard.md
@@ -38,7 +35,7 @@ Target shape:
 +-- assets/                  Templates, icons, report files, or other output assets
 ```
 
-Use only the directories the skill actually needs. `agents/openai.yaml` is expected for Skill Hub UI metadata. Add other adapters when the skill is intended to run on another Agent. Runtime fingerprints belong in `references/runtime-mapping.md`, not in `SKILL.md`.
+Use only the directories the skill actually needs. `agents/openai.yaml` is expected for Skill Hub UI metadata. Add another adapter only when a runtime needs facts `SKILL.md` cannot carry. Runtime fingerprints belong in `references/runtime-mapping.md`, not in `SKILL.md`.
 
 ## Thin Entrypoint Rules
 
@@ -79,9 +76,7 @@ At minimum, a multi-Agent skill should record:
 - shared instruction files;
 - expected output format.
 
-Read `agent-adapter-standard.md` before adding a new adapter.
-
-For Trae, use native SKILL.md format — Trae supports it natively under `.trae/skills/` (project) or `~/.trae-cn/skills/` (global), with on-demand loading based on description matching. Trae SKILL.md frontmatter (`name`, `description`) is compatible with Codex format. For CherryStudio, adapt skills as Code Tool, Agent, MCP, or custom assistant guidance unless a native skill format is verified. Do not invent runtime tool names.
+Read `agent-adapter-standard.md` before adding a new adapter. Do not invent runtime tool names.
 
 ## Cross-Platform Command Standard
 

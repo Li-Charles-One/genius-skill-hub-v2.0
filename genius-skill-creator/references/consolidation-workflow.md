@@ -31,7 +31,7 @@ find "$SKILL_ROOT" -name "SKILL.md" -print0 | xargs -0 grep -l "keyword"
 Common roots:
 
 - OpenCode: `~/.config/opencode/skills` or a hub checkout
-- Reasonix: `~/.reasonix/skills`
+- Claude Code: `~/.claude/skills` or project `.claude/skills`
 - Codex: project `.agents/skills`
 
 Read each candidate skill. For each, note:

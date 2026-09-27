@@ -5,6 +5,7 @@ Quick validation script for skills
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -43,6 +44,22 @@ def parse_skill_frontmatter(skill_md):
     return frontmatter, content, None
 
 
+def git_ignored(skill_path, paths):
+    """Return the subset of paths that git ignores; empty when git or a repo is unavailable."""
+    rels = [p.relative_to(skill_path).as_posix() for p in paths]
+    if not rels:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(skill_path), "check-ignore", "--stdin"],
+            input="\n".join(rels), capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    ignored = set(result.stdout.splitlines())
+    return {p for p, rel in zip(paths, rels) if rel in ignored}
+
+
 def list_skill_frontmatter_names(hub_path):
     names = {}
     hub_path = Path(hub_path)
@@ -71,15 +88,16 @@ def validate_resources_are_discoverable(skill_path, content):
         resource_dir = skill_path / resource_dir_name
         if not resource_dir.exists():
             continue
-        for resource_file in sorted(resource_dir.rglob("*")):
-            if "__pycache__" in resource_file.parts or resource_file.suffix in {".pyc", ".pyo"}:
+        files = [f for f in sorted(resource_dir.rglob("*")) if f.is_file()]
+        ignored = git_ignored(skill_path, files)
+        for resource_file in files:
+            if resource_file in ignored or "__pycache__" in resource_file.parts:
                 continue
-            if resource_file.name == ".env" or resource_file.name.startswith(".env."):
+            if resource_file.suffix in {".pyc", ".pyo"} or resource_file.name.startswith(".env"):
                 continue
-            if resource_file.is_file():
-                rel = resource_file.relative_to(skill_path).as_posix()
-                if rel not in discoverable_text and rel.replace("/", "\\") not in discoverable_text:
-                    missing.append(rel)
+            rel = resource_file.relative_to(skill_path).as_posix()
+            if rel not in discoverable_text and rel.replace("/", "\\") not in discoverable_text:
+                missing.append(rel)
     if missing:
         return (
             False,
@@ -100,16 +118,14 @@ def has_nongoal_cue(description):
 
 
 def find_junk_paths(skill_path):
-    junk = []
-    for path in sorted(skill_path.rglob("*")):
-        if path.name in {".DS_Store", "__pycache__"}:
-            junk.append(path.relative_to(skill_path).as_posix())
-    return junk
+    candidates = [p for p in sorted(skill_path.rglob("*")) if p.name in {".DS_Store", "__pycache__"}]
+    ignored = git_ignored(skill_path, candidates)
+    return [p.relative_to(skill_path).as_posix() for p in candidates if p not in ignored]
 
 
 def validate_skill(skill_path, hub_path=None):
     """Basic validation of a skill. Returns (valid, message, warnings)."""
-    skill_path = Path(skill_path)
+    skill_path = Path(skill_path).resolve()
     warnings = []
 
     skill_md = skill_path / "SKILL.md"

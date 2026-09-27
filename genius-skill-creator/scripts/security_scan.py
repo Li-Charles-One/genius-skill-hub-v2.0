@@ -3,6 +3,7 @@
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -51,6 +52,22 @@ def iter_files(skill_path):
             yield path
 
 
+def git_ignored(skill_path, paths):
+    """Return the subset of paths that git ignores; empty when git or a repo is unavailable."""
+    rels = [p.relative_to(skill_path).as_posix() for p in paths]
+    if not rels:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(skill_path), "check-ignore", "--stdin"],
+            input="\n".join(rels), capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    ignored = set(result.stdout.splitlines())
+    return {p for p, rel in zip(paths, rels) if rel in ignored}
+
+
 def is_text(path):
     return path.suffix.lower() in TEXT_SUFFIXES or path.name in SECRET_FILES
 
@@ -70,7 +87,7 @@ def host_of(url):
 
 
 def scan(skill_path):
-    skill_path = Path(skill_path)
+    skill_path = Path(skill_path).resolve()
     findings = []
     declared = ""
     skill_md = skill_path / "SKILL.md"
@@ -81,9 +98,17 @@ def scan(skill_path):
         for ref in references.rglob("*.md"):
             declared += "\n" + (read_text(ref) or "")
 
-    for path in iter_files(skill_path):
+    files = list(iter_files(skill_path))
+    ignored = git_ignored(skill_path, files)
+    for path in files:
         rel = path.relative_to(skill_path).as_posix()
-        if path.name in SECRET_FILES or path.suffix.lower() in SECRET_SUFFIXES:
+        secret_file = path.name in SECRET_FILES or path.suffix.lower() in SECRET_SUFFIXES
+        if path in ignored:
+            # Not published through git; only flag local secrets so a zipped copy leaves them out.
+            if secret_file:
+                findings.append(("LOW", rel, "git-ignored local secret file; exclude it from any zip or copy"))
+            continue
+        if secret_file:
             findings.append(("HIGH", rel, "secret-like file should not ship in a skill package"))
             continue
         if not is_text(path):

@@ -2,7 +2,7 @@
 name: genius-skill-creator
 description: "创建、修复、审计、评测与优化 SKILL.md 技能包及多平台适配器：支持工作流脚手架生成、规范审计与安全扫描。不要用于普通业务代码编写、应用排错或通用文本翻译。"
 metadata:
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
 # Genius Skill Creator
@@ -57,7 +57,7 @@ Every generated or repaired skill must:
 ### Create
 
 1. Read `references/capture-intent.md`. Harvest the conversation and artifacts first. Confirm one hypothesis, then fill purpose, trigger, non-goals, outputs, and dependencies.
-2. Scaffold with `scripts/init_skill.py` when useful (`--adapters` for starter adapters).
+2. Scaffold with `scripts/init_skill.py` when useful (`--resources` for folders; `evals` gets a starter file).
 3. Replace every `(fill: ...)` marker. Make the description a bit pushy and keep non-goals as near misses.
 4. Fill Gotchas with real environment traps, or leave "None known".
 5. Add only the resources the skill needs.
@@ -103,7 +103,7 @@ Every repair or optimization checks: a positive trigger, a negative trigger, the
 ## Gotchas
 
 - `quick_validate.py` passing does not mean the generated skill works. Run `references/eval-run-loop.md` when output is checkable.
-- Reasonix adapter tool names are unverified except those marked verified in `references/runtime-mapping.md`. Do not copy Codex names into that adapter.
+- `quick_validate.py` and `security_scan.py` skip git-ignored files, so a local `.env` or `.DS_Store` passes. A zipped copy of the folder still includes them; exclude them before sharing outside git.
 - Security scan LOW findings (undeclared URLs) do not fail the scan; HIGH and MED do.
 
 ## Output Standard
@@ -119,7 +119,7 @@ Report:
 
 ## Resource Map
 
-- `scripts/init_skill.py`: scaffold folders and optional adapters.
+- `scripts/init_skill.py`: scaffold `SKILL.md`, `agents/openai.yaml`, and requested resource folders.
 - `scripts/quick_validate.py`: structural checks; warns on fat entrypoints and missing non-goals; fails on junk files.
 - `scripts/security_scan.py`: secrets, injection-like instructions, undeclared script URLs.
 - `scripts/generate_openai_yaml.py`: Codex/UI `agents/openai.yaml`.
@@ -134,7 +134,7 @@ Report:
 - `references/capture-intent.md`: harvest a session or artifacts before scaffolding.
 - `references/consolidation-workflow.md`: merge overlapping skills.
 - `evals/evals.json`: creation, optimization, porting, trigger, and audit prompts.
-- `agents/openai.yaml`, `agents/reasonix.yaml`, `agents/opencode.yaml`, `agents/trae-solo.yaml`, `agents/cherrystudio.yaml`.
+- `agents/openai.yaml`, `agents/opencode.yaml`.
 
 ## Final Response
 
