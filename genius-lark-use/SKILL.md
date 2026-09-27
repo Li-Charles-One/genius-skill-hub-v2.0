@@ -2,55 +2,37 @@
 name: genius-lark-use
 description: "飞书/Lark 统一智能体技能（基于 lark-cli）：处理凭证认证、云文档与多维表格读写、IM 消息收发、日程任务与 OpenAPI 调用。不要用于非飞书第三方服务或纯本地文档编辑。"
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Lark / Feishu Unified CLI Skill
 
-This skill is the single entry point for Lark/Feishu work through the official `lark-cli`. It does not duplicate every upstream `lark-*` skill. Instead, it checks the local CLI, routes the request to the right command domain, and reads the official embedded skill content only when that domain is needed.
+This skill is the single entry point for Lark/Feishu work through the official `lark-cli`. It does not duplicate the upstream `lark-*` skills. It checks the local CLI, routes the request to the right command domain, and reads the official embedded skill (version-matched to the installed binary) only when that domain is needed.
 
 ## Load These References
 
-- `references/health-check.md` for CLI discovery, `doctor`, auth, profile, and scope checks.
-- `references/routing.md` for mapping user intent to `lark-cli` domains and official embedded skills.
-- `references/safety.md` for confirmation rules before outward-facing or hard-to-reverse actions.
-- `references/command-patterns.md` for common command shapes, JSON handling, schemas, and fallback patterns.
-- `evals/evals.json` contains representative trigger and routing prompts.
+- `references/health-check.md` — CLI discovery, `doctor`, auth, profile, scope checks, and commands that need approval.
+- `references/routing.md` — user intent and URL patterns to `lark-cli` domains and official embedded skills.
+- `references/safety.md` — what to confirm before outward-facing or hard-to-reverse actions.
+- `references/command-patterns.md` — command shapes, JSON handling, schemas, raw API fallback, error handling.
+- `evals/evals.json` — representative trigger and routing prompts.
 
 ## Core Workflow
 
-1. Identify whether the task is a Lark/Feishu task. If it is not, do not use this skill.
-2. For every new session or uncertain environment, run the checks in `references/health-check.md` before operational commands.
-3. Classify the task using `references/routing.md`.
-4. Read the matching official embedded skill before non-trivial domain work:
-   - `lark-cli skills read lark-doc`
-   - `lark-cli skills read lark-drive`
-   - `lark-cli skills read lark-base`
-   - or the domain-specific skill named in `references/routing.md`.
-5. Use `lark-cli <domain> --help`, `lark-cli <domain> <command> --help`, or `lark-cli schema <service.resource.method>` when command details are unclear.
-6. Before actions that send, publish, delete, overwrite, approve, reject, move, expose, or batch-modify data, apply `references/safety.md` and get user confirmation unless the user has already given explicit approval for that exact action.
-7. Prefer structured output when useful: `--format json`, `--format table`, `--page-all`, and `--dry-run` where supported.
-8. If the CLI output contains `_notice`, permission errors, scope errors, or auth problems, route to `lark-shared` guidance and report the exact next step.
-9. Summarize results plainly. Include created URLs, object IDs/tokens, counts changed, skipped items, and any failed commands.
+1. Confirm it is a Lark/Feishu task. If not, do not use this skill.
+2. In a new session or uncertain environment, run the checks in `references/health-check.md` first.
+3. Classify the task with `references/routing.md`, then read the matching official skill before non-trivial work: `lark-cli skills read <skill-name>`.
+4. When command details are unclear: `lark-cli <domain> [<command>] --help` or `lark-cli schema <service.resource.method>`.
+5. Before any write, apply `references/safety.md`.
+6. Prefer structured output (`--format json`) and `--dry-run` where supported.
+7. On `_notice`, permission, scope, or auth errors, read `lark-shared` and report the exact next step.
 
 ## Operating Principles
 
-- Use the official `lark-cli` as the source of truth. Do not call Lark/Feishu APIs directly unless using `lark-cli api` after checking the relevant schema or OpenAPI guidance.
-- Keep reads low-risk and fast. Ask for confirmation before write operations with external impact.
-- Do not install, update, or reconfigure `lark-cli` unless the user explicitly asks.
-- Do not expose secrets, app credentials, OAuth tokens, or raw sensitive payloads in the final answer.
-- When unsure which domain owns a request, inspect the URL path/token pattern and use `lark-cli skills read lark-openapi-explorer` only after checking the obvious domain skills.
+- `lark-cli` is the source of truth. Use `lark-cli api` only after checking schema or help; never raw HTTP.
+- Do not install, update, log in, or reconfigure `lark-cli` unless the user explicitly asks.
+- Do not expose secrets, app credentials, OAuth tokens, or raw sensitive payloads.
 
 ## Final Response Contract
 
-For completed Lark work, report:
-
-- What was checked or changed.
-- The relevant Lark/Feishu URL, token, file name, chat name, calendar event, record count, or task count.
-- Any confirmation that was required and obtained.
-- Any failed or skipped step, with the actionable error message.
-
-## Gotchas
-
-- Auth and install changes need an explicit ask. Do not reconfigure `lark-cli` on your own.
-- Prefer `lark-cli` over raw HTTP. Use `lark-cli api` only after schema/help.
+Report what was checked or changed; the relevant URL, token, file, chat, event, or record/task count; any confirmation obtained; and any failed or skipped step with its actionable error.

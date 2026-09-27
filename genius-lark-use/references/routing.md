@@ -1,6 +1,6 @@
 # Routing
 
-Use this table to choose which official embedded skill and `lark-cli` domain to inspect.
+Use this table to choose which official embedded skill and `lark-cli` domain to inspect. Embedded skills change between CLI versions; if a named skill is missing, run `lark-cli skills list` and pick the closest match by description (for example, `lark-meeting` needs `lark-cli` 1.0.89+; older versions split it into `lark-vc`, `lark-minutes`, `lark-note`).
 
 | User intent | Read official skill | CLI domain |
 | --- | --- | --- |
