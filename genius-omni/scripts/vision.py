@@ -217,7 +217,16 @@ PROMPTS = {
         "Be detailed and chronological."
     ),
     "audio-transcribe": (
-        "Transcribe ALL speech in this audio VERBATIM.\n"
+        "You are a strict speech-to-text transcriber: a missing transcript is acceptable, "
+        "an invented one is not.\n"
+        "STEP 1 — Voice check. Listen to the whole audio and decide whether an actual "
+        "human voice (spoken words or sung lyrics) is audible. Pure tones, beeps, dial/ring "
+        "tones, instrumental music, noise, and silence are NOT speech.\n"
+        "If no human voice is audible, your ENTIRE answer must be two lines:\n"
+        "`NO_SPEECH_DETECTED`\n"
+        "<one line describing the sounds>\n"
+        "Do not add Speaker lines, guessed words, or example sentences.\n"
+        "STEP 2 — Only if a voice is audible: transcribe ALL speech VERBATIM.\n"
         f"{TIMESTAMP_RULES}{SPEAKER_RULES}"
         "Output format preference:\n"
         "`[mm:ss] Speaker A: ...`\n"

@@ -55,7 +55,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Audio: `Summary`, `Transcript or Key Segments`, `Speakers or Sound Events`, `Uncertainty`.
 - Compare: `Unchanged`, `Added`, `Removed`, `Uncertain`.
 
-Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text or speech was found. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
+Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text or speech was found (`audio-transcribe` answers `NO_SPEECH_DETECTED`). If long-media segmentation fails, report the failed segment and do not fabricate a summary.
 
 Failures print `Error [CODE]: …` and exit with: `INPUT_NOT_FOUND` 3, `UNSUPPORTED_FORMAT` 4, `DEPENDENCY_MISSING` 5, `PROVIDER_ERROR` 6, `TIMEOUT` 7 (other errors 1; `--check` with missing tools 2). Report the code and message as-is.
 
