@@ -2,7 +2,7 @@
 name: genius-impl-plans
 description: "在编写代码前，将已确认的设计简报（Brief/Spec）转化为逐项可执行的代码实现计划。不要在已进入编码阶段使用，且不要在需求目标仍不明确时使用（需求阶段用 genius-brief-thinking）。"
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Genius Impl Plans
@@ -11,7 +11,7 @@ Write an implementation plan an engineer can follow without extra context. Exact
 
 Save to `docs/plans/YYYY-MM-DD-<feature-name>.md` unless the user names another path.
 
-This skill stops at the plan. Do not start implementation unless the user asks.
+This skill stops at the plan. Writing it is not permission to code or commit.
 
 ## Before You Write
 
@@ -31,9 +31,7 @@ If the repo already uses tests:
 4. Run the same command again
 5. Commit only if the user asked for commits in the plan
 
-If the repo has no test runner, write the verification step that this repo actually uses (typecheck, script smoke test, or manual check). Do not invent `pytest` for a Node or PowerShell project.
-
-Do not make every step a commit. Frequent commits are optional and only when the user wants them.
+If the repo has no test runner, write the verification step that this repo actually uses (typecheck, script smoke test, or manual check). Do not force pytest, TDD, worktrees, or per-step commits onto a repo that does not use them.
 
 ## Plan Header
 
@@ -127,9 +125,3 @@ Fix inline and save.
 Tell the user where the file is. Stop.
 
 If they ask to execute: follow the plan in this session, one task at a time, and pause after each group. Do not spawn implementation subagents unless they ask for that.
-
-## Gotchas
-
-- No brief and the approach is still fuzzy → `genius-brief-thinking`, not this skill.
-- Writing the plan is not permission to code or commit.
-- Do not force pytest, TDD, worktrees, or per-step commits onto a repo that does not use them.

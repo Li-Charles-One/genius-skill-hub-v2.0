@@ -70,7 +70,9 @@ genius-skill-hub-v2.0/
 ├── genius-github-usage/
 ├── genius-lark-use/
 ├── genius-impl-plans/
-└── genius-x-search/
+├── genius-x-search/
+├── WORKFLOW.md          # brief → plan → memory 交接协议
+└── hermes-install.md    # Hermes Agent 安装说明
 ```
 
 每个 skill 根目录含 `SKILL.md`。
