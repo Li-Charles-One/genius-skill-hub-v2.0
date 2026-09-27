@@ -1,123 +1,63 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.0.1"
+  version: "3.1.0"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
 # Genius-WePlaning
-_(Skill package v3.0.1; protocol 3.0)_
+_(Skill package v3.1.0; protocol 3.0)_
 
-The planning handoff states and fields are defined in the repository-level [`WORKFLOW.md`](../WORKFLOW.md). Reuse the existing `CURRENT.md` sections; do not create another state file.
+Project memory lives in `.agent-memory/`: **CURRENT.md** is accepted truth, **CHANGES.md** the append-only ledger, `DECISIONS.md` optional, `archive/` rolled-off ledger. Leftover 2.3 `THREADS.md` / `sessions/` are history, never truth; never create sessions. `.backups/` and `.weplaning.lock` are device-local: never sync them.
 
-## Use When
+Do not use for ordinary summaries, one-off answers, trivial code edits, or **this skill's own changelog** (skill upgrades never go into a business project's memory).
 
-- Shared durable project state lives in `.agent-memory/`.
-- The user asks to read, write, repair, or initialize that memory.
+## Triggers
 
-Do not use for ordinary summaries, one-off answers, trivial code edits, or **this skill's own changelog**. Skill upgrades belong in the skill folder, never in a business project's memory.
-
-## Mode
-
-| Intent | Command |
-|---|---|
-| Read | `weplaning-read.cjs` |
-| Brief progress | `weplaning-read.cjs --brief` |
-| Handoff / continue #N | `weplaning-read.cjs --handoff` / `--next N` |
-| Search history | `weplaning-read.cjs --find "<query>"` |
-| Write (note or mainline) | `weplaning-write.cjs` |
-| Repair | `check-memory.cjs` then `repair-memory.cjs` |
-| Init | `init-memory.cjs` |
-
-`<skill_dir>` is this skill's directory. Do not create a session. Truth: **CURRENT.md**. `CHANGES.md` is the ledger. Leftover 2.3 `THREADS.md` / `sessions/` are not truth.
-
-## User-Facing Trigger Phrases
-
-| User says | Agent does |
+| User says | Run |
 |---|---|
 | "查看项目记忆" / "读取项目记忆" | `weplaning-read.cjs` |
-| "读取记忆接力" | `weplaning-read.cjs --handoff`; report focus, or no pending tasks / unknown |
-| "项目叫什么" / "现在目标是什么" / "查看项目进度" | `weplaning-read.cjs --brief` |
-| "继续干 #N" | `weplaning-read.cjs --next N` → start the selected task only after successful selection |
-| "记一笔" / "这件事记下来" / "提交主线" / "close out" | `weplaning-write.cjs` with `--changed` and CURRENT patches when facts changed |
-| "完成了" / "done" / "搞定" | Call write only if there is a durable fact; trivial oral done is a no-op |
-| "修一下记忆" | `check-memory.cjs` first, then `repair-memory.cjs` if the cause is known |
+| "查看项目进度" / "项目叫什么" / "现在目标是什么" | `weplaning-read.cjs --brief` |
+| "读取记忆接力" | `weplaning-read.cjs --handoff`; report the focus, or no pending tasks / unknown |
+| "继续干 #N" | `weplaning-read.cjs --next N`; start only after a successful selection |
+| "记一笔" / "这件事记下来" / "提交主线" / "close out" | `weplaning-write.cjs` |
+| "完成了" / "done" / "搞定" with no new fact | nothing; say nothing was persisted |
+| "修一下记忆" | `check-memory.cjs`, then `repair-memory.cjs` if the cause is known |
 
-Oral "完成了" with no new fact **must not** write. If accepted state changed, pass `--state` / `--next-step` / `--goal` / `--blockers`. `--changed` alone never overwrites Current State.
-
-## Workflow Handoff
-
-When a durable transition occurs, record `Brief`, `Plan`, `Status`, and `Current Task` in the existing Current State or Accepted Next Steps sections. Use the states from `WORKFLOW.md`: `BRIEF_APPROVED`, `PLAN_DRAFT`, `PLAN_APPROVED`, `IMPLEMENTING`, `BLOCKED`, or `DONE`. Write on approvals, implementation start, blockers, or verified completion; do not write for routine task progress or ordinary code edits.
-
-## Proactive Triggers
-
-Auto-run `weplaning-write.cjs` only for **durable, cross-session** facts: accepted state changes, or a non-obvious decision with `--decision`.
-
-Do **not** auto-write routine code edits, process chatter, or WePlaning/skill maintenance.
+Write on your own only for **durable, cross-session** facts: accepted state changes, approvals, blockers, verified completion, or a non-obvious decision (`--decision`). Never for routine edits, process chatter or skill maintenance.
 
 ## Commands
 
+`<skill_dir>` is this skill's directory. Always pass `--agent <name>`.
+
 ```bash
-node <skill_dir>/scripts/weplaning-read.cjs <project-root>
-node <skill_dir>/scripts/weplaning-read.cjs <project-root> --brief
-node <skill_dir>/scripts/weplaning-write.cjs <project-root> --agent <name> --changed "<fact>"
-node <skill_dir>/scripts/weplaning-write.cjs <project-root> --agent <name> --changed "<fact>" --state "Fact A;;Fact B" --next-step "Do C"
-node <skill_dir>/scripts/check-memory.cjs <project-root>
-node <skill_dir>/scripts/init-memory.cjs <project-root> --agent <name> --project "<name>" --goal "<goal>"
+node <skill_dir>/scripts/weplaning-read.cjs <root> [--brief | --handoff | --next N | --full | --find "<q>" | --json]
+node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --changed "<fact>" [--verification "<method/time/result>"] [--file <path>]
+# Change one fact in place instead of resending a whole section:
+node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --replace "<exact old text>" --with "<new text>" --changed "<what happened>"
+node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --add-state "<new fact>" --drop "<text unique to the obsolete line>"
+node <skill_dir>/scripts/check-memory.cjs <root>
+node <skill_dir>/scripts/init-memory.cjs <root> --agent <name> --project "<name>" --goal "<goal>"
 ```
 
-`weplaning-note.cjs` and `weplaning-close.cjs` are wrappers around write.
-
-Full CLI: `references/cli.md`.
+Full CLI, schema and pitfalls: `references/reference.md`.
 
 ## Rules
 
-- After writing `.agent-memory/`, run `check-memory.cjs` and do not report success until it passes.
-- Before replacing a section, re-read it and retain still-valid facts. `--state` / `--next-step` replace the entire named section; scripts preserve other sections and extra content.
-- Keep next steps actionable and accepted. Use `none` / `无待执行事项` when there is no pending work, and `unknown` when undecided. Preserve conditional triggers; reading memory does not activate them.
-- Do not store secrets, tokens, passwords, cookies, or private credentials.
-- Keep memory concise and factual: one fact per item, concrete file paths, decisions, verification method/time/result, blockers, exact next step. Put durable operating guidance in Current Understanding.
-- Always pass `--agent <persona>`.
-- Never hand-edit `.agent-memory/` when the scripts can do the write.
-- Leftover 2.3 session trees are read-only; do not create new sessions.
+- Never hand-edit `.agent-memory/`. For one fact use `--replace/--with`, `--add-state` or `--drop`: each must match exactly once or the write fails with nothing changed.
+- `--state` / `--next-step` / `--blockers` / `--goal` / `--understanding` replace the whole section: re-read it first and keep every still-valid item.
+- `--changed` only appends the ledger and never touches Current State. A CURRENT patch without `--changed` still gets a ledger entry.
+- Values are one line (`;;` separates items); only `--goal`, `--understanding`, `--replace` and `--with` may span lines. Markdown headings are rejected.
+- Every write runs the consistency check; report success only when it passes.
+- Accepted Next Steps holds accepted actions: `none` / `无待执行事项` when nothing is pending, `unknown` when undecided; keep conditional triggers. Durable guidance belongs in Current Understanding.
+- One fact per item: concrete paths, decisions, verification method/time/result, blockers, exact next step.
+- Never store secrets, tokens, passwords, cookies or private credentials.
 
-**Project type:** `init-memory` writes `CURRENT.md` → Project Config. Has code → git versions code, WePlaning owns `.agent-memory` only. Ops/doc → standalone.
+## Workflow Handoff
 
-## Files
-
-```text
-.agent-memory/
-├── CURRENT.md       accepted truth (goal, state, next steps, blockers)
-├── CHANGES.md       append-only ledger
-├── DECISIONS.md     optional decision ledger
-└── archive/         rolled-off CHANGES
-```
-
-`THREADS.md` and `sessions/` may exist on old projects. Ignore them as truth. `.backups/` and `.weplaning.lock` are device-local scratch: never sync them.
-
-## Resource Map
-
-- `references/weplaning-v3.0-protocol.md` — schema
-- `references/weplaning-v2.3-protocol.md` — leftover 2.3 pointer
-- `references/cli.md` — full CLI
-- `references/pitfalls.md` — failure modes
-- `references/hermes-install.md` — hub / junction install
-- `scripts/weplaning-read.cjs`, `scripts/weplaning-write.cjs`, `scripts/weplaning-utils.cjs`
-- `scripts/weplaning-note.cjs`, `scripts/weplaning-close.cjs` — write wrappers
-- `scripts/weplaning-find.cjs`, `scripts/check-dirty.cjs`, `scripts/archive-changes.cjs`, `scripts/append-decision.cjs`
-- `scripts/init-memory.cjs`, `scripts/check-memory.cjs`, `scripts/repair-memory.cjs`
-- Compatibility only (do not use on 3.0 projects): `scripts/new-session.cjs`, `scripts/safe-edit.cjs`, `scripts/merge-session.cjs`, `scripts/session-status.cjs`, `scripts/archive-threads.cjs`, `scripts/append-change.cjs`
-- `evals/evals.json`
+Planning states come from [`WORKFLOW.md`](../WORKFLOW.md): `BRIEF_APPROVED`, `PLAN_DRAFT`, `PLAN_APPROVED`, `IMPLEMENTING`, `BLOCKED`, `DONE`. On approvals, implementation start, blockers or verified completion, record `Brief`, `Plan`, `Status` and `Current Task` in the existing Current State / Accepted Next Steps sections. Never create another state file.
 
 ## Output
 
-- Read: memory update time, goal, key understanding, recorded state, next steps, blockers (including unknown), last few ledger lines. A read is not live verification; update time is not verification time. Handoff also includes recorded verification/file references.
-- Handoff: no pending tasks means stop; unknown means clarify. Invalid task numbers are errors, never a fallback to #1. Do not dump leftover session notes.
-- Write: whether anything persisted, whether check passed, corresponding change ID, exact next step. Unchanged patches are no-ops; state-only changes still create a ledger entry.
-- Trivial done: say nothing was persisted.
-
-## Gotchas
-
-- CURRENT.md is truth. Do not hand-edit `.agent-memory` files; run the bundled scripts.
-- Failed structural/argument checks must be resolved before writing. Repair adds missing schema lines locally; it refuses malformed state, unsupported schemas and sync conflicts rather than inventing facts.
-- Do not write this skill's own changelog into a project's memory.
+- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, and an invalid task number is an error, never a fallback to #1.
+- Write: whether anything persisted, whether the check passed, the change ID, the exact next step. Unchanged patches persist nothing.

@@ -214,7 +214,7 @@ function testTrivialNoteNoop() {
   init(root);
   const beforeChanges = read(root, "CHANGES.md");
   const beforeCurrent = read(root, "CURRENT.md");
-  const result = run([script("weplaning-note.cjs"), root, "完成了", "--agent", "CI"]);
+  const result = writeCmd(root, ["完成了"]);
   assert(result.stdout.includes("nothing-to-persist"), "trivial note should no-op");
   assert(read(root, "CHANGES.md") === beforeChanges, "trivial note mutated CHANGES.md");
   assert(read(root, "CURRENT.md") === beforeCurrent, "trivial note mutated CURRENT.md");
@@ -223,8 +223,8 @@ function testTrivialNoteNoop() {
 function testDurableNote() {
   const root = tempRoot("note");
   init(root);
-  run([script("weplaning-note.cjs"), root, "us-one Hy2 recovered", "--agent", "CI"]);
-  assert(read(root, "CHANGES.md").includes("us-one Hy2 recovered"), "note wrapper did not append ledger");
+  writeCmd(root, ["us-one Hy2 recovered"]);
+  assert(read(root, "CHANGES.md").includes("us-one Hy2 recovered"), "positional note did not append ledger");
   assert(!fs.existsSync(path.join(root, ".agent-memory", "THREADS.md")), "note created a session tree");
 }
 
@@ -333,8 +333,9 @@ function testReadTruncatesLedger() {
   const root = tempRoot("truncate");
   init(root);
   const longNote = `Durable note ${"x".repeat(200)} UNIQUE_TAIL_SHOULD_NOT_LEAK`;
-  run([script("weplaning-note.cjs"), root, longNote, "--agent", "CI"]);
+  writeCmd(root, [longNote]);
   assert(read(root, "CHANGES.md").includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "ledger lost the full note");
+  assert(!read(root, "CURRENT.md").includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "Based On copied the full ledger line");
   const briefing = run([script("weplaning-read.cjs"), root]).stdout;
   assert(!briefing.includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "read briefing dumped the full ledger line");
 }
@@ -472,21 +473,44 @@ function testCheckDirtyMtimeFallback() {
   run([script("check-dirty.cjs"), root, "--strict"], { expectFail: true });
 }
 
-function testCloseWrapper() {
-  const root = tempRoot("closewrap");
+function testExactEdits() {
+  const root = tempRoot("exact");
   init(root);
-  writeCmd(root, ["--changed", "seed", "--state", "Fact A;;Fact B"]);
-  run([
-    script("weplaning-close.cjs"), root,
-    "--changed", "later work", "--agent", "CI",
-  ]);
-  const after = read(root, "CURRENT.md");
-  assert(after.includes("Fact A"), "close wrapper clobbered curated state");
-  run([
-    script("weplaning-close.cjs"), root,
-    "--changed", "shipped", "--state", "Shipped", "--next-step", "Rest", "--agent", "CI",
-  ]);
-  assert(read(root, "CURRENT.md").includes("Shipped"), "close --state did not patch");
+  writeCmd(root, ["--state", "xtc uses jp.yaml;;Fact B", "--next-step", "Do X;;Do Y;;Do Z"]);
+  const edited = JSON.parse(writeCmd(root, ["--replace", "jp.yaml", "--with", "us-good.yaml", "--json"]).stdout);
+  assert(edited.persisted && edited.patched.includes("replace"), "replace was not persisted");
+  let current = read(root, "CURRENT.md");
+  assert(current.includes("- xtc uses us-good.yaml\n- Fact B"), "replace did not edit in place");
+  assert(read(root, "CHANGES.md").includes("Replaced in CURRENT: jp.yaml → us-good.yaml"), "replace has no ledger entry");
+  const before = memorySnapshot(root);
+  for (const extra of [["--replace", "Do ", "--with", "x"], ["--replace", "NOT_THERE", "--with", "x"], ["--replace", "Fact B"], ["--drop", "Do "]]) {
+    run([script("weplaning-write.cjs"), root, "--agent", "CI", ...extra], { expectFail: true });
+    assert(memorySnapshot(root) === before, `ambiguous exact edit mutated memory: ${extra.join(" ")}`);
+  }
+  const same = JSON.parse(writeCmd(root, ["--replace", "Fact B", "--with", "Fact B", "--json"]).stdout);
+  assert(same.persisted === false, "identical replace persisted");
+  writeCmd(root, ["--drop", "Do X", "--add-state", "Fact C"]);
+  current = read(root, "CURRENT.md");
+  assert(current.includes("## Accepted Next Steps\n1. Do Y\n2. Do Z\n"), "drop did not renumber next steps");
+  assert(current.includes("- Fact B\n- Fact C\n"), "add-state did not append to Current State");
+  writeCmd(root, ["--next-step", "1. a;;1. b;;c"]);
+  assert(read(root, "CURRENT.md").includes("1. a\n2. b\n3. c\n"), "numbered next steps were not renumbered");
+  run([script("check-memory.cjs"), root]);
+}
+
+function testRejectsInjectedStructure() {
+  const root = tempRoot("inject");
+  init(root);
+  const before = memorySnapshot(root);
+  for (const extra of [
+    ["--changed", "line one\n## injected"], ["--changed", "two\nlines"], ["--state", "fact\n## Extra"],
+    ["--understanding", "ok\n## Evil"], ["--replace", "Required memory files exist.", "--with", "x\n# Evil"], ["single\nline note"],
+  ]) {
+    run([script("weplaning-write.cjs"), root, "--agent", "CI", ...extra], { expectFail: true });
+    assert(memorySnapshot(root) === before, `injected structure mutated memory: ${JSON.stringify(extra)}`);
+  }
+  writeCmd(root, ["--understanding", "- rule one\n- rule two"]);
+  assert(read(root, "CURRENT.md").includes("## Current Understanding\n- rule one\n- rule two\n"), "multi-line understanding was rejected");
 }
 
 function testAuditMixedBlockers() {
@@ -732,7 +756,8 @@ for (const test of [
   testInitForceOnlyFillsGaps,
   testSyncPackageRefusesSameDirectory,
   testCheckDirtyMtimeFallback,
-  testCloseWrapper,
+  testExactEdits,
+  testRejectsInjectedStructure,
   testAuditMixedBlockers,
   testWritePreservesWhitespaceAndExtraContent,
   testInvalidStructureCannotBeReadOrWritten,

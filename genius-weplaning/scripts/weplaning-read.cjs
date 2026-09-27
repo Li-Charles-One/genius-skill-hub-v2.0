@@ -10,7 +10,6 @@ const path = require("path");
 const {
   parseArgs,
   parseCurrentMd,
-  parseThreads,
   readMemory,
   runCheck,
   truncateSummary,
@@ -25,7 +24,7 @@ Usage:
 Options:
   --handoff     Highlight next step #1
   --brief       Goal, context, state, next steps and blockers (no ledger)
-  --full        Also list leftover 2.3 sessions and archive files
+  --full        Also list archive files
   --json        Machine-readable JSON on stdout
   --next <N>    Focus Accepted Next Steps item N (1-based)
   --limit <K>   Number of recent change blocks (default: 3)
@@ -66,13 +65,12 @@ function parseChangeBlocks(text) {
     if (!match) continue;
     const id = match[1].trim();
     const body = match[2].trim();
-    const session = (body.match(/^- Session:\s*(.+)$/m) || [])[1]?.trim() || null;
     const agent = (body.match(/^- Agent:\s*(.+)$/m) || [])[1]?.trim() || null;
     function items(label) {
       const match = body.match(new RegExp(`^- ${label}:\\n((?:  - .+\\n?)*)`, "m"));
       return match ? match[1].split("\n").map((line) => line.replace(/^\s+- /, "").trim()).filter(Boolean) : [];
     }
-    blocks.push({ id, session, agent, changed: items("Changed"), verification: items("Verification"), files: items("Files touched"), body });
+    blocks.push({ id, agent, changed: items("Changed"), verification: items("Verification"), files: items("Files touched"), body });
   }
   return blocks;
 }
@@ -91,15 +89,9 @@ function parseNextSteps(text) {
   return items;
 }
 
-runCheck(root, __dirname, { quiet: true });
+runCheck(root, { quiet: true });
 const currentText = readMemory(root, "CURRENT.md");
 const current = parseCurrentMd(currentText);
-
-let threads = { rows: [], mainline: null };
-const threadsPath = path.join(memDir, "THREADS.md");
-if ((args.full || args.json) && fs.existsSync(threadsPath)) {
-  threads = parseThreads(fs.readFileSync(threadsPath, "utf8"));
-}
 
 const changesPath = path.join(memDir, "CHANGES.md");
 let recentChanges = [];
@@ -120,9 +112,6 @@ const archives = (args.full || args.json) && fs.existsSync(archiveDir)
         return { file: `archive/${name}`, kind: name.startsWith("CHANGES") ? "changes" : "threads", count };
       })
   : [];
-
-const closedNotes = threads.rows.filter((r) => r.status === "closed").slice(-8).reverse();
-const activeSessions = threads.rows.filter((r) => r.status === "active" || r.status === "paused").slice(-8).reverse();
 
 const isNoTask = (text) => /^(none|no (?:pending )?tasks?|no (?:accepted )?next steps?|无|无待办|无待执行事项|暂无待办|暂无待执行事项)[。.]?$/i.test(text);
 const isUnknown = (text) => /^(unknown|unavailable|未知|待确认|未确定)[。.]?$/i.test(text);
@@ -157,10 +146,6 @@ const payload = {
     files: c.files,
   })),
   archives,
-  leftoverSessions: {
-    closed: closedNotes.map((r) => ({ id: r.id, summary: r.summary, agent: r.agent })),
-    active: activeSessions.map((r) => ({ id: r.id, summary: r.summary, status: r.status })),
-  },
   truth: "CURRENT.md is accepted truth. CHANGES.md is the ledger. Leftover 2.3 sessions are not truth.",
 };
 
@@ -225,25 +210,11 @@ if (recentChanges.length === 0) {
   }
 }
 
-if (args.full) {
-  if (closedNotes.length > 0) {
-    out += `\n📝 Leftover 2.3 closed notes (not truth):\n`;
-    for (const row of closedNotes) {
-      out += `  · ${row.id}  ${truncateSummary(row.summary)}\n`;
-    }
-  }
-  if (activeSessions.length > 0) {
-    out += `\n🔧 Leftover 2.3 active sessions (not truth):\n`;
-    for (const row of activeSessions) {
-      out += `  · ${row.id}  [${row.status}]  ${truncateSummary(row.summary)}\n`;
-    }
-  }
-  if (archives.length > 0) {
-    out += `\n🗄 Archive:\n`;
-    for (const item of archives) {
-      const unit = item.kind === "changes" ? "change blocks" : "session rows";
-      out += `  · ${item.file}${item.count ? `  (${item.count} ${unit})` : ""}\n`;
-    }
+if (args.full && archives.length > 0) {
+  out += `\n🗄 Archive:\n`;
+  for (const item of archives) {
+    const unit = item.kind === "changes" ? "change blocks" : "session rows";
+    out += `  · ${item.file}${item.count ? `  (${item.count} ${unit})` : ""}\n`;
   }
 }
 

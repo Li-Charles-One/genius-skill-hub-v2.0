@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  allowNoCheck,
   defaultAgent,
   detectProjectConfig,
   emitResult,
@@ -28,12 +27,10 @@ Options:
   --force              Create only the files that are missing; never touch existing ones
   --reinit             Discard CURRENT/CHANGES/DECISIONS and bootstrap from scratch
   --json               Print machine-readable JSON result on stdout
-  --no-check           Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
-allowNoCheck(args, "init-memory.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const project = args.project;
@@ -137,7 +134,7 @@ Schema version: ${SCHEMA_VERSION}
 if (kept.length) {
   console.error(`Left ${kept.length} existing file(s) untouched: ${kept.join(", ")}`);
 }
-if (!args["no-check"]) runCheck(root, __dirname);
+runCheck(root);
 emitResult(args, "initialized", {
   project,
   goal,

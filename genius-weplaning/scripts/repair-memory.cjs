@@ -3,7 +3,6 @@
 const path = require("path");
 const fs = require("fs");
 const {
-  allowNoCheck,
   emitResult,
   findMemoryConflicts,
   hasSupportedSchema,
@@ -30,12 +29,10 @@ Does not rebuild 2.3 session trees. Leftover THREADS.md / sessions/ are ignored.
 Options:
   --dry-run    Print intended repairs without writing
   --json
-  --no-check   Internal use only
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
-allowNoCheck(args, "repair-memory.cjs");
 
 if (args.prefer) {
   console.error("WePlaning 3.0 repair no longer takes --prefer current|threads (session trees are not truth).");
@@ -85,7 +82,7 @@ withMemoryLock(root, () => {
   for (const [file, text] of outputs) validateKnownMarkdown(file, text);
   if (args["dry-run"]) return;
   for (const [file, text] of outputs) writeMemory(root, file, text);
-  if (!args["no-check"]) runCheck(root, __dirname);
+  runCheck(root);
 });
 
 if (args["dry-run"]) {

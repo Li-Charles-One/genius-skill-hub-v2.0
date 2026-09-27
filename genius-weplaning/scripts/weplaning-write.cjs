@@ -11,7 +11,6 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  allowNoCheck,
   defaultAgent,
   emitResult,
   formatSectionItems,
@@ -22,7 +21,10 @@ const {
   replaceField,
   runCheck,
   SCHEMA_VERSION,
+  section,
+  setSection,
   toList,
+  truncateSummary,
   uniqueStamp,
   usage,
   utcNow,
@@ -40,6 +42,10 @@ Patch accepted project state. One command replaces note + closeout.
 Options:
   --agent <name>         Agent name (default: $WEPLANING_AGENT or inferred)
   --changed <text>       Ledger line(s). Repeat or separate with ";;"
+  --replace <old>        Exact CURRENT.md text that occurs once; pair with --with
+  --with <new>           Replacement for the matching --replace (repeat in order)
+  --drop <text>          Remove the single CURRENT.md line containing this text
+  --add-state <text>     Append Current State bullet(s) (";;")
   --state <text>         Replace Current State (";;" bullets)
   --next-step <text>     Replace Accepted Next Steps
   --blockers <text>      Replace Open Blockers
@@ -51,22 +57,27 @@ Options:
   --verification <text>  Optional verification notes (repeat / ";;")
   --note <text>          Extra ledger notes (repeat / ";;")
   --json                 Machine-readable JSON on stdout
-  --no-check             Internal use only
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
-allowNoCheck(args, "weplaning-write.cjs");
 
-const valueFlags = ["agent", "changed", "state", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "file", "files", "verification", "note", "time"];
+const valueFlags = ["agent", "changed", "replace", "with", "drop", "add-state", "state", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "file", "files", "verification", "note", "time"];
+// Only these may span lines; every other value becomes one Markdown line or list item.
+const multiLineFlags = ["goal", "understanding", "replace", "with"];
+const HEADING = /^[ \t]{0,3}#{1,6}([ \t]|$)/m;
 for (const [key, value] of Object.entries(args)) {
   if (key === "_") continue;
-  usage(valueFlags.includes(key) || ["json", "no-check", "help"].includes(key), `Unknown option: --${key}`, help);
+  usage(valueFlags.includes(key) || ["json", "help"].includes(key), `Unknown option: --${key}`, help);
   if (valueFlags.includes(key)) {
     const values = Array.isArray(value) ? value : [value];
     usage(values.every((item) => typeof item === "string" && toList(item).length > 0), `Missing value for --${key}`, help);
     if (["agent", "goal", "understanding", "decision", "rationale", "time"].includes(key)) {
       usage(values.length === 1, `--${key} accepts one value`, help);
+    }
+    usage(values.every((item) => !HEADING.test(item)), `--${key} must not contain Markdown headings`, help);
+    if (!multiLineFlags.includes(key)) {
+      usage(values.every((item) => !/[\r\n]/.test(item)), `--${key} must be one line; separate items with ";;"`, help);
     }
   } else {
     usage(value === true, `--${key} does not take a value`, help);
@@ -76,10 +87,16 @@ usage(args._.length <= 2, "Unexpected positional arguments", help);
 
 const root = path.resolve(args._[0] || process.cwd());
 const positional = args._[1] ? String(args._[1]).trim() : "";
+usage(!/[\r\n]/.test(positional) && !HEADING.test(positional), "Note must be one line without Markdown headings", help);
 const changed = toList(args.changed);
 if (positional && changed.length === 0) changed.push(positional);
 
-const hasPatch = Boolean(args.state || args["next-step"] || args.blockers || args.goal || args.understanding);
+const replaces = [].concat(args.replace ?? []);
+const withs = [].concat(args.with ?? []);
+const drops = [].concat(args.drop ?? []);
+usage(replaces.length === withs.length, "Each --replace needs exactly one --with", help);
+
+const hasPatch = Boolean(args.state || args["next-step"] || args.blockers || args.goal || args.understanding || args["add-state"] || replaces.length || drops.length);
 const hasDecision = Boolean(args.decision && args.decision !== true);
 const trivialOnly = changed.length > 0 && changed.every(isTrivialNote);
 
@@ -119,11 +136,36 @@ function listBlock(items, fallback) {
   return values.map((item) => `  - ${item}`).join("\n");
 }
 
+const oneLine = (text) => String(text).replace(/\s+/g, " ").trim();
+
 withMemoryLock(root, () => {
-  if (!args["no-check"]) runCheck(root, __dirname);
-  let currentText = readMemory(root, "CURRENT.md").replace(/\r\n/g, "\n");
+  runCheck(root);
+  const original = readMemory(root, "CURRENT.md").replace(/\r\n/g, "\n");
+  const basedOn = section(original, "Based On");
+  // Based On is regenerated below, so exact edits must not match its copied summary.
+  let currentText = setSection(original, "Based On", "");
+  const descriptions = [];
+
+  // Exact edits first: the same contract as an editor's old/new string replacement.
+  replaces.forEach((oldText, index) => {
+    const count = currentText.split(oldText).length - 1;
+    usage(count === 1, `--replace text must occur exactly once in CURRENT.md (found ${count}): ${oldText}`, help);
+    if (withs[index] === oldText) return;
+    currentText = currentText.replace(oldText, () => withs[index]);
+    if (!patched.includes("replace")) patched.push("replace");
+    descriptions.push(`Replaced in CURRENT: ${oneLine(oldText)} → ${oneLine(withs[index])}`);
+  });
+  for (const text of drops) {
+    const lines = currentText.split("\n");
+    const hits = lines.flatMap((line, index) => (line.includes(text) ? [index] : []));
+    usage(hits.length === 1, `--drop text must match exactly one CURRENT.md line (found ${hits.length}): ${text}`, help);
+    descriptions.push(`Removed from CURRENT: ${oneLine(lines[hits[0]])}`);
+    lines.splice(hits[0], 1);
+    currentText = lines.join("\n");
+    if (!patched.includes("drop")) patched.push("drop");
+  }
+
   const current = parseCurrentMd(currentText);
-  const patches = [];
   const fields = {
     goal: ["activeGoal", "Active Goal"],
     understanding: ["currentUnderstanding", "Current Understanding"],
@@ -137,31 +179,35 @@ withMemoryLock(root, () => {
       ? args[flag].trim()
       : formatSectionItems(args[flag], { numbered: flag === "next-step" });
     if (value === current[field]) continue;
-    current[field] = value;
-    patches.push([heading, value]);
+    currentText = setSection(currentText, heading, value);
     patched.push(flag);
+    descriptions.push(`Updated ${heading}: ${oneLine(value)}`);
+  }
+  if (args["add-state"] !== undefined) {
+    const added = formatSectionItems(args["add-state"]);
+    currentText = setSection(currentText, "Current State", `${section(currentText, "Current State")}\n${added}`);
+    patched.push("add-state");
+    descriptions.push(`Added to Current State: ${oneLine(added.replace(/^- /gm, ""))}`);
+  }
+  const steps = section(currentText, "Accepted Next Steps");
+  if (steps !== section(original, "Accepted Next Steps")) {
+    let number = 0;
+    const renumbered = steps.replace(/^\d+\.(?=\s)/gm, () => `${(number += 1)}.`);
+    if (renumbered !== steps) currentText = setSection(currentText, "Accepted Next Steps", renumbered);
   }
 
   const ledgerItems = trivialOnly ? [] : [...changed];
   if (!ledgerItems.length) {
-    for (const [heading, value] of patches) ledgerItems.push(`Updated ${heading}: ${value.replace(/\s+/g, " ")}`);
+    ledgerItems.push(...descriptions);
     if (hasDecision) ledgerItems.push(`Decision: ${args.decision}`);
   }
   if (!ledgerItems.length) return;
 
-  const summary = ledgerItems[0];
-  current.lastUpdated = now;
-  const keptBasedOn = String(current.basedOn || "")
+  const keptBasedOn = basedOn
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !/^- Last change:/.test(line) && !/^- Session:/.test(line));
-  current.basedOn = [`- Last change: ${now} ${summary}`, ...keptBasedOn].join("\n");
-  patches.push(["Based On", current.basedOn]);
-  for (const [heading, value] of patches) {
-    const pattern = new RegExp(`^##[ \\t]+${heading}[ \\t]*\\n[\\s\\S]*?(?=\\n##[ \\t]+|$(?![\\s\\S]))`, "m");
-    if (pattern.test(currentText)) currentText = currentText.replace(pattern, () => `## ${heading}\n${value}\n`);
-    else currentText = `${currentText.trimEnd()}\n\n## ${heading}\n${value}\n`;
-  }
+  currentText = setSection(currentText, "Based On", [`- Last change: ${now} ${truncateSummary(ledgerItems[0])}`, ...keptBasedOn].join("\n"));
   currentText = replaceField(currentText, "Schema version", SCHEMA_VERSION).replace(/^Mainline session:[^\n]*\n?/m, "");
   currentText = /^Last updated:/m.test(currentText)
     ? replaceField(currentText, "Last updated", now)
@@ -203,7 +249,7 @@ ${listBlock(extraNotes, "none")}
   for (const [file, content] of outputs) validateKnownMarkdown(file, content);
   for (const [file, content] of outputs) writeMemory(root, file, content);
   persisted = true;
-  if (!args["no-check"]) runCheck(root, __dirname);
+  runCheck(root);
 });
 
 if (!persisted) {

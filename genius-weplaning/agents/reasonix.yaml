@@ -13,7 +13,5 @@ usage:
   default_prompt: "Use genius-weplaning for .agent-memory init, read, write, or repair. CURRENT.md is truth."
   shared_instructions:
     - "../SKILL.md"
-    - "../references/weplaning-v3.0-protocol.md"
-    - "../references/cli.md"
-    - "../references/pitfalls.md"
+    - "../references/reference.md"
   output_contract: "Report whether anything persisted, check-memory result, and the exact next step. Never hand-edit .agent-memory files; always run the bundled scripts."

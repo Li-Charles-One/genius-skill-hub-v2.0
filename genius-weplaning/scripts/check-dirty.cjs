@@ -100,7 +100,7 @@ const payload = {
       ? mode === "none"
         ? "No git repo and no CURRENT.md timestamp; dirty check skipped."
         : "Workspace clean (outside .agent-memory)."
-      : `Workspace dirty (${dirty.length} path(s) changed since the last memory update). Consider weplaning-note before handoff.`,
+      : `Workspace dirty (${dirty.length} path(s) changed since the last memory update). Consider weplaning-write before handoff.`,
 };
 
 if (args.json) {

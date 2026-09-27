@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 const {
-  allowNoCheck,
   emitResult,
   parseArgs,
   readMemory,
@@ -28,12 +27,10 @@ Options:
   --keep <N>     Number of newest complete change blocks to keep (default: 30)
   --dry-run      Print plan without writing
   --json         Machine-readable JSON on stdout
-  --no-check     Internal use only; external callers must run consistency checks
 `;
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
-allowNoCheck(args, "archive-changes.cjs");
 
 const root = path.resolve(args._[0] || process.cwd());
 const keep = Math.max(1, Number(args.keep || 30) || 30);
@@ -62,7 +59,7 @@ withMemoryLock(root, () => {
     console.error("CHANGES.md has no recognizable schema header; refusing to rewrite it.");
     process.exit(1);
   }
-  if (!args["no-check"]) runCheck(root, __dirname);
+  runCheck(root);
   kept = Math.min(keep, blocks.length);
   archived = Math.max(0, blocks.length - keep);
   if (archived === 0) return;
@@ -90,7 +87,7 @@ ${toArchive.join("\n").replace(/\s*$/, "")}
   writeMemory(root, "CHANGES.md", nextChanges);
 });
 
-if (!args["dry-run"] && archived > 0 && !args["no-check"]) runCheck(root, __dirname);
+if (!args["dry-run"] && archived > 0) runCheck(root);
 
 if (args["dry-run"]) {
   emitResult(args, archived ? `Would archive ${archived} block(s), keep ${kept}` : "Nothing to archive", {

@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -61,38 +60,25 @@ function normalizeNewlines(text) {
   return text.replace(/\r?\n/g, "\n");
 }
 
-function readFile(filePath) {
-  return fs.readFileSync(filePath, "utf8");
-}
-
 const BACKUP_DIR_NAME = ".backups";
 const LOCK_DIR_NAME = ".weplaning.lock";
 
-/** Files that are themselves backups must never be backed up again — that is how .backups/.backups/ grows. */
-function isTransientPath(filePath) {
-  return path
-    .resolve(filePath)
-    .split(path.sep)
-    .some((segment) => segment === BACKUP_DIR_NAME || segment === LOCK_DIR_NAME);
-}
-
 function writeFile(filePath, text) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const normalized = normalizeNewlines(text);
   const dir = path.dirname(filePath);
   const base = path.basename(filePath);
   const stamp = uniqueStamp();
   const tempPath = path.join(dir, `.${base}.${stamp}.tmp`);
 
-  if (fs.existsSync(filePath) && !isTransientPath(filePath)) {
-    const backupDir = path.join(dir, ".backups");
+  if (fs.existsSync(filePath)) {
+    const backupDir = path.join(dir, BACKUP_DIR_NAME);
     fs.mkdirSync(backupDir, { recursive: true });
     fs.copyFileSync(filePath, path.join(backupDir, `${base}.${stamp}.bak`));
     cleanupBackups(backupDir, base, 10);
   }
 
   try {
-    fs.writeFileSync(tempPath, normalized, "utf8");
+    fs.writeFileSync(tempPath, normalizeNewlines(text), "utf8");
     fs.renameSync(tempPath, filePath);
   } catch (error) {
     if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
@@ -101,7 +87,6 @@ function writeFile(filePath, text) {
 }
 
 function cleanupBackups(backupDir, base, keep) {
-  if (!fs.existsSync(backupDir)) return;
   const prefix = `${base}.`;
   const backups = fs
     .readdirSync(backupDir, { withFileTypes: true })
@@ -120,34 +105,25 @@ function memoryDir(root) {
   return path.join(root, ".agent-memory");
 }
 
-function memoryPath(root, relativePath) {
-  return path.join(memoryDir(root), relativePath);
-}
-
 function readMemory(root, relativePath) {
-  return readFile(memoryPath(root, relativePath));
+  return fs.readFileSync(path.join(memoryDir(root), relativePath), "utf8");
 }
 
 function writeMemory(root, relativePath, text) {
   validateKnownMarkdown(relativePath, text);
-  writeFile(memoryPath(root, relativePath), text);
+  writeFile(path.join(memoryDir(root), relativePath), text);
 }
 
 function utcNow() {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-function compactTimestamp(iso) {
-  return iso.replace(/[-:]/g, "").replace(".000", "");
-}
-
 function uniqueStamp() {
-  return `${compactTimestamp(utcNow())}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  const compact = utcNow().replace(/[-:]/g, "");
+  return `${compact}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const SUMMARY_MAX_CHARS = 120;
-
-function truncateSummary(text, max = SUMMARY_MAX_CHARS) {
+function truncateSummary(text, max = 120) {
   const oneLine = String(text || "").replace(/\s+/g, " ").trim();
   if (oneLine.length <= max) return oneLine;
   if (max <= 1) return "…";
@@ -161,46 +137,24 @@ function defaultAgent() {
   return "Agent";
 }
 
-function osToken(value) {
-  const raw = String(value || process.platform).toLowerCase();
-  if (raw.startsWith("win")) return "win";
-  if (raw.includes("darwin") || raw.includes("mac")) return "mac";
-  if (raw.includes("linux")) return "linux";
-  return slug(raw) || "os";
-}
-
-function slug(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 32);
-}
-
-function randomShortId() {
-  return Math.random().toString(36).slice(2, 6);
-}
-
-function generateSessionId({ iso, agent, shortId }) {
-  const timestamp = compactTimestamp(iso).replace(/(\d{8}T\d{4}).*/, "$1");
-  return [timestamp, slug(agent) || "agent", slug(shortId) || randomShortId()].join("-");
-}
-
 function section(text, heading) {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = normalizeNewlines(text).match(new RegExp(`^##[ \\t]+${escaped}[ \\t]*\\n([\\s\\S]*?)(?=\\n##[ \\t]+|$(?![\\s\\S]))`, "m"));
   return match ? match[1].trimEnd() : "";
 }
 
+/** Replace a `## heading` section body in place, or append the section when missing. */
+function setSection(text, heading, value) {
+  const pattern = new RegExp(`^##[ \\t]+${heading}[ \\t]*\\n[\\s\\S]*?(?=\\n##[ \\t]+|$(?![\\s\\S]))`, "m");
+  if (pattern.test(text)) return text.replace(pattern, () => `## ${heading}\n${value}\n`);
+  return `${text.trimEnd()}\n\n## ${heading}\n${value}\n`;
+}
+
 const SCHEMA_VERSION = "3.0";
 const SCHEMA_PATTERN = /^(2\.(2|3)|3\.0)$/;
 
-function schemaVersionOf(text) {
-  return extractField(text, "Schema version") || "";
-}
-
 function hasSupportedSchema(text) {
-  return SCHEMA_PATTERN.test(schemaVersionOf(text));
+  return SCHEMA_PATTERN.test(extractField(text, "Schema version") || "");
 }
 
 function markdownErrors(relativePath, text) {
@@ -244,12 +198,60 @@ function findMemoryConflicts(root) {
   return found.sort();
 }
 
-function isTrivialNote(text) {
-  return /^(完成了|done|搞定|ok|okay|finished|complete)$/i.test(String(text || "").trim());
+const NO_BLOCKER = "none|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞";
+
+/** Structural consistency gate shared by check-memory.cjs and every write. */
+function checkMemory(root, { audit = false } = {}) {
+  const dir = memoryDir(root);
+  const errors = [];
+  const warnings = [];
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    errors.push("Missing required directory: .agent-memory");
+  } else {
+    const conflicts = findMemoryConflicts(root);
+    if (conflicts.length > 0) {
+      const shown = conflicts.slice(0, 10).map((name) => `    .agent-memory/${name}`);
+      if (conflicts.length > shown.length) shown.push(`    ... and ${conflicts.length - shown.length} more`);
+      errors.push(
+        `Sync conflict copies found in .agent-memory (${conflicts.length}). Memory diverged across devices.\n` +
+          `${shown.join("\n")}\n` +
+          `  Fix: compare each copy against the live file, merge anything worth keeping, then delete the copies.`,
+      );
+    }
+  }
+  for (const file of ["CURRENT.md", "CHANGES.md"]) {
+    if (!fs.existsSync(path.join(dir, file))) errors.push(`Missing required file: .agent-memory/${file}`);
+  }
+  if (errors.length) return { errors, warnings };
+
+  const current = readMemory(root, "CURRENT.md");
+  errors.push(...markdownErrors("CURRENT.md", current), ...markdownErrors("CHANGES.md", readMemory(root, "CHANGES.md")));
+  if (fs.existsSync(path.join(dir, "DECISIONS.md"))) {
+    errors.push(...markdownErrors("DECISIONS.md", readMemory(root, "DECISIONS.md")));
+  }
+  if (audit && errors.length === 0) {
+    const lines = section(current, "Open Blockers").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const hasReal = lines.some((line) => !new RegExp(`^-?\\s*(${NO_BLOCKER}|unknown|unavailable)\\s*[。.]?$`, "i").test(line));
+    const hasNone = lines.some((line) => new RegExp(`^-\\s*(${NO_BLOCKER})\\s*[。.]?$`, "i").test(line));
+    if (hasReal && hasNone) warnings.push("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
+  }
+  return { errors, warnings };
 }
 
-function memoryExists(root, relativePath) {
-  return fs.existsSync(memoryPath(root, relativePath));
+/** Run the gate in-process; on failure print the errors and exit 1. */
+function runCheck(root, { quiet = false } = {}) {
+  const { errors } = checkMemory(root);
+  if (errors.length) {
+    console.error("WePlaning memory check failed:");
+    for (const error of errors) console.error(`- ${error}`);
+    process.exit(1);
+  }
+  // Keep machine-readable primary output on stdout; check chatter goes to stderr.
+  if (!quiet) console.error("WePlaning memory check passed.");
+}
+
+function isTrivialNote(text) {
+  return /^(完成了|done|搞定|ok|okay|finished|complete)$/i.test(String(text || "").trim());
 }
 
 function formatSectionItems(value, { numbered = false, fallback = "- none" } = {}) {
@@ -258,10 +260,7 @@ function formatSectionItems(value, { numbered = false, fallback = "- none" } = {
   return items
     .map((item, index) => {
       const trimmed = String(item).trim();
-      if (numbered) {
-        if (/^\d+\.\s/.test(trimmed)) return trimmed;
-        return `${index + 1}. ${trimmed.replace(/^[-*]\s+/, "")}`;
-      }
+      if (numbered) return `${index + 1}. ${trimmed.replace(/^(\d+\.|[-*])\s+/, "")}`;
       if (trimmed.startsWith("- ") || /^\d+\.\s/.test(trimmed)) return trimmed;
       return `- ${trimmed}`;
     })
@@ -270,9 +269,8 @@ function formatSectionItems(value, { numbered = false, fallback = "- none" } = {
 
 function parseCurrentMd(text) {
   return {
-    schemaVersion: schemaVersionOf(text) || SCHEMA_VERSION,
+    schemaVersion: extractField(text, "Schema version") || SCHEMA_VERSION,
     lastUpdated: extractField(text, "Last updated") || "unknown",
-    mainlineSession: extractField(text, "Mainline session") || "",
     activeGoal: section(text, "Active Goal") || "unknown",
     currentUnderstanding: section(text, "Current Understanding") || "unknown",
     currentState: section(text, "Current State") || "- unknown",
@@ -354,64 +352,6 @@ function detectProjectConfig(root, overrides = {}) {
   };
 }
 
-function parseSessionMd(text) {
-  return {
-    sessionId: extractField(text, "Session ID") || "unknown",
-    agent: extractField(text, "Agent") || "unknown",
-    adapter: extractField(text, "Adapter") || "unknown",
-    os: extractField(text, "OS") || "unknown",
-    role: extractField(text, "Role") || "unknown",
-    parentSession: extractField(text, "Parent session") || "unknown",
-    status: extractField(text, "Status") || "unknown",
-    started: extractField(text, "Started") || "unknown",
-    closed: extractField(text, "Closed") || "unknown",
-    goal: section(text, "Goal") || "unknown",
-    contextRead: section(text, "Context Read") || "- unknown",
-    workNotes: section(text, "Work Notes") || "- unknown",
-    filesTouched: section(text, "Files Touched") || "- unknown",
-    decisions: section(text, "Decisions") || "- none yet",
-    result: section(text, "Result") || "unknown",
-    exactNextStep: section(text, "Exact Next Step") || "unknown",
-  };
-}
-
-function renderSessionMd(state) {
-  return `# Session ${state.sessionId}
-
-Schema version: 2.3
-Session ID: ${state.sessionId}
-Agent: ${state.agent}
-Adapter: ${state.adapter}
-OS: ${state.os}
-Role: ${state.role}
-Parent session: ${state.parentSession}
-Status: ${state.status}
-Started: ${state.started}
-Closed: ${state.closed}
-
-## Goal
-${state.goal}
-
-## Context Read
-${state.contextRead}
-
-## Work Notes
-${state.workNotes}
-
-## Files Touched
-${state.filesTouched}
-
-## Decisions
-${state.decisions}
-
-## Result
-${state.result}
-
-## Exact Next Step
-${state.exactNextStep}
-`;
-}
-
 function validateKnownMarkdown(relativePath, text) {
   try {
     const errors = markdownErrors(relativePath, text);
@@ -422,39 +362,10 @@ function validateKnownMarkdown(relativePath, text) {
       for (const key of ["lastUpdated", "activeGoal", "currentUnderstanding", "currentState", "acceptedNextSteps", "openBlockers", "projectConfig", "basedOn"]) {
         if (before[key] !== after[key]) throw new Error(`CURRENT.md round-trip changed ${key}`);
       }
-    } else if (relativePath === "THREADS.md") {
-      const before = parseThreads(text);
-      const after = parseThreads(renderThreads({ ...before, updated: "round-trip" }));
-      if (before.mainline !== after.mainline) throw new Error("THREADS.md round-trip changed mainline");
-      if (before.lastMerged !== after.lastMerged) throw new Error("THREADS.md round-trip changed lastMerged");
-      if (before.rows.length !== after.rows.length) {
-        throw new Error(`THREADS.md round-trip changed row count ${before.rows.length} -> ${after.rows.length}`);
-      }
-      for (let index = 0; index < before.rows.length; index += 1) {
-        if (before.rows[index].id !== after.rows[index].id) {
-          throw new Error(`THREADS.md round-trip changed row ${index} id`);
-        }
-        if (before.rows[index].status !== after.rows[index].status) {
-          throw new Error(`THREADS.md round-trip changed status of ${before.rows[index].id}`);
-        }
-      }
-    } else if (relativePath.replace(/\\/g, "/").startsWith("sessions/")) {
-      const before = parseSessionMd(text);
-      const after = parseSessionMd(renderSessionMd(before));
-      for (const key of ["sessionId", "agent", "role", "parentSession", "status"]) {
-        if (before[key] !== after[key]) throw new Error(`${relativePath} round-trip changed ${key}`);
-      }
     }
   } catch (error) {
     throw new Error(`${relativePath} round-trip validation failed: ${error.message}`);
   }
-}
-
-function allowNoCheck(args, scriptName) {
-  if (!args["no-check"]) return;
-  if (process.env.WEPLANING_INTERNAL_NO_CHECK === "1") return;
-  console.error(`${scriptName}: --no-check is internal-only. Run check-memory.cjs after writes instead.`);
-  process.exit(1);
 }
 
 function sleepSync(ms) {
@@ -481,10 +392,7 @@ function readJsonIfExists(filePath) {
 }
 
 function withMemoryLock(root, callback, options = {}) {
-  const lockKey = path.resolve(memoryDir(root));
-  if (process.env.WEPLANING_LOCK_HELD === lockKey) return callback();
-
-  const dir = path.join(memoryDir(root), ".weplaning.lock");
+  const dir = path.join(memoryDir(root), LOCK_DIR_NAME);
   const ownerPath = path.join(dir, "owner.json");
   const timeoutMs = Number(options.timeoutMs || process.env.WEPLANING_LOCK_TIMEOUT_MS || 30_000);
   const staleMs = Number(options.staleMs || process.env.WEPLANING_LOCK_STALE_MS || 120_000);
@@ -537,14 +445,9 @@ function withMemoryLock(root, callback, options = {}) {
   };
   // process.exit() skips finally blocks; the exit handler guarantees release.
   process.once("exit", releaseLock);
-
-  const previousLock = process.env.WEPLANING_LOCK_HELD;
-  process.env.WEPLANING_LOCK_HELD = lockKey;
   try {
     return callback();
   } finally {
-    if (previousLock === undefined) delete process.env.WEPLANING_LOCK_HELD;
-    else process.env.WEPLANING_LOCK_HELD = previousLock;
     process.removeListener("exit", releaseLock);
     releaseLock();
   }
@@ -565,132 +468,6 @@ function replaceField(text, label, value) {
   return text.replace(pattern, `${label}: ${value}`);
 }
 
-function sanitizeCell(value) {
-  return String(value || "unknown").replace(/\|/g, "/").replace(/\r?\n/g, " ").trim();
-}
-
-function appendTableRow(text, heading, rowCells) {
-  const lines = normalizeNewlines(text).split("\n");
-  const headingIndex = lines.findIndex((line) => line.trim() === heading);
-  if (headingIndex === -1) {
-    throw new Error(`Missing heading: ${heading}`);
-  }
-  let insertIndex = headingIndex + 1;
-  while (insertIndex < lines.length && lines[insertIndex].trim() === "") {
-    insertIndex += 1;
-  }
-  while (insertIndex < lines.length && lines[insertIndex].startsWith("|")) {
-    insertIndex += 1;
-  }
-  lines.splice(insertIndex, 0, `| ${rowCells.map(sanitizeCell).join(" | ")} |`);
-  return `${lines.join("\n").replace(/\n+$/, "")}\n`;
-}
-
-function replaceOrAppendTableRow(text, heading, keyValue, rowCells) {
-  const lines = normalizeNewlines(text).split("\n");
-  const headingIndex = lines.findIndex((line) => line.trim() === heading);
-  if (headingIndex === -1) {
-    throw new Error(`Missing heading: ${heading}`);
-  }
-  let index = headingIndex + 1;
-  while (index < lines.length && lines[index].trim() === "") index += 1;
-  while (index < lines.length && lines[index].startsWith("|")) {
-    const cells = lines[index].split("|").slice(1, -1).map((cell) => cell.trim());
-    if (cells[0] === keyValue) {
-      lines[index] = `| ${rowCells.map(sanitizeCell).join(" | ")} |`;
-      return `${lines.join("\n").replace(/\n+$/, "")}\n`;
-    }
-    index += 1;
-  }
-  lines.splice(index, 0, `| ${rowCells.map(sanitizeCell).join(" | ")} |`);
-  return `${lines.join("\n").replace(/\n+$/, "")}\n`;
-}
-
-function parseThreads(text) {
-  const mainline = extractField(text, "Mainline session");
-  const lastMerged = extractField(text, "Last merged session");
-  const archived = extractField(text, "Archived rows");
-  const rows = text
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith("| ") && !line.includes(":--"))
-    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()))
-    .filter((cells) => cells.length >= 7 && cells[0] !== "Session ID")
-    .map((cells) => ({
-      id: cells[0],
-      parent: cells[1],
-      agent: cells[2],
-      os: cells[3],
-      role: cells[4],
-      status: cells[5],
-      // A hand-edited or externally merged row may carry an unescaped "|", which splits
-      // the summary into extra cells. Rejoin them so the tail is not dropped on re-render.
-      summary: cells.slice(6).join(" | "),
-    }));
-  return { mainline, lastMerged, archived, rows };
-}
-
-function renderThreads({ updated, mainline, lastMerged, archived, rows }) {
-  const lines = [
-    "# Threads",
-    "Schema version: 2.3",
-    `Last updated: ${updated}`,
-    "",
-    `Mainline session: ${mainline}`,
-    `Last merged session: ${lastMerged}`,
-    ...(archived ? [`Archived rows: ${archived}`] : []),
-    "",
-    "## Session Tree",
-    "",
-    "| Session ID | Parent | Agent | OS | Role | Status | Summary |",
-    "|:--|:--|:--|:--|:--|:--|:--|",
-  ];
-  for (const row of rows) {
-    lines.push(
-      `| ${sanitizeCell(row.id)} | ${sanitizeCell(row.parent)} | ${sanitizeCell(row.agent)} | ${sanitizeCell(row.os)} | ${sanitizeCell(row.role)} | ${sanitizeCell(row.status)} | ${sanitizeCell(truncateSummary(row.summary))} |`,
-    );
-  }
-  return `${lines.join("\n")}\n`;
-}
-
-function readThreads(root) {
-  return parseThreads(readMemory(root, "THREADS.md"));
-}
-
-function writeThreads(root, threads, updated) {
-  writeMemory(root, "THREADS.md", renderThreads({ ...threads, updated }));
-}
-
-function activeCount(rows) {
-  return rows.filter((row) => row.status === "active").length;
-}
-
-function sessionPath(root, sessionId) {
-  return memoryPath(root, path.join("sessions", `${sessionId}.md`));
-}
-
-function readSession(root, sessionId) {
-  return readFile(sessionPath(root, sessionId));
-}
-
-function writeSession(root, sessionId, text) {
-  const relativePath = path.join("sessions", `${sessionId}.md`);
-  writeMemory(root, relativePath, text);
-}
-
-function runCheck(root, scriptDir, { quiet = false } = {}) {
-  const checker = path.join(scriptDir, "check-memory.cjs");
-  const result = spawnSync(process.execPath, [checker, root], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  // Keep machine-readable primary output on stdout; checks go to stderr.
-  if (result.stdout && (!quiet || result.status !== 0)) process.stderr.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
-  if (result.status !== 0) {
-    process.exit(result.status || 1);
-  }
-}
-
 /** Print a stable result: JSON when --json, otherwise a single primary line on stdout. */
 function emitResult(args, primaryLine, payload = {}) {
   if (args && args.json) {
@@ -701,55 +478,30 @@ function emitResult(args, primaryLine, payload = {}) {
 }
 
 module.exports = {
-  activeCount,
-  appendTableRow,
-  allowNoCheck,
-  BACKUP_DIR_NAME,
-  compactTimestamp,
+  checkMemory,
   defaultAgent,
   detectProjectConfig,
   emitResult,
-  extractField,
   findMemoryConflicts,
   formatSectionItems,
   hasSupportedSchema,
-  isTransientPath,
   isTrivialNote,
-  LOCK_DIR_NAME,
-  generateSessionId,
-  memoryExists,
-  memoryPath,
-  markdownErrors,
-  normalizeNewlines,
-  osToken,
   parseArgs,
+  parseCurrentMd,
   readMemory,
-  readSession,
-  readThreads,
-  parseThreads,
   renderCurrentMd,
-  renderSessionMd,
   replaceField,
-  replaceOrAppendTableRow,
   required,
   runCheck,
-  SCHEMA_PATTERN,
   SCHEMA_VERSION,
-  schemaVersionOf,
   section,
-  sessionPath,
-  parseCurrentMd,
-  parseSessionMd,
-  SUMMARY_MAX_CHARS,
+  setSection,
   toList,
   truncateSummary,
+  uniqueStamp,
   usage,
   utcNow,
-  uniqueStamp,
   validateKnownMarkdown,
   withMemoryLock,
-  writeFile,
   writeMemory,
-  writeSession,
-  writeThreads,
 };

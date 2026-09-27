@@ -35,7 +35,7 @@
       "id": "quick-note",
       "prompt": "记一笔：us-one Hy2 已恢复",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-write.cjs (or weplaning-note wrapper) with --changed. Does not create a session.",
+      "expected_output": "Runs weplaning-write.cjs with --changed. Does not create a session.",
       "files": ["scripts/weplaning-write.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-write"}
@@ -137,7 +137,7 @@
       "id": "preserve-other-facts",
       "prompt": "记一笔：Docker 自启已恢复并验证，更新当前状态。原有代理、网卡和内存限制等事实仍然有效。",
       "trigger_expected": true,
-      "expected_output": "Re-reads CURRENT before constructing the complete state replacement. Changes only Docker's fact, retains other valid facts, includes verification evidence and a change ledger entry, then checks memory.",
+      "expected_output": "Changes only Docker's fact in place with --replace/--with (or re-reads CURRENT before a complete section replacement), retains other valid facts, includes verification evidence and a change ledger entry, then checks memory.",
       "files": ["scripts/weplaning-write.cjs", "scripts/check-memory.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-write"},
