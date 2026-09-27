@@ -263,7 +263,7 @@ PROMPTS = {
 # ── File type detection ───────────────────────────────────────────────
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}
-AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma", ".opus"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma", ".opus", ".aiff", ".aif"}
 PDF_EXTENSIONS = {".pdf"}
 
 IMAGE_MODES = {
@@ -874,6 +874,7 @@ MIME_TYPES = {
     ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
     ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".aac": "audio/aac",
     ".wma": "audio/x-ms-wma", ".opus": "audio/opus",
+    ".aiff": "audio/aiff", ".aif": "audio/aiff",
     ".pdf": "application/pdf",
 }
 # URLs without a known extension fall back to the media kind.
@@ -1191,6 +1192,19 @@ def _analyze_long_video(
     return result
 
 
+# audio-transcribe asks this first: a dedicated yes/no request stops the model from
+# inventing speech for tones, music or noise, which a strict transcribe prompt alone did not.
+VOICE_CHECK_PROMPT = (
+    "Is an actual human voice (spoken words or sung lyrics) audible anywhere in this audio? "
+    "Pure tones, beeps, dial/ring tones, instrumental music, noise and silence are not a voice. "
+    "Answer with exactly one word: YES or NO."
+)
+NO_SPEECH_RESULT = (
+    "NO_SPEECH_DETECTED\n"
+    "Voice check found no audible human voice. Use audio-summary or audio-scene to describe the sounds."
+)
+
+
 def analyze_media(
     media_input: str,
     mode: str = "describe",
@@ -1273,10 +1287,15 @@ def analyze_media(
         try:
             # --force-proxy is video-oriented; audio/image still size-trigger.
             # Gemini-style local video prefers H.264 for broader decoder support.
+            # OpenAI-style (MiMo) rejects AIFF, so it always gets an AAC proxy.
             upload_path = ensure_media_under_limit(
                 media_input,
                 kind=kind,
-                force_proxy=bool(force_proxy and is_video_input),
+                force_proxy=bool(force_proxy and is_video_input) or (
+                    is_audio_input
+                    and conf["api_style"] == "openai"
+                    and _path_suffix(media_input) in (".aiff", ".aif")
+                ),
                 prefer_h264=conf["api_style"] == "gemini",
             )
         except Exception as e:
@@ -1300,27 +1319,37 @@ def analyze_media(
     media = [(upload_path, kind)]
     if mode == "compare" and compare_with:
         media.append((compare_with, "image"))
-    try:
-        result_text = call_model(conf, media, prompt, timeout, show_think)
-    except OmniError as e:
-        err = str(e)
-        retryable = (
-            e.code == "PROVIDER_ERROR"
-            and is_local
-            and is_video_input
-            and (any(s in err for s in ("400", "Param", "Invalid"))
-                 or "corrupted" in err.lower() or "decode" in err.lower())
-        )
-        if not retryable:
-            raise
-        print(
-            f"[genius-omni] API failed ({err[:120]}); retrying with H.264 video proxy…",
-            file=sys.stderr,
-        )
-        proxy_path, enc = make_video_proxy(media_input, h264_only=True)
-        print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
-        media[0] = (proxy_path, kind)
-        result_text = call_model(conf, media, prompt, timeout, show_think)
+    no_voice = (
+        mode == "audio-transcribe"
+        and os.environ.get("VISION_VOICE_CHECK", "1").strip().lower() not in ("0", "false", "no", "off")
+        and call_model(conf, media, VOICE_CHECK_PROMPT, timeout).strip().upper().startswith("NO")
+    )
+    if no_voice:
+        print("[genius-omni] voice check: no human voice, skipping transcription", file=sys.stderr)
+        result_text = NO_SPEECH_RESULT
+    else:
+        try:
+            result_text = call_model(conf, media, prompt, timeout, show_think)
+        except OmniError as e:
+            err = str(e)
+            retryable = (
+                e.code == "PROVIDER_ERROR"
+                and is_local
+                and is_video_input
+                and (any(s in err for s in ("400", "Param", "Invalid"))
+                     or "corrupted" in err.lower() or "decode" in err.lower())
+            )
+            if not retryable:
+                raise
+            print(
+                f"[genius-omni] API failed ({err[:120]}); retrying with H.264 video proxy…",
+                file=sys.stderr,
+            )
+            proxy_path, enc = make_video_proxy(media_input, h264_only=True)
+            print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
+            media[0] = (proxy_path, kind)
+            result_text = call_model(conf, media, prompt, timeout, show_think)
+
 
     if actual_duration is not None:
         footer_parts = [f"ffprobe 实测: **{format_duration(actual_duration)}**"]

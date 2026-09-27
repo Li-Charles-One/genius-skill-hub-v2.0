@@ -120,6 +120,7 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 | `VISION_MODEL` / `VISION_BASE_URL` / `VISION_API_STYLE` | — | override the **active** provider only |
 | `VISION_MAX_TOKENS` | `32768` | output limit |
 | `VISION_SHOW_THINKING` | off | `1` prints thinking before the answer |
+| `VISION_VOICE_CHECK` | `1` | `audio-transcribe` runs a yes/no voice check first; `0` skips it |
 | `VISION_VIDEO_FPS` / `VISION_VIDEO_RESOLUTION` | `2` / `default` | MiMo video sampling |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` | — | HTTP proxy for API calls (first one set wins) |
 
@@ -129,7 +130,7 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 |---|---|
 | Image | jpg / png / gif / webp / bmp (SVG: convert to PNG first) |
 | Video | mp4 / mov / avi / mkv / webm / flv / wmv / m4v / YouTube |
-| Audio | mp3 / wav / flac / m4a / ogg / aac / wma / opus |
+| Audio | mp3 / wav / flac / m4a / ogg / aac / wma / opus / aiff (MiMo: aiff is converted to AAC first) |
 | PDF | pdf |
 
 Local media is sent as base64 (raw ≤35MB, leaving headroom under MiMo's ~50MB encoded limit). A public URL is passed through and skips base64 and proxies (MiMo: video ≤300MB, audio ≤100MB).

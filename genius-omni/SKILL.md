@@ -47,6 +47,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Local video ≥ 15 min is segmented and indexed (`--no-long-video` disables); ffprobe injects the real duration.
 - PDF: CPA reads the whole document in one request; MiMo (or `VISION_PDF_PAGES=1`) renders pages and analyzes them one by one.
 - Local media over 20MB is compressed into an analysis proxy automatically.
+- `audio-transcribe` first asks the model whether a human voice is audible (one short extra request; `VISION_VOICE_CHECK=0` disables) and answers `NO_SPEECH_DETECTED` without transcribing when there is none.
 
 ## Report
 
