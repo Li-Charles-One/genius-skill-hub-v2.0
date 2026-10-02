@@ -58,9 +58,7 @@ Every generated or repaired skill must:
 1. Read `references/capture-intent.md`. Harvest the conversation and artifacts first. Confirm one hypothesis, then fill purpose, trigger, non-goals, outputs, and dependencies.
 2. Scaffold with `scripts/init_skill.py` when useful (`--resources` for folders; `evals` gets a starter file).
 3. Replace every `(fill: ...)` marker. Make the description a bit pushy and keep non-goals as near misses.
-4. Fill Gotchas with real environment traps, or leave "None known".
-5. Add only the resources the skill needs.
-6. Run `scripts/quick_validate.py` and `scripts/security_scan.py`. If behavior is risky, use `references/eval-run-loop.md`.
+4. Run `scripts/quick_validate.py` and `scripts/security_scan.py`. If behavior is risky, use `references/eval-run-loop.md`.
 
 ### Repair
 
@@ -68,7 +66,7 @@ Check in this order: frontmatter, name/folder match, hub duplicates, description
 
 ### Audit
 
-Inspect the same evidence as Repair, then run `scripts/security_scan.py`. Report findings first. If no files changed, say so.
+Inspect the same evidence as Repair, then run `scripts/security_scan.py`.
 
 ### Evaluate
 
