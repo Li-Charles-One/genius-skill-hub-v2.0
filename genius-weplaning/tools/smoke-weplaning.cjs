@@ -629,6 +629,57 @@ function testLedgerOmitsEmptyFields() {
   assert(/- Files touched:\n  - a\.yaml\n- Verification:\n  - checked\n- Notes:\n  - extra\n$/.test(lastBlock()), "ledger dropped a provided field");
 }
 
+function testSupersedeDecision() {
+  const root = tempRoot("supersede");
+  init(root);
+  writeCmd(root, ["--decision", "OLD_CHOICE use port 1", "--rationale", "first guess"]);
+  const before = memorySnapshot(root);
+  run([script("weplaning-write.cjs"), root, "--agent", "CI", "--decision", "x", "--supersedes", "NO_SUCH_DECISION"], { expectFail: true });
+  run([script("weplaning-write.cjs"), root, "--agent", "CI", "--changed", "x", "--supersedes", "OLD_CHOICE"], { expectFail: true });
+  assert(memorySnapshot(root) === before, "a failed --supersedes changed memory");
+  writeCmd(root, ["--decision", "NEW_CHOICE use port 2", "--supersedes", "OLD_CHOICE"]);
+  const blocks = read(root, "DECISIONS.md").split(/\n(?=## )/);
+  const oldBlock = blocks.find((block) => block.includes("OLD_CHOICE"));
+  const newBlock = blocks.find((block) => block.includes("NEW_CHOICE"));
+  assert(/^- Superseded by: \S+ decision$/m.test(oldBlock) && oldBlock.includes("first guess"), "old decision was not marked or lost content");
+  assert(/^- Supersedes: \S+ decision$/m.test(newBlock) && !newBlock.includes("Superseded by"), "new decision does not point at the old one");
+  assert(read(root, "CHANGES.md").includes("Superseded decision: OLD_CHOICE use port 1"), "ledger missed the superseded decision");
+  run([script("weplaning-write.cjs"), root, "--agent", "CI", "--decision", "y", "--supersedes", "OLD_CHOICE"], { expectFail: true });
+  fs.mkdirSync(path.join(root, ".agent-memory", "archive"), { recursive: true });
+  write(root, path.join("archive", "DECISIONS-old.md"), "# Archived Decisions\nSchema version: 3.0\nBlocks: 2\n");
+  const full = run([script("weplaning-read.cjs"), root, "--full"]).stdout;
+  const shownDecisions = full.split("⚖ Decisions")[1].split("\n\n")[0];
+  assert(shownDecisions.includes("NEW_CHOICE use port 2") && !shownDecisions.includes("OLD_CHOICE"), "--full did not show only active decisions");
+  assert(full.includes("1 superseded hidden") && full.includes("archive/DECISIONS-old.md  (2 decision blocks)"), "--full missed the superseded count or the decision archive");
+  assert(!run([script("weplaning-read.cjs"), root]).stdout.includes("⚖ Decisions"), "default read printed the decisions section");
+  const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
+  assert(payload.supersededDecisions === 1 && payload.decisions.some((item) => item.decision.includes("NEW_CHOICE")), "JSON lost decisions");
+}
+
+function testHandoffSkipsUserOwnedSteps() {
+  const root = tempRoot("user-steps");
+  init(root);
+  writeCmd(root, ["--next-step", "【待用户处理】USER_TASK;;AGENT_TASK"]);
+  const mixed = JSON.parse(run([script("weplaning-read.cjs"), root, "--handoff", "--json"]).stdout);
+  assert(mixed.focusNextStep.index === 2 && mixed.focusNextStep.text === "AGENT_TASK" && mixed.nextStepsStatus === "ready", "handoff focused a user-owned step");
+  writeCmd(root, ["--next-step", "【待用户处理】USER_TASK;;[user] OTHER_USER_TASK"]);
+  const waiting = JSON.parse(run([script("weplaning-read.cjs"), root, "--handoff", "--json"]).stdout);
+  assert(waiting.focusNextStep === null && waiting.nextStepsStatus === "waiting-user", "handoff invented a task when every step waits on the user");
+  assert(run([script("weplaning-read.cjs"), root, "--handoff"]).stdout.includes("Every next step waits on the user"), "handoff hid that every step waits on the user");
+  const chosen = JSON.parse(run([script("weplaning-read.cjs"), root, "--next", "1", "--json"]).stdout);
+  assert(chosen.focusNextStep.text.includes("USER_TASK"), "explicit --next could not select a user-owned step");
+}
+
+function testAgentTagIsLowercaseWithDevice() {
+  const root = tempRoot("agent-tag");
+  init(root);
+  run([script("weplaning-write.cjs"), root, "--agent", "Grok", "--changed", "TAGGED_FACT", "--decision", "TAGGED_DECISION"]);
+  for (const file of ["CHANGES.md", "DECISIONS.md"]) {
+    assert(/^- Agent: grok@[^\s@]+$/m.test(read(root, file)), `${file} agent is not lowercase name@device`);
+  }
+  assert(/^- Agent: ci@[^\s@]+$/m.test(read(root, "CHANGES.md")), "init agent is not lowercase name@device");
+}
+
 function testSearchPrioritizesCurrentTruth() {
   const root = tempRoot("search-priority");
   init(root);
@@ -688,6 +739,9 @@ for (const test of [
   testNextStepsNoneUnknownAndInvalidNumber,
   testBriefShortensLongItems,
   testLedgerOmitsEmptyFields,
+  testSupersedeDecision,
+  testHandoffSkipsUserOwnedSteps,
+  testAgentTagIsLowercaseWithDevice,
   testSearchPrioritizesCurrentTruth,
   testDirtyGitErrorIsNotClean,
 ]) {

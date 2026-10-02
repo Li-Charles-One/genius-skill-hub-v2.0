@@ -39,7 +39,9 @@ Last updated: <iso-time>
 
 The heading is the change ID. `Files touched`, `Verification` and `Notes` appear only when passed. Older blocks with a `Change ID` line and `none` fields stay valid.
 
-`DECISIONS.md` blocks: `## <iso-time> decision` with `- Agent:`, `- Decision:`, `- Rationale:`.
+`DECISIONS.md` blocks: `## <iso-time> decision` with `- Agent:`, `- Decision:`, `- Rationale:`. `--supersedes` adds `- Supersedes: <old heading>` to the new block and `- Superseded by: <new heading>` to the old one; nothing else in an old block changes.
+
+`- Agent:` is `<name>@<device>`: the name lowercased, the device from the host name. Older entries without a device stay valid.
 
 Only schema 3.0 passes the check; 2.x files are rejected. Old timestamp-only ledger headings stay valid.
 
@@ -50,9 +52,9 @@ node weplaning-read.cjs <root> [--brief] [--handoff] [--next N] [--full] [--limi
 node weplaning-find.cjs <root> "<query>" [--regex] [--case] [--limit N] [--scope current|changes|decisions|archive] [--json]
 ```
 
-- Default: memory update time, goal, understanding, state, next steps, blockers, last 3 ledger blocks. `--brief` omits the ledger and cuts understanding/state items over 80 characters to their label (text before the first colon, else the first 40 characters), reporting how many it shortened; `--handoff` adds recorded verification and file references; `--full` lists archive files.
+- Default: memory update time, goal, understanding, state, next steps, blockers, last 3 ledger blocks. `--brief` omits the ledger and cuts understanding/state items over 80 characters to their label (text before the first colon, else the first 40 characters), reporting how many it shortened; `--handoff` adds recorded verification and file references; `--full` adds the active decisions (superseded ones are counted, not shown) and lists CHANGES and DECISIONS archive files.
 - Reads run the structural check first. JSON `generatedAt` is the read time and `lastUpdated` the memory update time; neither is a live verification.
-- `--next N` needs a positive integer naming an existing actionable item; invalid input is an error, never #1. `nextStepsStatus` is `ready`, `none` (`none` / `无待执行事项`) or `unknown`; handoff never focuses a placeholder. Unknown blockers stay visible.
+- `--next N` needs a positive integer naming an existing actionable item; invalid input is an error, never #1. `nextStepsStatus` is `ready`, `none` (`none` / `无待执行事项`), `unknown` or `waiting-user` (every step starts with `【待用户` or `[user]`); handoff focuses the first step an agent can start, never a placeholder or a user-owned step. `--next N` may still select a user-owned step. Unknown blockers stay visible.
 - Search visits CURRENT before CHANGES, DECISIONS, archive and any other `.md` in the memory folder, so history cannot crowd out current truth.
 
 ## Write
@@ -70,6 +72,7 @@ node weplaning-write.cjs <root> --agent <name> [note] [options]
 | `--state` / `--next-step` / `--blockers` | Replace the whole section (`;;` or repeat the flag) |
 | `--goal` / `--understanding` | Replace the section with one (multi-line allowed) string |
 | `--decision` [`--rationale`] | Append DECISIONS.md and a ledger entry |
+| `--supersedes <text>` | With `--decision`: mark the one active decision containing `text` as superseded. Repeatable |
 | `--file` / `--verification` / `--note` | Ledger metadata |
 
 - Exact edits run first, then section replacements. Accepted Next Steps are renumbered whenever they change.

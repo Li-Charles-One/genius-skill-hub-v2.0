@@ -82,6 +82,38 @@
       ]
     },
     {
+      "id": "read-full-memory",
+      "prompt": "查看完整的项目记忆",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs --full. Reports the recorded state plus active decisions and the archive list; superseded decisions are counted, not presented as current.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--full"}
+      ]
+    },
+    {
+      "id": "supersede-decision",
+      "prompt": "记个决策：Mac 局域网地址改为固定 192.168.31.115，之前定的 .151 作废。",
+      "trigger_expected": true,
+      "expected_output": "One weplaning-write.cjs command with --decision, --rationale and --supersedes naming text unique to the old .151 decision. Does not hand-edit DECISIONS.md and does not leave the old decision looking active.",
+      "files": ["scripts/weplaning-write.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--supersedes"},
+        {"type": "contains", "value": "--decision"}
+      ]
+    },
+    {
+      "id": "handoff-all-user-owned",
+      "prompt": "读取记忆接力。CURRENT 的下一步两条都以【待用户处理】开头。",
+      "trigger_expected": true,
+      "expected_output": "Reads --handoff, reports that every next step waits on the user, and stops. Does not start a user-owned step or invent a task.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--handoff"},
+        {"type": "not_contains", "value": "weplaning-write"}
+      ]
+    },
+    {
       "id": "ordinary-summary",
       "prompt": "把刚才那段解释再缩成三句话",
       "trigger_expected": false,

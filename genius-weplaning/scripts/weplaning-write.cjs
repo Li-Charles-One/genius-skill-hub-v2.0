@@ -11,6 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  agentTag,
   checkMemory,
   defaultAgent,
   emitResult,
@@ -54,6 +55,7 @@ Options:
   --understanding <text> Replace Current Understanding
   --decision <text>      Also append DECISIONS.md
   --rationale <text>     Rationale for --decision
+  --supersedes <text>    Mark the one active decision containing this text as superseded by --decision
   --file <path>          Optional files touched (repeat / ";;")
   --verification <text>  Optional verification notes (repeat / ";;")
   --note <text>          Extra ledger notes (repeat / ";;")
@@ -63,7 +65,7 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const valueFlags = ["agent", "changed", "replace", "with", "drop", "add-state", "state", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "file", "files", "verification", "note", "time"];
+const valueFlags = ["agent", "changed", "replace", "with", "drop", "add-state", "state", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "supersedes", "file", "files", "verification", "note", "time"];
 // Only these may span lines; every other value becomes one Markdown line or list item.
 const multiLineFlags = ["goal", "understanding", "replace", "with"];
 const HEADING = /^[ \t]{0,3}#{1,6}([ \t]|$)/m;
@@ -99,13 +101,15 @@ usage(replaces.length === withs.length, "Each --replace needs exactly one --with
 
 const hasPatch = Boolean(args.state || args["next-step"] || args.blockers || args.goal || args.understanding || args["add-state"] || replaces.length || drops.length);
 const hasDecision = Boolean(args.decision && args.decision !== true);
+const supersedes = [].concat(args.supersedes ?? []);
+usage(!supersedes.length || hasDecision, "--supersedes needs --decision", help);
 const trivialOnly = changed.length > 0 && changed.every(isTrivialNote);
 
 if (!hasPatch && !hasDecision && changed.length === 0) {
   usage(false, "Nothing to write. Pass --changed, a CURRENT patch flag, or --decision.", help);
 }
 
-const agent = args.agent || defaultAgent();
+const agent = agentTag(args.agent || defaultAgent());
 const now = args.time || utcNow();
 const files = toList(args.file || args.files);
 const verification = toList(args.verification);
@@ -197,6 +201,29 @@ withMemoryLock(root, () => {
     if (renumbered !== steps) currentText = setSection(currentText, "Accepted Next Steps", renumbered);
   }
 
+  let decisionsText = "";
+  const superseded = [];
+  if (hasDecision) {
+    const decisionsPath = path.join(root, ".agent-memory", "DECISIONS.md");
+    decisionsText = fs.existsSync(decisionsPath)
+      ? fs.readFileSync(decisionsPath, "utf8").replace(/\r\n/g, "\n").replace(/\s*$/, "")
+      : `# Decisions\nSchema version: ${SCHEMA_VERSION}`;
+    if (!/^Schema version:/m.test(decisionsText)) {
+      decisionsText = `# Decisions\nSchema version: ${SCHEMA_VERSION}\n${decisionsText}`;
+    }
+    // Old decisions stay in place; a superseded one only gains a pointer to its replacement.
+    for (const text of supersedes) {
+      const blocks = decisionsText.split(/\n(?=## )/);
+      const hits = blocks.flatMap((block, index) => (index > 0 && block.includes(text) && !/^- Superseded by:/m.test(block) ? [index] : []));
+      usage(hits.length === 1, `--supersedes text must match exactly one active decision (found ${hits.length}): ${text}`, help);
+      const block = blocks[hits[0]].trimEnd();
+      superseded.push(block.split("\n")[0].replace(/^## /, ""));
+      descriptions.push(`Superseded decision: ${truncateSummary((block.match(/^- Decision: (.*)$/m) || [])[1] || superseded.at(-1))}`);
+      blocks[hits[0]] = `${block}\n- Superseded by: ${now} decision\n`;
+      decisionsText = blocks.join("\n").replace(/\s*$/, "");
+    }
+  }
+
   const ledgerItems = trivialOnly ? [] : [...changed];
   if (!ledgerItems.length) {
     ledgerItems.push(...descriptions);
@@ -221,20 +248,13 @@ ${listField("Changed", ledgerItems)}${listField("Files touched", files)}${listFi
   const outputs = [["CURRENT.md", currentText], ["CHANGES.md", `${existing}${entry}`]];
 
   if (hasDecision) {
-    const decisionsPath = path.join(root, ".agent-memory", "DECISIONS.md");
-    let text = fs.existsSync(decisionsPath)
-      ? fs.readFileSync(decisionsPath, "utf8").replace(/\s*$/, "")
-      : `# Decisions\nSchema version: ${SCHEMA_VERSION}`;
-    if (!/^Schema version:/m.test(text)) {
-      text = `# Decisions\nSchema version: ${SCHEMA_VERSION}\n${text}`;
-    }
     const entry = `
 ## ${now} decision
 - Agent: ${agent}
 - Decision: ${args.decision}
 - Rationale: ${args.rationale ? String(args.rationale) : "none"}
-`;
-    outputs.push(["DECISIONS.md", `${text}\n${entry}`]);
+${superseded.length ? `- Supersedes: ${superseded.join("; ")}\n` : ""}`;
+    outputs.push(["DECISIONS.md", `${decisionsText}\n${entry}`]);
     decisionRecorded = true;
   }
   for (const [file, content] of outputs) validateKnownMarkdown(file, content);

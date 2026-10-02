@@ -22,9 +22,9 @@ Usage:
   node weplaning-read.cjs <project-root> [options]
 
 Options:
-  --handoff     Highlight next step #1
+  --handoff     Highlight the first next step an agent can start
   --brief       Goal, next steps and blockers; long context/state items cut to their label (no ledger)
-  --full        Also list archive files
+  --full        Also show active decisions and list archive files
   --json        Machine-readable JSON on stdout
   --next <N>    Focus Accepted Next Steps item N (1-based)
   --limit <K>   Number of recent change blocks (default: 3)
@@ -103,26 +103,45 @@ const archiveDir = path.join(memDir, "archive");
 const archives = (args.full || args.json) && fs.existsSync(archiveDir)
   ? fs
       .readdirSync(archiveDir)
-      .filter((name) => /^CHANGES-.*\.md$/.test(name))
+      .filter((name) => /^(CHANGES|DECISIONS)-.*\.md$/.test(name))
       .sort()
       .reverse()
       .map((name) => {
         const text = fs.readFileSync(path.join(archiveDir, name), "utf8");
         const count = Number((text.match(/^Blocks:\s*(\d+)$/m) || [])[1] || 0);
-        return { file: `archive/${name}`, kind: "changes", count };
+        return { file: `archive/${name}`, kind: name.startsWith("CHANGES") ? "changes" : "decisions", count };
       })
   : [];
+
+const decisionsPath = path.join(memDir, "DECISIONS.md");
+const decisions = (args.full || args.json) && fs.existsSync(decisionsPath)
+  ? fs
+      .readFileSync(decisionsPath, "utf8")
+      .replace(/\r?\n/g, "\n")
+      .split(/\n(?=## )/)
+      .slice(1)
+      .map((block) => ({
+        when: (block.match(/^## (\S+)/) || [])[1] || "unknown",
+        decision: (block.match(/^- Decision: (.*)$/m) || [])[1] || "",
+        superseded: /^- Superseded by:/m.test(block),
+      }))
+  : [];
+const activeDecisions = decisions.filter((item) => !item.superseded);
+
+// A step only the user can do is never a handoff focus.
+const isUserOwned = (text) => /^(【待用户|\[user\])/i.test(text);
 
 const isNoTask = (text) => /^(none|no (?:pending )?tasks?|no (?:accepted )?next steps?|无|无待办|无待执行事项|暂无待办|暂无待执行事项)[。.]?$/i.test(text);
 const isUnknown = (text) => /^(unknown|unavailable|未知|待确认|未确定)[。.]?$/i.test(text);
 const rawSteps = parseNextSteps(current.acceptedNextSteps);
-const nextStepsStatus = rawSteps.every(isNoTask) ? "none" : rawSteps.every(isUnknown) ? "unknown" : "ready";
+const nextStepsStatus = rawSteps.every(isNoTask) ? "none" : rawSteps.every(isUnknown) ? "unknown" : rawSteps.every(isUserOwned) ? "waiting-user" : "ready";
 const nextSteps = nextStepsStatus === "none" ? [] : rawSteps;
 if (nextN !== null) {
   usage(nextN <= nextSteps.length, `Next step #${nextN} does not exist (${nextSteps.length} recorded)`, help);
   usage(!isNoTask(nextSteps[nextN - 1]) && !isUnknown(nextSteps[nextN - 1]), `Next step #${nextN} is not an actionable task`, help);
 }
-const focusIndex = nextN ?? (args.handoff && nextStepsStatus === "ready" && !isNoTask(nextSteps[0]) && !isUnknown(nextSteps[0]) ? 1 : null);
+const agentStep = nextSteps.findIndex((step) => !isNoTask(step) && !isUnknown(step) && !isUserOwned(step));
+const focusIndex = nextN ?? (args.handoff && agentStep !== -1 ? agentStep + 1 : null);
 
 const payload = {
   ok: true,
@@ -146,6 +165,8 @@ const payload = {
     files: c.files,
   })),
   archives,
+  decisions: activeDecisions.map(({ when, decision }) => ({ when, decision })),
+  supersededDecisions: decisions.length - activeDecisions.length,
   truth: "CURRENT.md is accepted truth. CHANGES.md is the ledger.",
 };
 
@@ -189,6 +210,7 @@ if (payload.focusNextStep) {
 
 out += `\n✅ Accepted Next Steps:\n${nextStepsStatus === "none" ? "No pending tasks." : current.acceptedNextSteps}\n`;
 if (nextStepsStatus === "unknown") out += "Next steps are unknown; clarify before continuing.\n";
+if (nextStepsStatus === "waiting-user") out += "Every next step waits on the user; nothing for an agent to start.\n";
 
 const hasBlockers = String(payload.blockers || "")
   .split(/\r?\n/)
@@ -227,10 +249,15 @@ if (recentChanges.length === 0) {
   }
 }
 
+if (args.full && decisions.length > 0) {
+  out += `\n⚖ Decisions (${activeDecisions.length} active, ${payload.supersededDecisions} superseded hidden):\n`;
+  for (const item of activeDecisions) out += `- ${item.when} ${item.decision}\n`;
+}
+
 if (args.full && archives.length > 0) {
   out += `\n🗄 Archive:\n`;
   for (const item of archives) {
-    out += `  · ${item.file}${item.count ? `  (${item.count} change blocks)` : ""}\n`;
+    out += `  · ${item.file}${item.count ? `  (${item.count} ${item.kind === "changes" ? "change" : "decision"} blocks)` : ""}\n`;
   }
 }
 

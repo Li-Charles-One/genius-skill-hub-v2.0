@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  agentTag,
   defaultAgent,
   detectProjectConfig,
   emitResult,
@@ -51,7 +52,7 @@ if (memoryExists && !args.force && !args.reinit) {
   process.exit(1);
 }
 
-const agent = args.agent || defaultAgent();
+const agent = agentTag(args.agent || defaultAgent());
 const now = args.started || utcNow();
 
 if (args.reinit && memoryExists) {

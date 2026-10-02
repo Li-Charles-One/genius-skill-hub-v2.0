@@ -1,4 +1,5 @@
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 function parseArgs(argv) {
@@ -135,6 +136,11 @@ function defaultAgent() {
   if (process.env.CODEX_HOME || process.env.CODEX_CI) return "Codex";
   if (process.env.CLAUDE_CODE || process.env.CLAUDECODE) return "Claude";
   return "Agent";
+}
+
+/** Ledger signature: lowercase agent name plus the device that wrote the entry. */
+function agentTag(name) {
+  return `${String(name).trim().toLowerCase()}@${os.hostname().replace(/\.local$/i, "").toLowerCase()}`;
 }
 
 function section(text, heading) {
@@ -481,6 +487,7 @@ function emitResult(args, primaryLine, payload = {}) {
 }
 
 module.exports = {
+  agentTag,
   checkMemory,
   defaultAgent,
   detectProjectConfig,

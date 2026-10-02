@@ -1,13 +1,13 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.4.0"
+  version: "3.5.0"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
 # Genius-WePlaning
 
-Project memory lives in `.agent-memory/`: **CURRENT.md** is accepted truth, **CHANGES.md** the append-only ledger, `DECISIONS.md` optional, `archive/` rolled-off ledger. Leftover 2.3 `THREADS.md` / `sessions/` are history, never truth; never create sessions. `.backups/` and `.weplaning.lock` are device-local: never sync them.
+Project memory lives in `.agent-memory/`: **CURRENT.md** is accepted truth, **CHANGES.md** the append-only ledger, `DECISIONS.md` optional, `archive/` rolled-off ledger. `.backups/` and `.weplaning.lock` are device-local: never sync them.
 
 Do not use for ordinary summaries, one-off answers, trivial code edits, or **this skill's own changelog** (skill upgrades never go into a business project's memory).
 
@@ -16,6 +16,7 @@ Do not use for ordinary summaries, one-off answers, trivial code edits, or **thi
 | User says | Run |
 |---|---|
 | "查看项目记忆" / "读取项目记忆" | `weplaning-read.cjs` |
+| "查看完整的项目记忆" | `weplaning-read.cjs --full` (adds active decisions and the archive list) |
 | "查看项目进度" / "项目叫什么" / "现在目标是什么" | `weplaning-read.cjs --brief` |
 | "读取记忆接力" | `weplaning-read.cjs --handoff`; report the focus, or no pending tasks / unknown |
 | "继续干 #N" | `weplaning-read.cjs --next N`; start only after a successful selection |
@@ -27,7 +28,7 @@ Write on your own only for **durable, cross-session** facts: accepted state chan
 
 ## Commands
 
-`<skill_dir>` is this skill's directory. Always pass `--agent <name>`.
+`<skill_dir>` is this skill's directory. Always pass `--agent <name>`: your runtime (`claude-code`, `codex`, `opencode`, `grok`), never a skill, person or device. The script lowercases it and appends the device.
 
 ```bash
 node <skill_dir>/scripts/weplaning-read.cjs <root> [--brief | --handoff | --next N | --full | --find "<q>" | --json]
@@ -35,6 +36,8 @@ node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --changed "<f
 # Change one fact in place instead of resending a whole section:
 node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --replace "<exact old text>" --with "<new text>" --changed "<what happened>"
 node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --add-state "<new fact>" --drop "<text unique to the obsolete line>"
+# A decision that replaces an older one marks the old one superseded:
+node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --decision "<new decision>" --rationale "<why>" --supersedes "<text unique to the old decision>"
 node <skill_dir>/scripts/check-memory.cjs <root>
 node <skill_dir>/scripts/init-memory.cjs <root> --agent <name> --project "<name>" --goal "<goal>"
 ```
@@ -49,7 +52,7 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 - One event, one write: put its patches, `--changed`, `--verification` and `--decision` in a single command instead of several writes.
 - Values are one line (`;;` separates items); only `--goal`, `--understanding`, `--replace` and `--with` may span lines. Markdown headings are rejected.
 - Every write runs the consistency check; report success only when it passes.
-- Accepted Next Steps holds accepted actions: `none` / `无待执行事项` when nothing is pending, `unknown` when undecided; keep conditional triggers. Durable guidance belongs in Current Understanding.
+- Accepted Next Steps holds accepted actions: `none` / `无待执行事项` when nothing is pending, `unknown` when undecided; keep conditional triggers. Start a step only the user can do with `【待用户…】` or `[user]`; handoff skips it. Durable guidance belongs in Current Understanding.
 - One fact per item: concrete paths, decisions, verification method/time/result, blockers, exact next step.
 - Never store secrets, tokens, passwords, cookies or private credentials.
 
@@ -59,7 +62,7 @@ Planning states shared with `genius-brief-thinking` and `genius-impl-plans`: `BR
 
 ## Output
 
-- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, and an invalid task number is an error, never a fallback to #1.
+- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, every step waiting on the user means report that and stop, and an invalid task number is an error, never a fallback to #1.
 - Write: whether anything persisted, whether the check passed, the change ID, any `[audit]` warning (oversized CURRENT; relay it, do not trim memory unasked), the exact next step. Unchanged patches persist nothing.
 
 ## Resource Map
