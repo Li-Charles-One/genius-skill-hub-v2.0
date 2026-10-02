@@ -21,4 +21,4 @@ usage:
     - "../references/runtime-mapping.md"
     - "../references/agent-adapter-standard.md"
     - "../references/eval-workflow.md"
-  output_contract: "Report requirement summary, files changed, adapter status, validation results, and remaining risks."
+  output_contract: "Follow the Output Standard in ../SKILL.md: requirement summary, files changed, architecture changes, validation and eval results, platform status, remaining risks, package location."

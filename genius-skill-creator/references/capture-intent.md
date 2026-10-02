@@ -29,4 +29,4 @@ Use this before scaffolding a new skill. Human words are commentary. Files, link
 
 ## Description craft
 
-Write the `description` a bit pushy so the skill is not under-triggered. Name the job, the phrases that should fire it, and the non-goals. Keep non-goals as near misses, not unrelated chores.
+See Description Optimization in `eval-workflow.md`.

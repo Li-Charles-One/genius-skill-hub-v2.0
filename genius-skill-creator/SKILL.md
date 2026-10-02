@@ -2,7 +2,7 @@
 name: genius-skill-creator
 description: "创建、修复、审计、评测与优化 SKILL.md 技能包及多平台适配器：支持工作流脚手架生成、规范审计与安全扫描。不要用于普通业务代码编写、应用排错或通用文本翻译。"
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
 ---
 
 # Genius Skill Creator
@@ -46,7 +46,6 @@ Every generated or repaired skill must:
 - Put trigger conditions and non-goals in `description`.
 - Keep `SKILL.md` thin; move detail into linked `references/`.
 - Add scripts and assets only when they are used.
-- Put runtime metadata in `agents/<runtime>.yaml`.
 - Support Windows, macOS, and Linux when commands or scripts ship.
 - Skip extra README, changelog, or install docs unless the target ecosystem requires them.
 - Include a Gotchas section. "None known" is valid; invented gotchas are not.
@@ -79,14 +78,12 @@ For trigger tuning, read `references/eval-workflow.md`. For checkable behavior, 
 
 Audit is read-only. For Optimize, state the limited file scope before editing, then validate only that scope; do not perform unrelated refactors.
 
-1. Capture the six requirement fields in the optimization template.
-2. Keep `SKILL.md` as trigger, mode routing, workflow, resource map, and output contract.
-3. Move reusable detail into `references/`.
-4. Keep deterministic work in `scripts/`.
-5. Keep runtime facts in `agents/` and `references/runtime-mapping.md`.
-6. Update evals when trigger or output risk changes.
-7. Check referenced resources and script entrypoints exist, adapters match declared runtimes, and description triggers align with evals.
-8. Validate before hub sync.
+1. Capture the six requirement fields in `references/skill-optimization-template.md`.
+2. Reshape to that template: `SKILL.md` keeps trigger, mode routing, workflow, resource map, and output contract; reusable detail moves to `references/`, deterministic work to `scripts/`, runtime facts to `agents/`.
+3. Cut what is said twice, but keep every resource path named once (see Gotchas).
+4. Update evals when trigger or output risk changes.
+5. Check referenced resources and script entrypoints exist, adapters match declared runtimes, and description triggers align with evals.
+6. Validate before hub sync.
 
 ### Port
 
@@ -102,7 +99,7 @@ Every repair or optimization checks: a positive trigger, a negative trigger, the
 
 ## Gotchas
 
-- `quick_validate.py` passing does not mean the generated skill works. Run `references/eval-run-loop.md` when output is checkable.
+- `quick_validate.py` fails when a file under `references/`, `scripts/`, `assets/`, or `evals/` is not named by its relative path in `SKILL.md` or `agents/openai.yaml`. When thinning an entrypoint, drop repeated prose, not the last mention of a path.
 - `quick_validate.py` and `security_scan.py` skip git-ignored files, so a local `.env` or `.DS_Store` passes. A zipped copy of the folder still includes them; exclude them before sharing outside git.
 - Security scan LOW findings (undeclared URLs) do not fail the scan; HIGH and MED do.
 
@@ -111,8 +108,9 @@ Every repair or optimization checks: a positive trigger, a negative trigger, the
 Report:
 
 - requirement summary: purpose, trigger, and non-goals;
+- files changed, or plainly that none changed (audit or plan only);
 - architecture changes;
-- validation and security scan pass/fail;
+- validation and security scan pass/fail, plus evals or manual checks run;
 - platform status: adapters present, missing, or unverified;
 - remaining risks;
 - package location.
@@ -135,7 +133,3 @@ Report:
 - `references/consolidation-workflow.md`: merge overlapping skills.
 - `evals/evals.json`: creation, optimization, porting, trigger, and audit prompts.
 - `agents/openai.yaml`, `agents/opencode.yaml`.
-
-## Final Response
-
-Use the Output Standard. If no files changed, say that plainly and report only the audit or plan.

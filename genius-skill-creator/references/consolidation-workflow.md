@@ -44,19 +44,19 @@ Read each candidate skill. For each, note:
 
 Choose a structure:
 
-**Option A: Orchestration layer** (like design-plan)
+**Option A: Orchestration layer**
 
 - One routing skill receives all requests
 - Specialist skills handle specific sub-tasks
 - Router analyzes need, loads specialist, executes
 
-**Option B: Single unified skill** (like document, hyperframes)
+**Option B: Single unified skill**
 
 - One skill with sections for each sub-domain
 - Clear section headers for navigation
 - References to deep-dive docs in `references/`
 
-**Option C: Class + sub-skills** (like genius-github-usage + sub-skills)
+**Option C: Class + sub-skills**
 
 - Main skill covers common cases
 - Sub-skills for niche scenarios (but consider if they are needed)
@@ -99,14 +99,6 @@ rm -rf "$SKILL_ROOT/$DEPRECATED_SKILL"
 - **NOT library-level**: `pymupdf`, `reportlab`
 
 The name should describe the domain, not the tool.
-
-## Example Consolidations
-
-| Before | After | Pattern |
-|---|---|---|
-| design-plan + design-md + frontend-design + ui-ux-pro-max | design-plan (router) + specialists | Orchestration |
-| hyperframes + hyperframes-cli + hyperframes-media | hyperframes (unified) | Single skill |
-| genius-github-usage + github-auth + github-issues + github-pr-workflow | genius-github-usage | Keep best, delete rest |
 
 ## Removing an Orchestrator
 

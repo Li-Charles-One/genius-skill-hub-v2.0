@@ -92,17 +92,7 @@ Use `cross-platform-command-standard.md` to decide:
 
 ## Output Contract
 
-For skill creation, repair, audit, or optimization, final output should include:
-
-- requirement summary;
-- files changed;
-- architecture/module changes;
-- adapters added or verified;
-- validation commands and results;
-- evals or manual checks run;
-- remaining risks or next step.
-
-For audit-only work, lead with findings and avoid pretending changes were made.
+Final output for skill creation, repair, audit, or optimization follows the Output Standard in `SKILL.md`; that list is the single source. For audit-only work, lead with findings and avoid pretending changes were made.
 
 ## Validation Gates
 

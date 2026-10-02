@@ -14,23 +14,7 @@ agents/
 
 ## `agents/openai.yaml`
 
-Purpose: UI and Codex product metadata. Generate it with `scripts/generate_openai_yaml.py`; constraints are in `openai_yaml.md`.
-
-```yaml
-interface:
-  display_name: "Readable Name"
-  short_description: "25 to 64 character UI description"
-  icon_small: "./assets/icon-small.svg"
-  icon_large: "./assets/icon-large.png"
-  default_prompt: "Use $skill-name to perform a concrete task."
-```
-
-Rules:
-
-- quote string values;
-- keep `short_description` between 25 and 64 characters;
-- make `default_prompt` mention `$skill-name`;
-- keep icon paths relative to the skill folder.
+Purpose: UI and Codex product metadata. Generate it with `scripts/generate_openai_yaml.py`; the full field list and constraints are in `openai_yaml.md`. The hub validator enforces two of them: `short_description` is 25–64 characters, and `default_prompt` mentions `$skill-name`.
 
 ## `agents/<runtime>.yaml`
 
