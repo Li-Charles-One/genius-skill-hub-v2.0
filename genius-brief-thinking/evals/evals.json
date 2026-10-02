@@ -1,0 +1,87 @@
+{
+  "skill_name": "genius-brief-thinking",
+  "evals": [
+    {
+      "id": "lite-approach-choice",
+      "prompt": "通知中心该用轮询、SSE 还是 WebSocket？帮我 brainstorm 一下",
+      "trigger_expected": true,
+      "expected_output": "Lite tier: 2-3 approaches with one-line trade-offs and a recommendation in one message; no spec review loop, no code.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "推荐"},
+        {"type": "not_contains", "value": "git commit"}
+      ]
+    },
+    {
+      "id": "full-brief-on-disk",
+      "prompt": "我们要新增一个计费服务，涉及数据模型和第三方支付对接。给我出一份完整的设计简报并落盘。",
+      "trigger_expected": true,
+      "expected_output": "Full tier: explores context, asks one clarifying question at a time, then writes specs/YYYY-MM-DD-<topic>-design.md with numbered requirements.",
+      "files": ["SKILL.md", "spec-document-reviewer-prompt.md"],
+      "assertions": [
+        {"type": "contains", "value": "specs/"},
+        {"type": "contains", "value": "R1"}
+      ]
+    },
+    {
+      "id": "unclear-feature",
+      "prompt": "想给后台加多租户权限，但还没想清楚怎么切，先帮我理一理",
+      "trigger_expected": true,
+      "expected_output": "Treats this as an ambiguous multi-file feature and starts a brief instead of writing code.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "git commit"}
+      ]
+    },
+    {
+      "id": "stop-at-brief",
+      "prompt": "方案就选 SSE 吧，直接开始写代码。（此前只做了方案对比，还没有计划）",
+      "trigger_expected": true,
+      "expected_output": "Does not jump to implementation: confirms the decision and offers genius-impl-plans as the next step.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "genius-impl-plans"}
+      ]
+    },
+    {
+      "id": "no-rename",
+      "prompt": "把 getUserInfo 全局重命名成 fetchUserProfile",
+      "trigger_expected": false,
+      "expected_output": "Clear intent across many files: no brief, just do the rename.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "## Non-goals"}
+      ]
+    },
+    {
+      "id": "no-known-bugfix",
+      "prompt": "登录按钮点了没反应，报错在 auth.ts 第 42 行空指针，修一下",
+      "trigger_expected": false,
+      "expected_output": "Single-file bug with an obvious fix: no design phase.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "## Non-goals"}
+      ]
+    },
+    {
+      "id": "no-complete-spec-to-plan",
+      "prompt": "需求、约束和验收标准都写在 specs/2026-09-30-notify-design.md 里了，拆成实现计划",
+      "trigger_expected": false,
+      "expected_output": "A settled spec goes to genius-impl-plans; no second brief is written.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "## Non-goals"}
+      ]
+    },
+    {
+      "id": "no-design-md",
+      "prompt": "给这个项目出一份 DESIGN.md 视觉规范",
+      "trigger_expected": false,
+      "expected_output": "Visual design specification belongs to genius-design, not a feature brief.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "## Non-goals"}
+      ]
+    }
+  ]
+}

@@ -3,7 +3,7 @@ name: genius-brief-thinking
 description: "在开发复杂功能前探索用户真实意图、头脑风暴并输出设计简报（Brief/Spec），为实现计划做准备。不要用于范围清晰的微小改动、重命名或已有明确解法的 Bug 修复。"
 license: MIT
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
   hermes:
     tags: [planning, design, spec, brief, brainstorming, architecture, requirements]
     related_skills: [genius-impl-plans]
@@ -11,7 +11,7 @@ metadata:
 
 # Genius Brief Thinking
 
-This skill produces a **brief**: what to build and why. `genius-impl-plans` defines how, and is the only next skill. Shared handoff states live in [`WORKFLOW.md`](../WORKFLOW.md).
+This skill produces a **brief**: what to build and why. `genius-impl-plans` defines how, and is the only next skill.
 
 Run when the user asks to brainstorm or make a brief. A request for an implementation plan goes to `genius-impl-plans`; so does a complete spec with settled goals, constraints, and acceptance criteria. Speak in briefs, not brainstorming ritual.
 
@@ -66,21 +66,10 @@ Every saved brief uses these minimum sections, with requirements numbered `R1`, 
 
 ## Stop Rule
 
-Both tiers end at the brief. Picking an approach is not permission to code, and do not `git commit` unless asked. After the user approves, offer `genius-impl-plans` — never jump to implementation.
+Both tiers end at the brief. Picking an approach is not permission to code, and do not `git commit` unless asked. After the user approves (handoff state `BRIEF_APPROVED`), offer `genius-impl-plans` — never jump to implementation.
 
 ## Visual Companion
 
 Optional, Full tier only. Use when seeing beats reading (mockups, layouts, diagrams); a UI topic is not automatically visual. Details: `visual-companion.md`. If `scripts/` is missing, stay in the terminal.
 
-## Module Layout
-
-```
-genius-brief-thinking/
-├── SKILL.md
-├── agents/
-├── visual-companion.md              # optional browser companion
-├── spec-document-reviewer-prompt.md # Full-tier spec review persona
-└── scripts/                         # companion runtime + start/stop launchers
-```
-
-Companion files: `scripts/server.cjs`, `scripts/frame-template.html`, `scripts/helper.js`, `scripts/start-server.sh`, `scripts/stop-server.sh`.
+Companion files: `scripts/server.cjs`, `scripts/frame-template.html`, `scripts/helper.js`, `scripts/start-server.sh`, `scripts/stop-server.sh`. Trigger checks: `evals/evals.json`.
