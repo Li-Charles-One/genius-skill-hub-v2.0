@@ -2,16 +2,18 @@
 name: genius-impl-plans
 description: "在编写代码前，将已确认的设计简报（Brief/Spec）转化为逐项可执行的代码实现计划。不要在已进入编码阶段使用，且不要在需求目标仍不明确时使用（需求阶段用 genius-brief-thinking）。"
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Genius Impl Plans
 
-Write an implementation plan an engineer can follow without extra context. Exact files, complete code for code steps, exact commands, expected results. DRY. YAGNI.
+Write an implementation plan an engineer can follow without extra context: exact files, exact commands, expected results. DRY. YAGNI.
+
+Write real code where a wrong guess is costly: tests, public signatures and data shapes, and non-obvious logic. Routine code may instead be specified precisely in words (file, function, inputs, behavior, error cases), so the plan does not write the whole feature twice.
 
 Save to `docs/plans/YYYY-MM-DD-<feature-name>.md` unless the user names another path.
 
-This skill stops at the plan. Writing it is not permission to code or commit.
+This skill stops at the plan (handoff state `PLAN_DRAFT`). Writing it is not permission to code or commit; implementation starts only after the user approves.
 
 ## Before You Write
 
@@ -53,60 +55,40 @@ Every plan starts with:
 
 ## Task Shape
 
+The bracketed parts are slots to fill, in the target repo's language and commands. Use as many steps as the task needs.
+
 ````markdown
 ### Task N: [Component Name]
 
 **Covers:** R1, R2
 
 **Files:**
-- Create: `exact/path/to/file.py`
-- Modify: `exact/path/to/existing.py:123-145`
-- Test: `tests/exact/path/to/test.py`
+- Create: `exact/path/to/new-file`
+- Modify: `exact/path/to/existing-file:123-145`
+- Test: `exact/path/to/test-file`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: [one action, e.g. write the failing test]**
 
-```python
-def test_specific_behavior():
-    result = function(input)
-    assert result == expected
+```[language]
+[the actual test, signature, or change]
 ```
 
-- [ ] **Step 2: Run the project test command**
+- [ ] **Step 2: [verify]**
 
-Run: `<the command this repo already uses>`
-Expected: FAIL with a specific reason
-
-- [ ] **Step 3: Write minimal implementation**
-
-```python
-def function(input):
-    return expected
-```
-
-- [ ] **Step 4: Re-run the same command**
-
-Expected: PASS
-
-- [ ] **Step 5: Commit** (only if the user asked)
-
-```bash
-git add tests/path/test.py src/path/file.py
-git commit -m "feat: add specific feature"
-```
+Run: `[the command this repo already uses]`
+Expected: [specific result, e.g. FAIL with the reason before the change, PASS after]
 ````
 
 End every plan with a `## Requirement Coverage` table mapping each brief requirement to its task and verification.
-
-Use the languages and commands of the target repo. The Python above is an example, not a requirement.
 
 ## No Placeholders
 
 These are plan failures — never write them:
 
 - TBD, TODO, implement later, fill in details
-- "Add error handling" / "add validation" without the code
+- "Add error handling" / "add validation" without naming the cases and what happens in each
 - "Write tests" without the actual test
-- "Similar to Task N" (repeat the code)
+- "Similar to Task N" without stating exactly what differs
 - Steps that say what but not how
 - Types or functions never defined in any task
 
@@ -125,3 +107,5 @@ Fix inline and save.
 Tell the user where the file is. Stop.
 
 If they ask to execute: follow the plan in this session, one task at a time, and pause after each group. Do not spawn implementation subagents unless they ask for that.
+
+Trigger checks: `evals/evals.json`.

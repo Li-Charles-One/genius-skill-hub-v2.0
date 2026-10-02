@@ -1,0 +1,88 @@
+{
+  "skill_name": "genius-impl-plans",
+  "evals": [
+    {
+      "id": "approved-brief-to-plan",
+      "prompt": "brief 已确认，在 specs/2026-09-30-notify-design.md，拆成实现计划",
+      "trigger_expected": true,
+      "expected_output": "Writes docs/plans/YYYY-MM-DD-<feature>.md with the plan header, tasks that declare Covers: Rn, and a Requirement Coverage table; then stops.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "docs/plans/"},
+        {"type": "contains", "value": "Requirement Coverage"}
+      ]
+    },
+    {
+      "id": "plan-then-stop",
+      "prompt": "按这份 spec 写 implementation plan，先别动代码",
+      "trigger_expected": true,
+      "expected_output": "Saves the plan, tells the user the path, and does not start implementing or committing.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "docs/plans/"},
+        {"type": "not_contains", "value": "git commit -m"}
+      ]
+    },
+    {
+      "id": "repo-without-tests",
+      "prompt": "这个仓库没有测试框架，只有 tsc --noEmit。把已批准的 brief 拆成计划。",
+      "trigger_expected": true,
+      "expected_output": "Uses the repo's real verification (tsc --noEmit) in each task instead of inventing a test runner.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "tsc --noEmit"},
+        {"type": "not_contains", "value": "pytest"}
+      ]
+    },
+    {
+      "id": "split-independent-subsystems",
+      "prompt": "这份 spec 同时包含支付对账和消息推送两个互不依赖的子系统，出实现计划",
+      "trigger_expected": true,
+      "expected_output": "Suggests one plan per subsystem rather than one combined plan.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "docs/plans/"}
+      ]
+    },
+    {
+      "id": "no-unclear-goal",
+      "prompt": "我还没想清楚要不要做多租户，先帮我理理思路",
+      "trigger_expected": false,
+      "expected_output": "Goal is still ambiguous: this is a genius-brief-thinking job, no plan file.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "docs/plans/"}
+      ]
+    },
+    {
+      "id": "no-already-coding",
+      "prompt": "Task 2 的接口我已经写了一半，帮我把剩下的分页逻辑补完",
+      "trigger_expected": false,
+      "expected_output": "Already in the coding stage: finish the code, do not write a new plan.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "Requirement Coverage"}
+      ]
+    },
+    {
+      "id": "no-todo-list",
+      "prompt": "把刚才的会议内容整理成待办清单",
+      "trigger_expected": false,
+      "expected_output": "A meeting to-do list is not a code implementation plan.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "docs/plans/"}
+      ]
+    },
+    {
+      "id": "no-trivial-edit",
+      "prompt": "修一下 README 里的两个错别字",
+      "trigger_expected": false,
+      "expected_output": "Trivial edit: just do it, no plan.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "docs/plans/"}
+      ]
+    }
+  ]
+}
