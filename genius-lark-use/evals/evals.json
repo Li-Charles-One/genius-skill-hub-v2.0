@@ -81,6 +81,65 @@
           "value": "lark-cli auth login"
         }
       ]
+    },
+    {
+      "id": "no-eager-health-check",
+      "prompt": "查一下我明天的日程",
+      "trigger_expected": true,
+      "expected_output": "Runs the calendar command directly; does not run doctor or auth status first when nothing has failed.",
+      "files": [
+        "SKILL.md",
+        "references/routing.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "lark-cli calendar"
+        },
+        {
+          "type": "not_contains",
+          "value": "lark-cli doctor"
+        }
+      ]
+    },
+    {
+      "id": "slack-message-non-trigger",
+      "prompt": "给 Slack 的 #general 频道发条消息说今晚发版",
+      "trigger_expected": false,
+      "expected_output": "Slack is a different service; lark-cli is not used.",
+      "files": [],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "lark-cli"
+        }
+      ]
+    },
+    {
+      "id": "notion-export-non-trigger",
+      "prompt": "把这个 Notion 页面导出成 Markdown",
+      "trigger_expected": false,
+      "expected_output": "Notion is a different service; lark-cli is not used.",
+      "files": [],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "lark-cli"
+        }
+      ]
+    },
+    {
+      "id": "local-doc-about-feishu-non-trigger",
+      "prompt": "帮我写一份飞书机器人接入方案，存到本地 docs/feishu-bot.md 就行",
+      "trigger_expected": false,
+      "expected_output": "Mentions Feishu but the work is a local file; nothing is created in Lark.",
+      "files": [],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "lark-cli docs"
+        }
+      ]
     }
   ]
 }

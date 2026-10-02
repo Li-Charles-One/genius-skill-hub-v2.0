@@ -1,10 +1,10 @@
 # Health Check
 
-Use this reference before operating Lark/Feishu through `lark-cli`, especially in a new session.
+Use this reference when a `lark-cli` command fails (command not found, auth, profile, scope) or when the user asks whether the CLI works. A working command needs no health check first.
 
 ## Minimal Checks
 
-Run these first when the user asks whether Lark CLI is available or when operational state is unknown:
+Run these when the user asks whether Lark CLI is available, or to locate the cause of a failure:
 
 ```bash
 command -v lark-cli
@@ -44,19 +44,6 @@ lark-cli auth check <scope>
 ```
 
 If a specific command's schema lists required scopes, check those scopes before retrying.
-
-## Non-Interactive Helpers
-
-For command discovery, these are safe and do not require confirmation:
-
-```bash
-lark-cli --help
-lark-cli <domain> --help
-lark-cli <domain> <subcommand> --help
-lark-cli skills list
-lark-cli skills read <skill-name>
-lark-cli schema <service.resource.method>
-```
 
 ## Login and Config Boundaries
 
