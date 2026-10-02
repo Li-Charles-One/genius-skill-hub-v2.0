@@ -1,7 +1,7 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.2.0"
+  version: "3.3.0"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
@@ -60,7 +60,7 @@ Planning states shared with `genius-brief-thinking` and `genius-impl-plans`: `BR
 ## Output
 
 - Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, and an invalid task number is an error, never a fallback to #1.
-- Write: whether anything persisted, whether the check passed, the change ID, the exact next step. Unchanged patches persist nothing.
+- Write: whether anything persisted, whether the check passed, the change ID, any `[audit]` warning (oversized CURRENT; relay it, do not trim memory unasked), the exact next step. Unchanged patches persist nothing.
 
 ## Resource Map
 

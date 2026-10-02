@@ -8,7 +8,7 @@ Usage:
   node check-memory.cjs <project-root> [--audit] [--strict]
 
 Checks WePlaning 3.0 structural consistency.
-  --audit    Semantic warnings (mixed blockers). Exit 0 unless --strict.
+  --audit    Warnings (mixed blockers, oversized CURRENT). Exit 0 unless --strict.
   --strict   With --audit: exit 1 when warnings exist.
 `;
 

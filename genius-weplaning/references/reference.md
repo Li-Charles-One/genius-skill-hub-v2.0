@@ -75,6 +75,7 @@ node weplaning-write.cjs <root> --agent <name> [note] [options]
 - Exact edits run first, then section replacements. Accepted Next Steps are renumbered whenever they change.
 - Without `--changed`, the ledger records what changed (`Replaced in CURRENT: …`, `Updated <section>: …`, `Decision: …`). Unchanged patches with no new fact write nothing (`persisted: false`). Trivial notes (`完成了`, `done`, `搞定`, `ok`) with no patch or decision print `nothing-to-persist`.
 - Every write refreshes `Last updated` and `Based On` (summary truncated to one line).
+- After a persisted write, the `--audit` warnings (see check) print on stderr as `[audit] …`; they never block the write.
 - Invalid input fails before any file changes: unknown flags, missing values, unpaired `--replace`, zero or multiple matches, line breaks outside the multi-line flags, Markdown headings anywhere. Inside a lock the script checks existing memory, validates every proposed file, writes, then checks again. There is no multi-file rollback for OS or disk failure.
 - Each overwritten file keeps its last 10 copies in `.backups/`. Change IDs (the block headings) carry a unique suffix even for simultaneous writes.
 
@@ -89,7 +90,7 @@ node check-dirty.cjs <root> [--strict] [--json] [--limit N]
 ```
 
 - `init`: existing memory needs `--force` (create only missing files) or `--reinit` (discard CURRENT/CHANGES/DECISIONS). Project Config: code projects keep code in git and WePlaning owns only `.agent-memory`; ops/doc projects are standalone.
-- `check` fails on missing CURRENT/CHANGES, unsupported or duplicate schema lines, missing/empty/duplicate required sections, duplicate optional sections, conflict markers and `*.sync-conflict-*` copies. `--audit` warns on blockers that mix a real item with `none`.
+- `check` fails on missing CURRENT/CHANGES, unsupported or duplicate schema lines, missing/empty/duplicate required sections, duplicate optional sections, conflict markers and `*.sync-conflict-*` copies. `--audit` warns on blockers that mix a real item with `none`, on CURRENT items over 300 characters and on a CURRENT.md over 8000 bytes.
 - `repair` recreates a missing CHANGES header and inserts a missing schema line when the result is valid. It keeps all facts, extra sections and the update time, and refuses malformed CURRENT, unsupported schemas, sync conflicts and a missing CURRENT.
 - `archive-changes` moves older blocks to `archive/CHANGES-<unique>.md` (exclusive create, never overwrites) and leaves an `Archived:` breadcrumb.
 - `check-dirty` lists changed paths outside `.agent-memory` (git status, or mtime newer than `Last updated` without git). A git failure is `ok: false`, never clean.

@@ -234,6 +234,10 @@ function checkMemory(root, { audit = false } = {}) {
     const hasReal = lines.some((line) => !new RegExp(`^-?\\s*(${NO_BLOCKER}|unknown|unavailable)\\s*[。.]?$`, "i").test(line));
     const hasNone = lines.some((line) => new RegExp(`^-\\s*(${NO_BLOCKER})\\s*[。.]?$`, "i").test(line));
     if (hasReal && hasNone) warnings.push("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
+    const longItems = current.split(/\r?\n/).filter((line) => /^\s*([-*]|\d+\.)\s/.test(line) && line.length > 300).length;
+    if (longItems) warnings.push(`CURRENT.md has ${longItems} item(s) over 300 characters; keep one fact per item.`);
+    const bytes = Buffer.byteLength(current);
+    if (bytes > 8000) warnings.push(`CURRENT.md is ${bytes} bytes (over 8000); move history and snapshots to the ledger.`);
   }
   return { errors, warnings };
 }

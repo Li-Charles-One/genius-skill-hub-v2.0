@@ -11,6 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  checkMemory,
   defaultAgent,
   emitResult,
   formatSectionItems,
@@ -247,6 +248,9 @@ if (!persisted) {
   emitResult(args, "nothing-to-persist", { persisted: false, reason: "unchanged", patched: [], message: "nothing to persist" });
   process.exit(0);
 }
+
+// Warn at the moment CURRENT grows; warnings never block the write.
+for (const warning of checkMemory(root, { audit: true }).warnings) console.error(`[audit] ${warning}`);
 
 emitResult(args, changeId, {
   persisted: true,

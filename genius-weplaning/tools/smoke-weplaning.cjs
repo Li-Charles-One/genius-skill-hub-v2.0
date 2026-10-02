@@ -522,6 +522,21 @@ function testAuditMixedBlockers() {
   run([script("check-memory.cjs"), root, "--audit", "--strict"], { expectFail: true });
 }
 
+function testAuditOversizedCurrent() {
+  const root = tempRoot("audit-size");
+  init(root);
+  const audit = () => run([script("check-memory.cjs"), root, "--audit"]).stderr;
+  assert(!audit().includes("[audit]"), "audit warned on a fresh memory");
+  assert(!writeCmd(root, ["--changed", "SMALL_FACT"]).stderr.includes("[audit]"), "write warned on a small memory");
+  const grown = writeCmd(root, ["--add-state", `LONG_ITEM ${"x".repeat(300)}`]);
+  assert(grown.stderr.includes("[audit] CURRENT.md has 1 item(s) over 300 characters"), "write did not warn when CURRENT grew a long item");
+  assert(audit().includes("1 item(s) over 300 characters") && !audit().includes("bytes"), "audit missed a long item");
+  writeCmd(root, ["--add-state", Array.from({ length: 40 }, (_, i) => `FACT_${i} ${"y".repeat(200)}`).join(";;")]);
+  assert(audit().includes("bytes (over 8000)"), "audit missed an oversized CURRENT");
+  run([script("check-memory.cjs"), root, "--audit", "--strict"], { expectFail: true });
+  run([script("check-memory.cjs"), root]);
+}
+
 function memorySnapshot(root) {
   const base = path.join(root, ".agent-memory");
   const files = [];
@@ -784,6 +799,7 @@ for (const test of [
   testExactEdits,
   testRejectsInjectedStructure,
   testAuditMixedBlockers,
+  testAuditOversizedCurrent,
   testWritePreservesWhitespaceAndExtraContent,
   testInvalidStructureCannotBeReadOrWritten,
   testStateOnlyWriteHasLedgerAndUnchangedIsNoop,
