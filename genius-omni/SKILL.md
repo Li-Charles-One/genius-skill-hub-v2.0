@@ -2,16 +2,16 @@
 name: genius-omni
 description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与语音转写。不要用于生成图片视频（用 dreamina-cli）或品牌设计规范（用 genius-design）。"
 metadata:
-  version: "2.7.0"
+  version: "2.7.1"
 ---
 
 # Genius Omni（视听）
 
 This skill exists to **analyze images**, **analyze video/audio**, and **OCR**. Nothing else.
 
-Default: CPA `gemini-3.8-flash-high` via native Gemini `generateContent`. Alternative: Xiaomi MiMo `mimo-v2.6-flash`, or any multimodal endpoint configured as a custom provider. Old name `genius-vision` is retired.
+Default: CPA `gemini-3.8-flash-high` via native Gemini `generateContent`. Alternative: Xiaomi MiMo `mimo-v2.6-flash`, or any multimodal endpoint configured as a custom provider.
 
-Config, providers, proxy and verification: `references/usage.md`.
+Config, providers, proxy and verification: `references/usage.md`. Trigger checks: `evals/evals.json`.
 
 ## Pick a mode
 
@@ -56,13 +56,12 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Audio: `Summary`, `Transcript or Key Segments`, `Speakers or Sound Events`, `Uncertainty`.
 - Compare: `Unchanged`, `Added`, `Removed`, `Uncertain`.
 
-Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text or speech was found (`audio-transcribe` answers `NO_SPEECH_DETECTED`). If long-media segmentation fails, report the failed segment and do not fabricate a summary.
+Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text was found; pass `NO_SPEECH_DETECTED` through unchanged. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
 
-Failures print `Error [CODE]: …` and exit with: `INPUT_NOT_FOUND` 3, `UNSUPPORTED_FORMAT` 4, `DEPENDENCY_MISSING` 5, `PROVIDER_ERROR` 6, `TIMEOUT` 7 (other errors 1; `--check` with missing tools 2). Report the code and message as-is.
+Failures print `Error [CODE]: …` with a non-zero exit. Report the code and message as-is; the code table is in `references/usage.md`.
 
 ## Gotchas
 
-- This skill analyzes media and extracts text. It does not generate images or video (use `dreamina-cli`).
 - MiMo multimodal is `mimo-v2.6-flash` (image, audio and video verified). Do not switch to a `-pro` model: `mimo-v2.5-pro` cannot see or hear, and `mimo-v2.6-pro` is unverified.
 - YouTube works on Gemini-style providers (CPA), not on every OpenAI-compatible gateway.
 - Proxy, PDF page and long-video index files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`) and are purged after 30 days.

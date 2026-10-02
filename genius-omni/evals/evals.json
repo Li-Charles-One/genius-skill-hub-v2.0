@@ -1,0 +1,118 @@
+{
+  "skill_name": "genius-omni",
+  "evals": [
+    {
+      "id": "screenshot-ocr",
+      "prompt": "这张截图里写了什么字？~/Desktop/error.png",
+      "trigger_expected": true,
+      "expected_output": "Runs scripts/vision.py in ocr mode and reports extracted text as observed, with illegible spans marked.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "vision.py"},
+        {"type": "contains", "value": "ocr"}
+      ]
+    },
+    {
+      "id": "ui-critique",
+      "prompt": "帮我看看这个登录页截图的 UI 有什么问题 login.png",
+      "trigger_expected": true,
+      "expected_output": "Chooses ui-review, not describe, and reports Summary / Observations / Uncertainty.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "ui-review"}
+      ]
+    },
+    {
+      "id": "image-diff",
+      "prompt": "对比一下 before.png 和 after.png 改了哪些地方",
+      "trigger_expected": true,
+      "expected_output": "Chooses compare with --compare-with and reports Unchanged / Added / Removed / Uncertain.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "compare"},
+        {"type": "contains", "value": "--compare-with"}
+      ]
+    },
+    {
+      "id": "meeting-video",
+      "prompt": "总结一下这个会议录像讲了什么 meeting.mp4",
+      "trigger_expected": true,
+      "expected_output": "Confirms the file and its length, runs video-summary, and reports Summary / Timeline / Key Moments.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "video-summary"}
+      ]
+    },
+    {
+      "id": "interview-transcribe",
+      "prompt": "把这段采访录音转成文字 interview.wav",
+      "trigger_expected": true,
+      "expected_output": "Runs audio-transcribe; inaudible spans stay [inaudible] and NO_SPEECH_DETECTED is passed through if there is no voice.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "audio-transcribe"}
+      ]
+    },
+    {
+      "id": "scanned-pdf",
+      "prompt": "提取这份扫描版 PDF 里的全部文字 contract.pdf",
+      "trigger_expected": true,
+      "expected_output": "Notes the page count and runs ocr on the PDF.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "vision.py"},
+        {"type": "contains", "value": "ocr"}
+      ]
+    },
+    {
+      "id": "missing-file-error",
+      "prompt": "分析一下 /tmp/does-not-exist.png 这张图",
+      "trigger_expected": true,
+      "expected_output": "Checks the file first and reports it is missing (or relays INPUT_NOT_FOUND) instead of describing an image it never saw.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "Observations"}
+      ]
+    },
+    {
+      "id": "no-image-generation",
+      "prompt": "生成一张赛博朋克风格的产品海报",
+      "trigger_expected": false,
+      "expected_output": "Image generation is out of scope; points to dreamina-cli.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "vision.py"}
+      ]
+    },
+    {
+      "id": "no-design-md",
+      "prompt": "参考这个网站的风格出一份 DESIGN.md",
+      "trigger_expected": false,
+      "expected_output": "Brand design specification belongs to genius-design.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "vision.py"}
+      ]
+    },
+    {
+      "id": "no-media-convert",
+      "prompt": "把这个 mp4 转成 gif，宽度压到 480",
+      "trigger_expected": false,
+      "expected_output": "Media conversion is an ffmpeg job, not media analysis.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "vision.py"}
+      ]
+    },
+    {
+      "id": "no-text-file",
+      "prompt": "读一下 report.csv，告诉我第三列的平均值",
+      "trigger_expected": false,
+      "expected_output": "Plain text data needs no multimodal model.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "vision.py"}
+      ]
+    }
+  ]
+}
