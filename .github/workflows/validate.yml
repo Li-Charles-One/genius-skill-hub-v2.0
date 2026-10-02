@@ -49,10 +49,21 @@ jobs:
               print(f"valid agent metadata: {file}")
           PY
 
-      - name: Validate Genius Skill Creator package
+      - name: Validate every skill package
         run: |
-          python genius-skill-creator/scripts/quick_validate.py genius-skill-creator --hub .
-          python genius-skill-creator/scripts/validate_evals.py genius-skill-creator/evals/evals.json
+          set -euo pipefail
+          for dir in */; do
+            dir="${dir%/}"
+            [ -f "$dir/SKILL.md" ] || continue
+            python genius-skill-creator/scripts/quick_validate.py "$dir" --hub .
+            python genius-skill-creator/scripts/security_scan.py "$dir"
+            if [ -f "$dir/evals/evals.json" ]; then
+              python genius-skill-creator/scripts/validate_evals.py "$dir/evals/evals.json"
+            fi
+          done
+
+      - name: Test Genius Design scripts
+        run: python -B genius-design/scripts/test_design_tools.py
 
       - name: Check WePlaning scripts syntax
         run: |
