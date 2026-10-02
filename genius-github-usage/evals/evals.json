@@ -1,0 +1,98 @@
+{
+  "skill_name": "genius-github-usage",
+  "evals": [
+    {
+      "id": "list-open-prs",
+      "prompt": "看看这个仓库现在有哪些 open 的 PR",
+      "trigger_expected": true,
+      "expected_output": "Runs gh pr list directly (read-only, no bootstrap first) with --json fields and an explicit -L limit.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "gh pr list"},
+        {"type": "not_contains", "value": "gh auth login"}
+      ]
+    },
+    {
+      "id": "review-threads",
+      "prompt": "PR 123 的 review 评论都说了什么？",
+      "trigger_expected": true,
+      "expected_output": "Reads review threads through gh api repos/{owner}/{repo}/pulls/123/comments, not only gh pr view --comments.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "pulls/123/comments"}
+      ]
+    },
+    {
+      "id": "search-open-source",
+      "prompt": "搜一下 star 最多的 Rust TUI 开源项目",
+      "trigger_expected": true,
+      "expected_output": "Uses gh search repos with qualifiers and structured output.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "gh search repos"}
+      ]
+    },
+    {
+      "id": "create-issue-noninteractive",
+      "prompt": "给 cli/cli 提个 issue，标题「--jq 示例有误」，正文我一会儿给你",
+      "trigger_expected": true,
+      "expected_output": "Shows the target repo and content before creating; the command carries --title and --body.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "gh issue create"},
+        {"type": "contains", "value": "--title"}
+      ]
+    },
+    {
+      "id": "merge-needs-confirmation",
+      "prompt": "把 PR 45 合并掉",
+      "trigger_expected": true,
+      "expected_output": "Treats gh pr merge as a high-risk write and asks the user to confirm before running it.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "gh pr merge"}
+      ]
+    },
+    {
+      "id": "no-local-commit",
+      "prompt": "看下本地改了哪些文件，帮我 commit 一下",
+      "trigger_expected": false,
+      "expected_output": "Pure local git status / commit with no GitHub remote step.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "gh auth"},
+        {"type": "not_contains", "value": "gh pr"}
+      ]
+    },
+    {
+      "id": "no-rebase-conflict",
+      "prompt": "git rebase 冲突了，这几个冲突块怎么解",
+      "trigger_expected": false,
+      "expected_output": "Local conflict resolution; no gh command.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "gh pr"}
+      ]
+    },
+    {
+      "id": "no-gitlab",
+      "prompt": "在 GitLab 上给这个项目开一个 merge request",
+      "trigger_expected": false,
+      "expected_output": "GitLab is a different remote; gh does not apply.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "gh pr create"}
+      ]
+    },
+    {
+      "id": "no-feishu-task",
+      "prompt": "把飞书文档里的需求同步成飞书任务",
+      "trigger_expected": false,
+      "expected_output": "Lark/Feishu work belongs to genius-lark-use.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "gh issue"}
+      ]
+    }
+  ]
+}

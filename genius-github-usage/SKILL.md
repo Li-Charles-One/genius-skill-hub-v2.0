@@ -2,7 +2,7 @@
 name: genius-github-usage
 description: "通过 GitHub CLI (gh) 操作 GitHub 远端：管理仓库、Issue、审查 PR、Fork、Release 与检索开源项目。不要用于不涉及 GitHub 远端的纯本地 Git 操作（如本地 status/commit/diff）。"
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # Genius GitHub Usage
@@ -37,3 +37,5 @@ Run the `gh` command first. Only diagnose if it fails (`command not found`, auth
 Before a push: check `git status --short`, `git diff --check`, `git diff --stat`, the remote, and the current branch; stage only intended files; verify `git status --short` afterward. If push is rejected, stop — do not force-push, reset, or pick merge/rebase automatically.
 
 Local `git status` / `git commit` with no GitHub step is not this skill.
+
+Trigger checks: `evals/evals.json`.
