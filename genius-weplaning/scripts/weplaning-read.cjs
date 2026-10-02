@@ -103,13 +103,13 @@ const archiveDir = path.join(memDir, "archive");
 const archives = (args.full || args.json) && fs.existsSync(archiveDir)
   ? fs
       .readdirSync(archiveDir)
-      .filter((name) => /^(CHANGES|THREADS)-.*\.md$/.test(name))
+      .filter((name) => /^CHANGES-.*\.md$/.test(name))
       .sort()
       .reverse()
       .map((name) => {
         const text = fs.readFileSync(path.join(archiveDir, name), "utf8");
-        const count = Number((text.match(/^(?:Blocks|Rows):\s*(\d+)$/m) || [])[1] || 0);
-        return { file: `archive/${name}`, kind: name.startsWith("CHANGES") ? "changes" : "threads", count };
+        const count = Number((text.match(/^Blocks:\s*(\d+)$/m) || [])[1] || 0);
+        return { file: `archive/${name}`, kind: "changes", count };
       })
   : [];
 
@@ -146,7 +146,7 @@ const payload = {
     files: c.files,
   })),
   archives,
-  truth: "CURRENT.md is accepted truth. CHANGES.md is the ledger. Leftover 2.3 sessions are not truth.",
+  truth: "CURRENT.md is accepted truth. CHANGES.md is the ledger.",
 };
 
 if (args.json) {
@@ -230,8 +230,7 @@ if (recentChanges.length === 0) {
 if (args.full && archives.length > 0) {
   out += `\n🗄 Archive:\n`;
   for (const item of archives) {
-    const unit = item.kind === "changes" ? "change blocks" : "session rows";
-    out += `  · ${item.file}${item.count ? `  (${item.count} ${unit})` : ""}\n`;
+    out += `  · ${item.file}${item.count ? `  (${item.count} change blocks)` : ""}\n`;
   }
 }
 

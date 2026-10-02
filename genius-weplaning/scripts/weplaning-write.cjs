@@ -207,9 +207,8 @@ withMemoryLock(root, () => {
   const keptBasedOn = basedOn
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !/^- Last change:/.test(line) && !/^- Session:/.test(line));
+    .filter((line) => line && !/^- Last change:/.test(line));
   currentText = setSection(currentText, "Based On", [`- Last change: ${now} ${truncateSummary(ledgerItems[0])}`, ...keptBasedOn].join("\n"));
-  currentText = replaceField(currentText, "Schema version", SCHEMA_VERSION).replace(/^Mainline session:[^\n]*\n?/m, "");
   currentText = /^Last updated:/m.test(currentText)
     ? replaceField(currentText, "Last updated", now)
     : currentText.replace(/^(Schema version:[^\n]*)/m, (line) => `${line}\nLast updated: ${now}`);
@@ -257,6 +256,5 @@ emitResult(args, changeId, {
   changeId,
   patched,
   decision: decisionRecorded,
-  upgradedSchema: SCHEMA_VERSION,
   message: `weplaning-write done: ${changeId}`,
 });

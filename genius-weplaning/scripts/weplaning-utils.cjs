@@ -151,10 +151,9 @@ function setSection(text, heading, value) {
 }
 
 const SCHEMA_VERSION = "3.0";
-const SCHEMA_PATTERN = /^(2\.(2|3)|3\.0)$/;
 
 function hasSupportedSchema(text) {
-  return SCHEMA_PATTERN.test(extractField(text, "Schema version") || "");
+  return extractField(text, "Schema version") === SCHEMA_VERSION;
 }
 
 function markdownErrors(relativePath, text) {
@@ -163,7 +162,7 @@ function markdownErrors(relativePath, text) {
   const normalized = normalizeNewlines(text);
   const schemas = normalized.match(/^Schema version:[^\n]*$/gm) || [];
   if (schemas.length !== 1 || !hasSupportedSchema(normalized)) {
-    errors.push(`${relativePath} must have one supported schema version (2.2, 2.3, or 3.0)`);
+    errors.push(`${relativePath} must have one schema version line: ${SCHEMA_VERSION}`);
   }
   if (/^<<<<<<<(?: |$)/m.test(normalized) || /^>>>>>>>(?: |$)/m.test(normalized) || /^=======[ \t]*$/m.test(normalized)) {
     errors.push(`${relativePath} contains merge conflict markers`);

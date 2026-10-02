@@ -55,7 +55,7 @@ withMemoryLock(root, () => {
   const { header, blocks } = splitBlocks(changes);
   // Rewriting CHANGES.md without its schema header would silently produce a file
   // that fails every later consistency check, so refuse instead of guessing one.
-  if (!/^Schema version:\s*(2\.(2|3)|3\.0)$/m.test(header)) {
+  if (!/^Schema version:\s*3\.0$/m.test(header)) {
     console.error("CHANGES.md has no recognizable schema header; refusing to rewrite it.");
     process.exit(1);
   }

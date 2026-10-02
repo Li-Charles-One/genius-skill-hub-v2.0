@@ -24,8 +24,6 @@ Repairs WePlaning 3.0 drift:
   - recreate a missing CHANGES.md header
   - add a missing schema line when CURRENT/CHANGES are structurally valid
 
-Does not rebuild 2.3 session trees. Leftover THREADS.md / sessions/ are ignored.
-
 Options:
   --dry-run    Print intended repairs without writing
   --json
@@ -33,11 +31,6 @@ Options:
 
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
-
-if (args.prefer) {
-  console.error("WePlaning 3.0 repair no longer takes --prefer current|threads (session trees are not truth).");
-  process.exit(1);
-}
 
 const root = path.resolve(args._[0] || process.cwd());
 const now = args.time || utcNow();

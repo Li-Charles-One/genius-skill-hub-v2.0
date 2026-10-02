@@ -1,7 +1,7 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.3.0"
+  version: "3.4.0"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 

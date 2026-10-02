@@ -41,19 +41,19 @@ The heading is the change ID. `Files touched`, `Verification` and `Notes` appear
 
 `DECISIONS.md` blocks: `## <iso-time> decision` with `- Agent:`, `- Decision:`, `- Rationale:`.
 
-Schemas 2.2, 2.3 and 3.0 all pass the check. A 2.x `CURRENT.md` (including `Mainline session`) is upgraded to 3.0 on its next write without losing Current State. Old timestamp-only ledger headings stay valid.
+Only schema 3.0 passes the check; 2.x files are rejected. Old timestamp-only ledger headings stay valid.
 
 ## Read
 
 ```bash
 node weplaning-read.cjs <root> [--brief] [--handoff] [--next N] [--full] [--limit K] [--find "<q>"] [--json]
-node weplaning-find.cjs <root> "<query>" [--regex] [--case] [--limit N] [--scope current|changes|decisions|archive|threads|sessions] [--json]
+node weplaning-find.cjs <root> "<query>" [--regex] [--case] [--limit N] [--scope current|changes|decisions|archive] [--json]
 ```
 
 - Default: memory update time, goal, understanding, state, next steps, blockers, last 3 ledger blocks. `--brief` omits the ledger and cuts understanding/state items over 80 characters to their label (text before the first colon, else the first 40 characters), reporting how many it shortened; `--handoff` adds recorded verification and file references; `--full` lists archive files.
 - Reads run the structural check first. JSON `generatedAt` is the read time and `lastUpdated` the memory update time; neither is a live verification.
 - `--next N` needs a positive integer naming an existing actionable item; invalid input is an error, never #1. `nextStepsStatus` is `ready`, `none` (`none` / `无待执行事项`) or `unknown`; handoff never focuses a placeholder. Unknown blockers stay visible.
-- Search visits CURRENT before CHANGES, DECISIONS, archive and leftover 2.3 files, so history cannot crowd out current truth.
+- Search visits CURRENT before CHANGES, DECISIONS, archive and any other `.md` in the memory folder, so history cannot crowd out current truth.
 
 ## Write
 

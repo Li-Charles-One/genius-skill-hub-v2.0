@@ -3,7 +3,7 @@
  * weplaning-find.cjs — search the whole memory, including archived history
  *
  * Without this, anything rolled into archive/ is unreachable for an agent that
- * only reads CURRENT/THREADS/CHANGES.
+ * only reads CURRENT/CHANGES.
  */
 
 "use strict";
@@ -16,14 +16,14 @@ const help = `
 Usage:
   node weplaning-find.cjs <project-root> <query> [options]
 
-Searches CURRENT.md, THREADS.md, CHANGES.md, DECISIONS.md, session files and
-everything under archive/. Case-insensitive substring by default.
+Searches CURRENT.md, CHANGES.md, DECISIONS.md and everything under archive/.
+Case-insensitive substring by default.
 
 Options:
   --regex        Treat <query> as a regular expression
   --case         Case-sensitive match
   --limit <N>    Maximum matches to print (default: 40)
-  --scope <s>    Restrict to: current|threads|changes|decisions|sessions|archive
+  --scope <s>    Restrict to: current|changes|decisions|archive
   --json         Machine-readable JSON on stdout
 `;
 
@@ -56,9 +56,7 @@ try {
 function scopeOf(relativePath) {
   const normalized = relativePath.replace(/\\/g, "/");
   if (normalized.startsWith("archive/")) return "archive";
-  if (normalized.startsWith("sessions/")) return "sessions";
   if (normalized === "CURRENT.md") return "current";
-  if (normalized === "THREADS.md") return "threads";
   if (normalized === "CHANGES.md") return "changes";
   if (normalized === "DECISIONS.md") return "decisions";
   return "other";
@@ -77,7 +75,7 @@ function collectFiles(dir, found = []) {
 const matches = [];
 let truncated = false;
 
-const priority = { current: 0, changes: 1, decisions: 2, archive: 3, threads: 4, sessions: 5, other: 6 };
+const priority = { current: 0, changes: 1, decisions: 2, archive: 3, other: 4 };
 const files = collectFiles(memDir).sort((a, b) => {
   const aScope = scopeOf(path.relative(memDir, a));
   const bScope = scopeOf(path.relative(memDir, b));

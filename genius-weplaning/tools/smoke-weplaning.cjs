@@ -67,105 +67,6 @@ function writeCmd(root, extra) {
   return run([script("weplaning-write.cjs"), root, "--agent", "CI", ...extra]);
 }
 
-function seedLegacy23(root) {
-  fs.mkdirSync(path.join(root, ".agent-memory", "sessions"), { recursive: true });
-  write(
-    root,
-    "CURRENT.md",
-    `# Current Mainline
-Schema version: 2.3
-Last updated: 2026-06-06T00:00:00Z
-Mainline session: 20260606T0000-ci-root
-
-## Active Goal
-Legacy goal
-
-## Current Understanding
-legacy
-
-## Current State
-- Fact keep me
-
-## Accepted Next Steps
-1. Stay compatible
-
-## Open Blockers
-- none
-
-## Based On
-- Session: 20260606T0000-ci-root
-- Last change: 2026-06-06T00:00:00Z init
-`,
-  );
-  write(
-    root,
-    "THREADS.md",
-    `# Threads
-Schema version: 2.3
-Last updated: 2026-06-06T00:00:00Z
-
-Mainline session: 20260606T0000-ci-root
-Last merged session: 20260606T0000-ci-root
-
-## Session Tree
-
-| Session ID | Parent | Agent | OS | Role | Status | Summary |
-|:--|:--|:--|:--|:--|:--|:--|
-| 20260606T0000-ci-root | root | CI | linux | creator | merged | Bootstrap |
-`,
-  );
-  write(
-    root,
-    "CHANGES.md",
-    `# Changes
-Schema version: 2.3
-
-## 2026-06-06T00:00:00Z init
-- Session: 20260606T0000-ci-root
-- Changed:
-  - Bootstrapped
-`,
-  );
-  write(
-    root,
-    path.join("sessions", "20260606T0000-ci-root.md"),
-    `# Session 20260606T0000-ci-root
-
-Schema version: 2.3
-Session ID: 20260606T0000-ci-root
-Agent: CI
-Adapter: Smoke
-OS: linux
-Role: creator
-Parent session: root
-Status: merged
-Started: 2026-06-06T00:00:00Z
-Closed: 2026-06-06T00:00:00Z
-
-## Goal
-g
-
-## Context Read
-- x
-
-## Work Notes
-- y
-
-## Files Touched
-- z
-
-## Decisions
-- none yet
-
-## Result
-ok
-
-## Exact Next Step
-next
-`,
-  );
-}
-
 function testInitShape() {
   const root = tempRoot("init");
   const line = init(root);
@@ -228,19 +129,6 @@ function testDurableNote() {
   assert(!fs.existsSync(path.join(root, ".agent-memory", "THREADS.md")), "note created a session tree");
 }
 
-function testLegacy23CheckPasses() {
-  const root = tempRoot("legacy23");
-  fs.mkdirSync(path.join(root, ".agent-memory"), { recursive: true });
-  seedLegacy23(root);
-  run([script("check-memory.cjs"), root]);
-  write(
-    root,
-    "CURRENT.md",
-    read(root, "CURRENT.md").replace(/^Mainline session:\s*.+$/m, "Mainline session: bogus"),
-  );
-  run([script("check-memory.cjs"), root]);
-}
-
 function testLegacyWePlaningIgnored() {
   const root = tempRoot("legacy");
   init(root);
@@ -248,17 +136,13 @@ function testLegacyWePlaningIgnored() {
   run([script("check-memory.cjs"), root]);
 }
 
-function testWriteUpgradesSchemaKeepsState() {
-  const root = tempRoot("upgrade");
-  fs.mkdirSync(path.join(root, ".agent-memory"), { recursive: true });
-  seedLegacy23(root);
-  writeCmd(root, ["--changed", "first 3.0 write"]);
-  const current = read(root, "CURRENT.md");
-  assert(current.includes("Schema version: 3.0"), "write did not upgrade schema");
-  assert(current.includes("Fact keep me"), "upgrade dropped Current State");
-  assert(!/^Mainline session:/m.test(current), "upgrade kept Mainline session");
-  assert(current.includes("Stay compatible"), "upgrade dropped next steps");
-  run([script("check-memory.cjs"), root]);
+function testOldSchemaIsRejected() {
+  const root = tempRoot("old-schema");
+  init(root);
+  write(root, "CHANGES.md", read(root, "CHANGES.md").replace("Schema version: 3.0", "Schema version: 2.3"));
+  run([script("check-memory.cjs"), root], { expectFail: true });
+  run([script("weplaning-write.cjs"), root, "--agent", "CI", "--changed", "SHOULD_NOT_PERSIST"], { expectFail: true });
+  assert(!read(root, "CHANGES.md").includes("SHOULD_NOT_PERSIST"), "write accepted a 2.x ledger");
 }
 
 function testMissingCurrentFails() {
@@ -293,12 +177,6 @@ function testRepairMissingChanges() {
   run([script("repair-memory.cjs"), root]);
   assert(read(root, "CHANGES.md").includes("Schema version: 3.0"), "repair did not recreate CHANGES.md");
   run([script("check-memory.cjs"), root]);
-}
-
-function testRepairRefusesPrefer() {
-  const root = tempRoot("prefer");
-  init(root);
-  run([script("repair-memory.cjs"), root, "--prefer", "current"], { expectFail: true });
 }
 
 function testJsonOutput() {
@@ -776,14 +654,12 @@ for (const test of [
   testWriteDoesNotClobberState,
   testTrivialNoteNoop,
   testDurableNote,
-  testLegacy23CheckPasses,
   testLegacyWePlaningIgnored,
-  testWriteUpgradesSchemaKeepsState,
+  testOldSchemaIsRejected,
   testMissingCurrentFails,
   testConflictMarkersFail,
   testCheckDetectsSyncConflict,
   testRepairMissingChanges,
-  testRepairRefusesPrefer,
   testJsonOutput,
   testReadHandoffAndJson,
   testReadTruncatesLedger,
