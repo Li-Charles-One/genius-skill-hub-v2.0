@@ -53,7 +53,7 @@ async function concurrentWriteTest() {
     workers.push(spawnNode([
       path.join(scriptDir, "weplaning-write.cjs"),
       root,
-      "--agent", "CI",
+      "--agent", "codex",
       "--changed", `Concurrent write ${index}`,
       "--file", `file-${index}.txt`,
       "--verification", `verification-${index}`,

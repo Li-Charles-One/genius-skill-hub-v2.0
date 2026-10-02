@@ -4,11 +4,11 @@ const fs = require("fs");
 const path = require("path");
 const {
   agentTag,
-  defaultAgent,
   detectProjectConfig,
   emitResult,
   parseArgs,
   renderCurrentMd,
+  required,
   runCheck,
   SCHEMA_VERSION,
   usage,
@@ -18,10 +18,10 @@ const {
 
 const help = `
 Usage:
-  node init-memory.cjs <project-root> --project <name> --goal <text> [options]
+  node init-memory.cjs <project-root> --agent <name> --project <name> --goal <text> [options]
 
 Options:
-  --agent <name>       Agent name. Default: $WEPLANING_AGENT or "Agent"
+  --agent <name>       Required. Your runtime: claude-code, codex, opencode, grok, cursor, zcode or hermes
   --type <code|ops-doc> Project type (default: auto-detect)
   --code-vcs <text>    Code versioning tool (default: auto-detect)
   --sync <text>        Sync strategy note (default: auto-detect)
@@ -52,7 +52,7 @@ if (memoryExists && !args.force && !args.reinit) {
   process.exit(1);
 }
 
-const agent = agentTag(args.agent || defaultAgent());
+const agent = agentTag(required(args, "agent", help));
 const now = args.started || utcNow();
 
 if (args.reinit && memoryExists) {

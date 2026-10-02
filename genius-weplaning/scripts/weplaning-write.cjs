@@ -13,7 +13,6 @@ const path = require("path");
 const {
   agentTag,
   checkMemory,
-  defaultAgent,
   emitResult,
   formatSectionItems,
   isTrivialNote,
@@ -21,6 +20,7 @@ const {
   parseCurrentMd,
   readMemory,
   replaceField,
+  required,
   runCheck,
   SCHEMA_VERSION,
   section,
@@ -37,13 +37,13 @@ const {
 
 const help = `
 Usage:
-  node weplaning-write.cjs <project-root> [note] [options]
+  node weplaning-write.cjs <project-root> --agent <name> [note] [options]
 
 Patch accepted project state. One command replaces note + closeout.
 
 Options:
-  --agent <name>         Agent name (default: $WEPLANING_AGENT or inferred)
-  --changed <text>       Ledger line(s). Repeat or separate with ";;"
+  --agent <name>         Required. Your runtime: claude-code, codex, opencode, grok, cursor, zcode or hermes
+  --changed <text>       Ledger line(s). Repeat or separate with ";;". Required with any CURRENT patch
   --replace <old>        Exact CURRENT.md text that occurs once; pair with --with
   --with <new>           Replacement for the matching --replace (repeat in order)
   --drop <text>          Remove the single CURRENT.md line containing this text
@@ -108,8 +108,10 @@ const trivialOnly = changed.length > 0 && changed.every(isTrivialNote);
 if (!hasPatch && !hasDecision && changed.length === 0) {
   usage(false, "Nothing to write. Pass --changed, a CURRENT patch flag, or --decision.", help);
 }
+// The ledger records what happened in the writer's words, not a copy of the CURRENT diff.
+usage(!hasPatch || (changed.length > 0 && !trivialOnly), "A CURRENT patch needs --changed: say what happened in one line.", help);
 
-const agent = agentTag(args.agent || defaultAgent());
+const agent = agentTag(required(args, "agent", help));
 const now = args.time || utcNow();
 const files = toList(args.file || args.files);
 const verification = toList(args.verification);
@@ -134,14 +136,11 @@ if (!hasPatch && !hasDecision && trivialOnly) {
 const patched = [];
 const changeId = `${now} change ${uniqueStamp()}`;
 let decisionRecorded = false;
-let persisted = false;
 
 // Empty ledger fields are left out instead of written as "none".
 function listField(label, items) {
   return items.length ? `- ${label}:\n${items.map((item) => `  - ${item}`).join("\n")}\n` : "";
 }
-
-const oneLine = (text) => String(text).replace(/\s+/g, " ").trim();
 
 withMemoryLock(root, () => {
   runCheck(root);
@@ -158,13 +157,11 @@ withMemoryLock(root, () => {
     if (withs[index] === oldText) return;
     currentText = currentText.replace(oldText, () => withs[index]);
     if (!patched.includes("replace")) patched.push("replace");
-    descriptions.push(`Replaced in CURRENT: ${oneLine(oldText)} → ${oneLine(withs[index])}`);
   });
   for (const text of drops) {
     const lines = currentText.split("\n");
     const hits = lines.flatMap((line, index) => (line.includes(text) ? [index] : []));
     usage(hits.length === 1, `--drop text must match exactly one CURRENT.md line (found ${hits.length}): ${text}`, help);
-    descriptions.push(`Removed from CURRENT: ${oneLine(lines[hits[0]])}`);
     lines.splice(hits[0], 1);
     currentText = lines.join("\n");
     if (!patched.includes("drop")) patched.push("drop");
@@ -186,13 +183,11 @@ withMemoryLock(root, () => {
     if (value === current[field]) continue;
     currentText = setSection(currentText, heading, value);
     patched.push(flag);
-    descriptions.push(`Updated ${heading}: ${oneLine(value)}`);
   }
   if (args["add-state"] !== undefined) {
     const added = formatSectionItems(args["add-state"]);
     currentText = setSection(currentText, "Current State", `${section(currentText, "Current State")}\n${added}`);
     patched.push("add-state");
-    descriptions.push(`Added to Current State: ${oneLine(added.replace(/^- /gm, ""))}`);
   }
   const steps = section(currentText, "Accepted Next Steps");
   if (steps !== section(original, "Accepted Next Steps")) {
@@ -229,7 +224,6 @@ withMemoryLock(root, () => {
     ledgerItems.push(...descriptions);
     if (hasDecision) ledgerItems.push(`Decision: ${args.decision}`);
   }
-  if (!ledgerItems.length) return;
 
   const keptBasedOn = basedOn
     .split(/\r?\n/)
@@ -259,14 +253,8 @@ ${superseded.length ? `- Supersedes: ${superseded.join("; ")}\n` : ""}`;
   }
   for (const [file, content] of outputs) validateKnownMarkdown(file, content);
   for (const [file, content] of outputs) writeMemory(root, file, content);
-  persisted = true;
   runCheck(root);
 });
-
-if (!persisted) {
-  emitResult(args, "nothing-to-persist", { persisted: false, reason: "unchanged", patched: [], message: "nothing to persist" });
-  process.exit(0);
-}
 
 // Warn at the moment CURRENT grows; warnings never block the write.
 for (const warning of checkMemory(root, { audit: true }).warnings) console.error(`[audit] ${warning}`);

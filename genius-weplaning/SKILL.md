@@ -1,7 +1,7 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.5.0"
+  version: "3.6.0"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
@@ -28,14 +28,14 @@ Write on your own only for **durable, cross-session** facts: accepted state chan
 
 ## Commands
 
-`<skill_dir>` is this skill's directory. Always pass `--agent <name>`: your runtime (`claude-code`, `codex`, `opencode`, `grok`), never a skill, person or device. The script lowercases it and appends the device.
+`<skill_dir>` is this skill's directory. Write and init require `--agent <name>`: your runtime, one of `claude-code`, `codex`, `opencode`, `grok`, `cursor`, `zcode`, `hermes`. Any other name (a skill, person or device) is rejected. The script lowercases it and appends the device.
 
 ```bash
 node <skill_dir>/scripts/weplaning-read.cjs <root> [--brief | --handoff | --next N | --full | --find "<q>" | --json]
 node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --changed "<fact>" [--verification "<method/time/result>"] [--file <path>]
 # Change one fact in place instead of resending a whole section:
 node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --replace "<exact old text>" --with "<new text>" --changed "<what happened>"
-node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --add-state "<new fact>" --drop "<text unique to the obsolete line>"
+node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --add-state "<new fact>" --drop "<text unique to the obsolete line>" --changed "<what happened>"
 # A decision that replaces an older one marks the old one superseded:
 node <skill_dir>/scripts/weplaning-write.cjs <root> --agent <name> --decision "<new decision>" --rationale "<why>" --supersedes "<text unique to the old decision>"
 node <skill_dir>/scripts/check-memory.cjs <root>
@@ -48,7 +48,7 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 
 - Never hand-edit `.agent-memory/`. For one fact use `--replace/--with`, `--add-state` or `--drop`: each must match exactly once or the write fails with nothing changed.
 - `--state` / `--next-step` / `--blockers` / `--goal` / `--understanding` replace the whole section: re-read it first and keep every still-valid item.
-- `--changed` only appends the ledger and never touches Current State. A CURRENT patch without `--changed` still gets a ledger entry.
+- `--changed` only appends the ledger and never touches Current State. Every CURRENT patch needs `--changed` saying what happened in one line; without it the write fails with nothing changed.
 - One event, one write: put its patches, `--changed`, `--verification` and `--decision` in a single command instead of several writes.
 - Values are one line (`;;` separates items); only `--goal`, `--understanding`, `--replace` and `--with` may span lines. Markdown headings are rejected.
 - Every write runs the consistency check; report success only when it passes.
@@ -62,8 +62,8 @@ Planning states shared with `genius-brief-thinking` and `genius-impl-plans`: `BR
 
 ## Output
 
-- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, every step waiting on the user means report that and stop, and an invalid task number is an error, never a fallback to #1.
-- Write: whether anything persisted, whether the check passed, the change ID, any `[audit]` warning (oversized CURRENT; relay it, do not trim memory unasked), the exact next step. Unchanged patches persist nothing.
+- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, every step waiting on the user means report that and stop, and an invalid task number is an error, never a fallback to #1. A sync-conflict warning means the read shows this device's live copy: relay it, and do not write until the copies are resolved.
+- Write: whether anything persisted, whether the check passed, the change ID, any `[audit]` warning (oversized CURRENT; relay it, do not trim memory unasked), the exact next step.
 
 ## Resource Map
 

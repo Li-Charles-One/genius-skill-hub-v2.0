@@ -89,7 +89,8 @@ function parseNextSteps(text) {
   return items;
 }
 
-runCheck(root, { quiet: true });
+// Sync-conflict copies block writes, not reads: the live files are still this device's record.
+const warnings = runCheck(root, { quiet: true, conflictsAsWarnings: true });
 const currentText = readMemory(root, "CURRENT.md");
 const current = parseCurrentMd(currentText);
 
@@ -167,6 +168,7 @@ const payload = {
   archives,
   decisions: activeDecisions.map(({ when, decision }) => ({ when, decision })),
   supersededDecisions: decisions.length - activeDecisions.length,
+  warnings,
   truth: "CURRENT.md is accepted truth. CHANGES.md is the ledger.",
 };
 
@@ -194,6 +196,9 @@ function shown(text) {
 const D = "─".repeat(52);
 let out =`\n${D}\n WePlaning · Read at: ${payload.generatedAt}${args.handoff ? " · HANDOFF" : ""}\n${D}\n`;
 out += `\nMemory last updated: ${payload.lastUpdated}\nRecorded state; not a live verification.\n`;
+for (const warning of warnings) {
+  out += `\n⚠ ${warning}\n  Below is this device's live copy; writes stay blocked until the copies are resolved.\n`;
+}
 
 out += `\n📌 Goal:\n${payload.goal}\n`;
 if (payload.projectConfig) {

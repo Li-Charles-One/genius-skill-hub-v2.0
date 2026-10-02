@@ -131,16 +131,17 @@ function truncateSummary(text, max = 120) {
   return `${oneLine.slice(0, max - 1).trimEnd()}…`;
 }
 
-function defaultAgent() {
-  if (process.env.WEPLANING_AGENT) return process.env.WEPLANING_AGENT;
-  if (process.env.CODEX_HOME || process.env.CODEX_CI) return "Codex";
-  if (process.env.CLAUDE_CODE || process.env.CLAUDECODE) return "Claude";
-  return "Agent";
-}
+// Runtimes allowed to sign the ledger. A skill, person or device name is not an agent.
+const AGENTS = ["claude-code", "codex", "opencode", "grok", "cursor", "zcode", "hermes"];
 
-/** Ledger signature: lowercase agent name plus the device that wrote the entry. */
+/** Ledger signature: a known runtime name, lowercased, plus the device that wrote the entry. */
 function agentTag(name) {
-  return `${String(name).trim().toLowerCase()}@${os.hostname().replace(/\.local$/i, "").toLowerCase()}`;
+  const agent = String(name).trim().toLowerCase();
+  if (!AGENTS.includes(agent)) {
+    console.error(`Unknown --agent "${name}". Use your runtime, one of: ${AGENTS.join(", ")}.`);
+    process.exit(1);
+  }
+  return `${agent}@${os.hostname().replace(/\.local$/i, "").toLowerCase()}`;
 }
 
 function section(text, heading) {
@@ -206,7 +207,7 @@ function findMemoryConflicts(root) {
 const NO_BLOCKER = "none|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞";
 
 /** Structural consistency gate shared by check-memory.cjs and every write. */
-function checkMemory(root, { audit = false } = {}) {
+function checkMemory(root, { audit = false, conflictsAsWarnings = false } = {}) {
   const dir = memoryDir(root);
   const errors = [];
   const warnings = [];
@@ -217,7 +218,8 @@ function checkMemory(root, { audit = false } = {}) {
     if (conflicts.length > 0) {
       const shown = conflicts.slice(0, 10).map((name) => `    .agent-memory/${name}`);
       if (conflicts.length > shown.length) shown.push(`    ... and ${conflicts.length - shown.length} more`);
-      errors.push(
+      // A read still shows this device's live files; only writes must stop on divergence.
+      (conflictsAsWarnings ? warnings : errors).push(
         `Sync conflict copies found in .agent-memory (${conflicts.length}). Memory diverged across devices.\n` +
           `${shown.join("\n")}\n` +
           `  Fix: compare each copy against the live file, merge anything worth keeping, then delete the copies.`,
@@ -241,15 +243,15 @@ function checkMemory(root, { audit = false } = {}) {
     if (hasReal && hasNone) warnings.push("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
     const longItems = current.split(/\r?\n/).filter((line) => /^\s*([-*]|\d+\.)\s/.test(line) && line.length > 300).length;
     if (longItems) warnings.push(`CURRENT.md has ${longItems} item(s) over 300 characters; keep one fact per item.`);
-    const bytes = Buffer.byteLength(current);
-    if (bytes > 8000) warnings.push(`CURRENT.md is ${bytes} bytes (over 8000); move history and snapshots to the ledger.`);
+    // Characters, not bytes: a byte budget charges CJK text three times over.
+    if (current.length > 10000) warnings.push(`CURRENT.md is ${current.length} characters (over 10000); move history and snapshots to the ledger.`);
   }
   return { errors, warnings };
 }
 
-/** Run the gate in-process; on failure print the errors and exit 1. */
-function runCheck(root, { quiet = false } = {}) {
-  const { errors } = checkMemory(root);
+/** Run the gate in-process; on failure print the errors and exit 1. Returns the warnings. */
+function runCheck(root, { quiet = false, conflictsAsWarnings = false } = {}) {
+  const { errors, warnings } = checkMemory(root, { conflictsAsWarnings });
   if (errors.length) {
     console.error("WePlaning memory check failed:");
     for (const error of errors) console.error(`- ${error}`);
@@ -257,6 +259,7 @@ function runCheck(root, { quiet = false } = {}) {
   }
   // Keep machine-readable primary output on stdout; check chatter goes to stderr.
   if (!quiet) console.error("WePlaning memory check passed.");
+  return warnings;
 }
 
 function isTrivialNote(text) {
@@ -489,7 +492,6 @@ function emitResult(args, primaryLine, payload = {}) {
 module.exports = {
   agentTag,
   checkMemory,
-  defaultAgent,
   detectProjectConfig,
   emitResult,
   findMemoryConflicts,

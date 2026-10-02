@@ -41,7 +41,7 @@ The heading is the change ID. `Files touched`, `Verification` and `Notes` appear
 
 `DECISIONS.md` blocks: `## <iso-time> decision` with `- Agent:`, `- Decision:`, `- Rationale:`. `--supersedes` adds `- Supersedes: <old heading>` to the new block and `- Superseded by: <new heading>` to the old one; nothing else in an old block changes.
 
-`- Agent:` is `<name>@<device>`: the name lowercased, the device from the host name. Older entries without a device stay valid.
+`- Agent:` is `<name>@<device>`: the lowercased runtime name (`claude-code`, `codex`, `opencode`, `grok`, `cursor`, `zcode` or `hermes`; write and init reject a missing or unlisted `--agent`), the device from the host name. Older entries with other names or without a device stay valid.
 
 Only schema 3.0 passes the check; 2.x files are rejected. Old timestamp-only ledger headings stay valid.
 
@@ -53,7 +53,7 @@ node weplaning-find.cjs <root> "<query>" [--regex] [--case] [--limit N] [--scope
 ```
 
 - Default: memory update time, goal, understanding, state, next steps, blockers, last 3 ledger blocks. `--brief` omits the ledger and cuts understanding/state items over 80 characters to their label (text before the first colon, else the first 40 characters), reporting how many it shortened; `--handoff` adds recorded verification and file references; `--full` adds the active decisions (superseded ones are counted, not shown) and lists CHANGES and DECISIONS archive files.
-- Reads run the structural check first. JSON `generatedAt` is the read time and `lastUpdated` the memory update time; neither is a live verification.
+- Reads run the structural check first. Sync-conflict copies do not stop a read: it shows this device's live files with a warning (JSON `warnings`), while every write still fails until the copies are resolved. JSON `generatedAt` is the read time and `lastUpdated` the memory update time; neither is a live verification.
 - `--next N` needs a positive integer naming an existing actionable item; invalid input is an error, never #1. `nextStepsStatus` is `ready`, `none` (`none` / `无待执行事项`), `unknown` or `waiting-user` (every step starts with `【待用户` or `[user]`); handoff focuses the first step an agent can start, never a placeholder or a user-owned step. `--next N` may still select a user-owned step. Unknown blockers stay visible.
 - Search visits CURRENT before CHANGES, DECISIONS, archive and any other `.md` in the memory folder, so history cannot crowd out current truth.
 
@@ -65,7 +65,7 @@ node weplaning-write.cjs <root> --agent <name> [note] [options]
 
 | Flag | Effect |
 |---|---|
-| `--changed` / positional note | Ledger line(s); never changes Current State |
+| `--changed` / positional note | Ledger line(s); never changes Current State. Required with any CURRENT patch |
 | `--replace <old> --with <new>` | Exact text edit; `old` must occur once in CURRENT (Based On excluded). Repeat pairs in order |
 | `--drop <text>` | Remove the single CURRENT line containing `text` |
 | `--add-state <text>` | Append Current State bullet(s) |
@@ -76,10 +76,10 @@ node weplaning-write.cjs <root> --agent <name> [note] [options]
 | `--file` / `--verification` / `--note` | Ledger metadata |
 
 - Exact edits run first, then section replacements. Accepted Next Steps are renumbered whenever they change.
-- Without `--changed`, the ledger records what changed (`Replaced in CURRENT: …`, `Updated <section>: …`, `Decision: …`). Unchanged patches with no new fact write nothing (`persisted: false`). Trivial notes (`完成了`, `done`, `搞定`, `ok`) with no patch or decision print `nothing-to-persist`.
+- The ledger holds the stated change, not a copy of the CURRENT diff: a patch without a non-trivial `--changed` fails. A decision without `--changed` is recorded as `Decision: …` (plus `Superseded decision: …`). Trivial notes (`完成了`, `done`, `搞定`, `ok`) with no patch or decision print `nothing-to-persist`.
 - Every write refreshes `Last updated` and `Based On` (summary truncated to one line).
 - After a persisted write, the `--audit` warnings (see check) print on stderr as `[audit] …`; they never block the write.
-- Invalid input fails before any file changes: unknown flags, missing values, unpaired `--replace`, zero or multiple matches, line breaks outside the multi-line flags, Markdown headings anywhere. Inside a lock the script checks existing memory, validates every proposed file, writes, then checks again. There is no multi-file rollback for OS or disk failure.
+- Invalid input fails before any file changes: unknown flags, missing values, a missing or unlisted `--agent`, a patch without `--changed`, unpaired `--replace`, zero or multiple matches, line breaks outside the multi-line flags, Markdown headings anywhere. Inside a lock the script checks existing memory, validates every proposed file, writes, then checks again. There is no multi-file rollback for OS or disk failure.
 - Each overwritten file keeps its last 10 copies in `.backups/`. Change IDs (the block headings) carry a unique suffix even for simultaneous writes.
 
 ## Init, check, repair, archive, dirty
@@ -93,7 +93,7 @@ node check-dirty.cjs <root> [--strict] [--json] [--limit N]
 ```
 
 - `init`: existing memory needs `--force` (create only missing files) or `--reinit` (discard CURRENT/CHANGES/DECISIONS). Project Config: code projects keep code in git and WePlaning owns only `.agent-memory`; ops/doc projects are standalone.
-- `check` fails on missing CURRENT/CHANGES, unsupported or duplicate schema lines, missing/empty/duplicate required sections, duplicate optional sections, conflict markers and `*.sync-conflict-*` copies. `--audit` warns on blockers that mix a real item with `none`, on CURRENT items over 300 characters and on a CURRENT.md over 8000 bytes.
+- `check` fails on missing CURRENT/CHANGES, unsupported or duplicate schema lines, missing/empty/duplicate required sections, duplicate optional sections, conflict markers and `*.sync-conflict-*` copies. `--audit` warns on blockers that mix a real item with `none`, on CURRENT items over 300 characters and on a CURRENT.md over 10000 characters.
 - `repair` recreates a missing CHANGES header and inserts a missing schema line when the result is valid. It keeps all facts, extra sections and the update time, and refuses malformed CURRENT, unsupported schemas, sync conflicts and a missing CURRENT.
 - `archive-changes` moves older blocks to `archive/CHANGES-<unique>.md` (exclusive create, never overwrites) and leaves an `Archived:` breadcrumb.
 - `check-dirty` lists changed paths outside `.agent-memory` (git status, or mtime newer than `Last updated` without git). A git failure is `ok: false`, never clean.
@@ -103,7 +103,7 @@ node check-dirty.cjs <root> [--strict] [--json] [--limit N]
 1. Run the smoke test before `init` on a new machine; a broken init is harder to recover than a failed test.
 2. `--reinit` destroys history. Never use it to fix a failing check; run `check-memory`, then `repair-memory`.
 3. Section replacement is not item merging. Prefer `--replace/--with`, `--add-state` or `--drop`; when replacing a section, include every still-valid item.
-4. Sync folders (Syncthing, iCloud): the lock is per device, so concurrent writers on two devices create `*.sync-conflict-*` copies and the check fails. Merge what matters, delete the copies, and exclude `.backups/` and `.weplaning.lock` from sync.
+4. Sync folders (Syncthing, iCloud): the lock is per device, so concurrent writers on two devices create `*.sync-conflict-*` copies; the check and every write then fail, and reads only warn. Merge what matters, delete the copies, and exclude `.backups/` and `.weplaning.lock` from sync.
 5. Recorded state is not a live check. Record verification method/time/result with `--verification`; keep `unknown` distinct from `none`.
 6. When offering destructive choices, every stated consequence must be true.
 7. Scripts use forward slashes and work on Windows through Node path normalization; do not switch them to `\\`.

@@ -9,7 +9,7 @@ If Genius-WePlaning lives in a separate repo (e.g. `genius-skill-hub-v2.0/`) and
    cmd //c "mklink /J C:\Users\<user>\AppData\Local\hermes\skills\project-management\genius-weplaning <hub>\genius-weplaning"
    ```
    `mklink /D` (symbolic link) requires admin or Developer Mode — junction is the right tool for standard users.
-4. **Set the agent name** — pass `--agent <persona>` on write commands, or set `$WEPLANING_AGENT`. If both are unset, scripts may infer Codex/Claude from known env vars, otherwise `Agent`.
+4. **Set the agent name** — pass `--agent hermes` on write and init commands. `--agent` is required and must be a known runtime name; there is no environment variable or inferred default.
 
 ## Junction pitfalls
 
