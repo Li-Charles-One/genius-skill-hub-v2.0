@@ -74,4 +74,4 @@ Tests are offline and create temporary files only. Optional test-workspace: `tes
 
 ## Verification Status
 
-Version 3.4.1 is exercised on Windows/Python 3.12 and macOS/Python 3.9 (test suite, extractor, lint, safe commit). Linux variants follow the same POSIX commands but are unverified. Reference snapshots use the host HTTP tool when requested.
+The scripts are exercised on Windows/Python 3.12 and macOS/Python 3.9 (test suite, extractor, lint, safe commit). Linux variants follow the same POSIX commands but are unverified. Reference snapshots use the host HTTP tool when requested.

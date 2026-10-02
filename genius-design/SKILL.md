@@ -3,7 +3,7 @@ name: genius-design
 description: "生成、审查或更新 DESIGN.md 品牌视觉与 UI 设计规范；支持品牌资料适配、网站设计逆向和按产品场景推荐方向。需要设计系统、语义 tokens 或可交给开发 Agent 的视觉规范时使用。不要用于单个按钮改色等局部 UI 修改；不要直接实现页面；不要把 brief 拆成实施计划（用 genius-impl-plans）；不要普通截图内容识别（用 genius-omni）；不要营销文案；不要图片视频生成（用 dreamina-cli）。"
 license: Apache-2.0
 metadata:
-  version: "3.4.1"
+  version: "3.4.2"
 ---
 
 # Genius Design
@@ -54,7 +54,7 @@ Resolve skill root vs project destination (`references/runtime-mapping.md`). Use
 2. **Stage** from `references/design-template.md`. Replace every TODO, including dials. Do not imitate `evals/fixtures/valid-design.md` unless this brief is actually that product.
 3. **Enrich** this brief only: semantic color/type/spacing tokens, named rhythm with real regions, applicable component states. Pick 3–5 warnings from `references/anti-patterns.md`. Optional H2s only when they add something. YAML: `references/output-contract.md`.
 4. **Lint** `scripts/lint_design_md.py <candidate>`. Resolve every FAIL (Pre-Ship Checklist only if that heading is present). Review WARNs (omitted Accessibility, high motion without Motion).
-5. **Commit** only via `scripts/design_io.py <candidate> <destination>` after telling the user if an existing file will be replaced. Revalidates, writes unique `.bak` / `.bak.1` (including empty files) beside the destination, then atomically replaces; tell the user about backups (they may want them gitignored; do not create a gitignore). Lint failure leaves destination and backups unchanged; an I/O failure after a backup rolls it back when possible. An unvalidated catalog snapshot or lint-failing candidate is never delivered.
+5. **Commit** only via `scripts/design_io.py <candidate> <destination>` after telling the user if an existing file will be replaced. It re-lints, writes a unique `.bak` / `.bak.1` beside the destination, then atomically replaces; a lint failure changes nothing. Tell the user about backups (do not create a gitignore). An unvalidated catalog snapshot or lint-failing candidate is never delivered.
 
 ## Delivery
 
