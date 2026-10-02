@@ -23,7 +23,7 @@ Usage:
 
 Options:
   --handoff     Highlight next step #1
-  --brief       Goal, context, state, next steps and blockers (no ledger)
+  --brief       Goal, next steps and blockers; long context/state items cut to their label (no ledger)
   --full        Also list archive files
   --json        Machine-readable JSON on stdout
   --next <N>    Focus Accepted Next Steps item N (1-based)
@@ -154,8 +154,24 @@ if (args.json) {
   process.exit(0);
 }
 
+// --brief keeps short items whole and cuts long ones down to their label.
+let shortened = 0;
+function shown(text) {
+  if (!args.brief) return text;
+  return String(text)
+    .split(/\r?\n/)
+    .map((line) => {
+      const [, marker = "", body] = line.match(/^(\s*(?:[-*]|\d+\.)\s+)?(.*)$/);
+      if (body.length <= 80) return line;
+      shortened += 1;
+      const label = body.match(/^[^：:]{1,40}(?=：|:\s)/);
+      return `${marker}${label ? label[0] : body.slice(0, 40)}…`;
+    })
+    .join("\n");
+}
+
 const D = "─".repeat(52);
-let out = `\n${D}\n WePlaning · Read at: ${payload.generatedAt}${args.handoff ? " · HANDOFF" : ""}\n${D}\n`;
+let out =`\n${D}\n WePlaning · Read at: ${payload.generatedAt}${args.handoff ? " · HANDOFF" : ""}\n${D}\n`;
 out += `\nMemory last updated: ${payload.lastUpdated}\nRecorded state; not a live verification.\n`;
 
 out += `\n📌 Goal:\n${payload.goal}\n`;
@@ -163,9 +179,9 @@ if (payload.projectConfig) {
   out += `\n⚙ Project Config:\n${payload.projectConfig}\n`;
 }
 if (payload.understanding && !isUnknown(payload.understanding)) {
-  out += `\n🧭 Current Understanding:\n${payload.understanding}\n`;
+  out += `\n🧭 Current Understanding:\n${shown(payload.understanding)}\n`;
 }
-out += `\n📊 Current State:\n${payload.currentState}\n`;
+out += `\n📊 Current State:\n${shown(payload.currentState)}\n`;
 
 if (payload.focusNextStep) {
   out += `\n🎯 Focus Next Step #${payload.focusNextStep.index}:\n${payload.focusNextStep.text}\n`;
@@ -184,6 +200,7 @@ if (hasBlockers) {
 }
 
 if (args.brief) {
+  if (shortened) out += `\n${shortened} long item(s) shortened to their label; run a full read before acting on them.\n`;
   out += `\n${D}\n`;
   process.stdout.write(out);
   process.exit(0);

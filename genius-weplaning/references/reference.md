@@ -27,16 +27,17 @@ Last updated: <iso-time>
 ```markdown
 ## <iso-time> change <unique-suffix>
 - Agent: <agent>
-- Change ID: <iso-time> change <unique-suffix>
 - Changed:
   - <durable change>
 - Files touched:
-  - <path or none>
+  - <path>
 - Verification:
-  - <check or none>
+  - <check>
 - Notes:
-  - none
+  - <note>
 ```
+
+The heading is the change ID. `Files touched`, `Verification` and `Notes` appear only when passed. Older blocks with a `Change ID` line and `none` fields stay valid.
 
 `DECISIONS.md` blocks: `## <iso-time> decision` with `- Agent:`, `- Decision:`, `- Rationale:`.
 
@@ -49,7 +50,7 @@ node weplaning-read.cjs <root> [--brief] [--handoff] [--next N] [--full] [--limi
 node weplaning-find.cjs <root> "<query>" [--regex] [--case] [--limit N] [--scope current|changes|decisions|archive|threads|sessions] [--json]
 ```
 
-- Default: memory update time, goal, understanding, state, next steps, blockers, last 3 ledger blocks. `--brief` omits the ledger; `--handoff` adds recorded verification and file references; `--full` lists archive files.
+- Default: memory update time, goal, understanding, state, next steps, blockers, last 3 ledger blocks. `--brief` omits the ledger and cuts understanding/state items over 80 characters to their label (text before the first colon, else the first 40 characters), reporting how many it shortened; `--handoff` adds recorded verification and file references; `--full` lists archive files.
 - Reads run the structural check first. JSON `generatedAt` is the read time and `lastUpdated` the memory update time; neither is a live verification.
 - `--next N` needs a positive integer naming an existing actionable item; invalid input is an error, never #1. `nextStepsStatus` is `ready`, `none` (`none` / `无待执行事项`) or `unknown`; handoff never focuses a placeholder. Unknown blockers stay visible.
 - Search visits CURRENT before CHANGES, DECISIONS, archive and leftover 2.3 files, so history cannot crowd out current truth.
@@ -75,7 +76,7 @@ node weplaning-write.cjs <root> --agent <name> [note] [options]
 - Without `--changed`, the ledger records what changed (`Replaced in CURRENT: …`, `Updated <section>: …`, `Decision: …`). Unchanged patches with no new fact write nothing (`persisted: false`). Trivial notes (`完成了`, `done`, `搞定`, `ok`) with no patch or decision print `nothing-to-persist`.
 - Every write refreshes `Last updated` and `Based On` (summary truncated to one line).
 - Invalid input fails before any file changes: unknown flags, missing values, unpaired `--replace`, zero or multiple matches, line breaks outside the multi-line flags, Markdown headings anywhere. Inside a lock the script checks existing memory, validates every proposed file, writes, then checks again. There is no multi-file rollback for OS or disk failure.
-- Each overwritten file keeps its last 10 copies in `.backups/`. Change IDs carry a unique suffix even for simultaneous writes.
+- Each overwritten file keeps its last 10 copies in `.backups/`. Change IDs (the block headings) carry a unique suffix even for simultaneous writes.
 
 ## Init, check, repair, archive, dirty
 

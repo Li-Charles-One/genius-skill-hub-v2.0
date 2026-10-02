@@ -117,7 +117,6 @@ Schema version: ${SCHEMA_VERSION}
 
 ## ${now} init
 - Agent: ${agent}
-- Change ID: ${now} init
 - Changed:
   - Bootstrapped WePlaning ${SCHEMA_VERSION} memory
 - Files touched:

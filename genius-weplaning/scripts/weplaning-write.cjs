@@ -131,9 +131,9 @@ const changeId = `${now} change ${uniqueStamp()}`;
 let decisionRecorded = false;
 let persisted = false;
 
-function listBlock(items, fallback) {
-  const values = items.length ? items : [fallback];
-  return values.map((item) => `  - ${item}`).join("\n");
+// Empty ledger fields are left out instead of written as "none".
+function listField(label, items) {
+  return items.length ? `- ${label}:\n${items.map((item) => `  - ${item}`).join("\n")}\n` : "";
 }
 
 const oneLine = (text) => String(text).replace(/\s+/g, " ").trim();
@@ -217,16 +217,7 @@ withMemoryLock(root, () => {
   const entry = `
 ## ${changeId}
 - Agent: ${agent}
-- Change ID: ${changeId}
-- Changed:
-${listBlock(ledgerItems, "unknown")}
-- Files touched:
-${listBlock(files, "none")}
-- Verification:
-${listBlock(verification, "none")}
-- Notes:
-${listBlock(extraNotes, "none")}
-`;
+${listField("Changed", ledgerItems)}${listField("Files touched", files)}${listField("Verification", verification)}${listField("Notes", extraNotes)}`;
   const outputs = [["CURRENT.md", currentText], ["CHANGES.md", `${existing}${entry}`]];
 
   if (hasDecision) {

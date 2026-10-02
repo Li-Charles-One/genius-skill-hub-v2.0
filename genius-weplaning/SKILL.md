@@ -1,7 +1,7 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.1.2"
+  version: "3.2.0"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
@@ -46,6 +46,7 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 - Never hand-edit `.agent-memory/`. For one fact use `--replace/--with`, `--add-state` or `--drop`: each must match exactly once or the write fails with nothing changed.
 - `--state` / `--next-step` / `--blockers` / `--goal` / `--understanding` replace the whole section: re-read it first and keep every still-valid item.
 - `--changed` only appends the ledger and never touches Current State. A CURRENT patch without `--changed` still gets a ledger entry.
+- One event, one write: put its patches, `--changed`, `--verification` and `--decision` in a single command instead of several writes.
 - Values are one line (`;;` separates items); only `--goal`, `--understanding`, `--replace` and `--with` may span lines. Markdown headings are rejected.
 - Every write runs the consistency check; report success only when it passes.
 - Accepted Next Steps holds accepted actions: `none` / `无待执行事项` when nothing is pending, `unknown` when undecided; keep conditional triggers. Durable guidance belongs in Current Understanding.
@@ -58,7 +59,7 @@ Planning states shared with `genius-brief-thinking` and `genius-impl-plans`: `BR
 
 ## Output
 
-- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, and an invalid task number is an error, never a fallback to #1.
+- Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, and an invalid task number is an error, never a fallback to #1.
 - Write: whether anything persisted, whether the check passed, the change ID, the exact next step. Unchanged patches persist nothing.
 
 ## Resource Map

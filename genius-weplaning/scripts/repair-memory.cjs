@@ -63,7 +63,7 @@ withMemoryLock(root, () => {
     const filePath = path.join(memoryDir, file);
     if (!fs.existsSync(filePath)) {
       repairs.push("CHANGES.md recreate missing ledger");
-      outputs.push([file, `# Changes\nSchema version: ${SCHEMA_VERSION}\n\n## ${now} repair\n- Agent: repair\n- Change ID: ${now} repair\n- Changed:\n  - Recreated missing CHANGES.md\n- Files touched:\n  - .agent-memory/CHANGES.md\n- Verification:\n  - repair-memory.cjs\n- Notes:\n  - none\n`]);
+      outputs.push([file, `# Changes\nSchema version: ${SCHEMA_VERSION}\n\n## ${now} repair\n- Agent: repair\n- Changed:\n  - Recreated missing CHANGES.md\n- Files touched:\n  - .agent-memory/CHANGES.md\n- Verification:\n  - repair-memory.cjs\n`]);
       continue;
     }
     let text = fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");

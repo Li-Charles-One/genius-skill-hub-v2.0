@@ -15,7 +15,7 @@
       "id": "read-progress-brief",
       "prompt": "查看项目进度",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs --brief.",
+      "expected_output": "Runs weplaning-read.cjs --brief. Reports goal, next steps and blockers; treats shortened items as labels only and runs a full read before acting on one.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
         {"type": "contains", "value": "--brief"}
@@ -141,6 +141,17 @@
       "files": ["scripts/weplaning-write.cjs", "scripts/check-memory.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-write"},
+        {"type": "contains", "value": "--verification"}
+      ]
+    },
+    {
+      "id": "one-event-one-write",
+      "prompt": "记一笔：us-vpn 带宽已改成 200/100 并验证，更新当前状态，同时记为决策。",
+      "trigger_expected": true,
+      "expected_output": "One weplaning-write.cjs command carrying the in-place state edit, --changed, --verification and --decision. Does not split the event across several writes.",
+      "files": ["scripts/weplaning-write.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--decision"},
         {"type": "contains", "value": "--verification"}
       ]
     },

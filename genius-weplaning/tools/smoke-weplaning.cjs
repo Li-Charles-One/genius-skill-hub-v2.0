@@ -711,6 +711,31 @@ function testNextStepsNoneUnknownAndInvalidNumber() {
   }
 }
 
+function testBriefShortensLongItems() {
+  const root = tempRoot("brief");
+  init(root);
+  writeCmd(root, ["--state", `SHORT_FACT stays whole;;HOST_LABEL：${"细节".repeat(60)} BRIEF_TAIL_SHOULD_NOT_SHOW`]);
+  const brief = run([script("weplaning-read.cjs"), root, "--brief"]).stdout;
+  assert(brief.includes("SHORT_FACT stays whole"), "--brief cut a short item");
+  assert(brief.includes("- HOST_LABEL…") && !brief.includes("BRIEF_TAIL_SHOULD_NOT_SHOW"), "--brief did not cut a long item to its label");
+  assert(brief.includes("1 long item(s) shortened"), "--brief hid that items were shortened");
+  const full = run([script("weplaning-read.cjs"), root]).stdout;
+  assert(full.includes("BRIEF_TAIL_SHOULD_NOT_SHOW") && !full.includes("shortened"), "default read lost item detail");
+}
+
+function testLedgerOmitsEmptyFields() {
+  const root = tempRoot("ledger-fields");
+  init(root);
+  const lastBlock = () => read(root, "CHANGES.md").split(/\n(?=## )/).at(-1);
+  writeCmd(root, ["--changed", "PLAIN_FACT"]);
+  assert(lastBlock().includes("PLAIN_FACT"), "ledger lost the change");
+  for (const label of ["Change ID:", "Files touched:", "Verification:", "Notes:", "- none"]) {
+    assert(!lastBlock().includes(label), `ledger wrote an empty or duplicate field: ${label}`);
+  }
+  writeCmd(root, ["--changed", "NOTED_FACT", "--file", "a.yaml", "--verification", "checked", "--note", "extra"]);
+  assert(/- Files touched:\n  - a\.yaml\n- Verification:\n  - checked\n- Notes:\n  - extra\n$/.test(lastBlock()), "ledger dropped a provided field");
+}
+
 function testSearchPrioritizesCurrentTruth() {
   const root = tempRoot("search-priority");
   init(root);
@@ -769,6 +794,8 @@ for (const test of [
   testRepeatedArchivePreservesHistory,
   testReadIncludesContextTimeAndVerification,
   testNextStepsNoneUnknownAndInvalidNumber,
+  testBriefShortensLongItems,
+  testLedgerOmitsEmptyFields,
   testSearchPrioritizesCurrentTruth,
   testDirtyGitErrorIsNotClean,
 ]) {
