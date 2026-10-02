@@ -1,12 +1,11 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.1.1"
+  version: "3.1.2"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
 # Genius-WePlaning
-_(Skill package v3.1.1; protocol 3.0)_
 
 Project memory lives in `.agent-memory/`: **CURRENT.md** is accepted truth, **CHANGES.md** the append-only ledger, `DECISIONS.md` optional, `archive/` rolled-off ledger. Leftover 2.3 `THREADS.md` / `sessions/` are history, never truth; never create sessions. `.backups/` and `.weplaning.lock` are device-local: never sync them.
 
@@ -55,7 +54,7 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 
 ## Workflow Handoff
 
-Planning states come from [`WORKFLOW.md`](../WORKFLOW.md): `BRIEF_APPROVED`, `PLAN_DRAFT`, `PLAN_APPROVED`, `IMPLEMENTING`, `BLOCKED`, `DONE`. On approvals, implementation start, blockers or verified completion, record `Brief`, `Plan`, `Status` and `Current Task` in the existing Current State / Accepted Next Steps sections. Never create another state file.
+Planning states shared with `genius-brief-thinking` and `genius-impl-plans`: `BRIEF_APPROVED`, `PLAN_DRAFT`, `PLAN_APPROVED`, `IMPLEMENTING`, `BLOCKED`, `DONE`. On approvals, implementation start, blockers or verified completion, record `Brief`, `Plan`, `Status` and `Current Task` in the existing Current State / Accepted Next Steps sections. Never create another state file.
 
 ## Output
 
@@ -64,8 +63,6 @@ Planning states come from [`WORKFLOW.md`](../WORKFLOW.md): `BRIEF_APPROVED`, `PL
 
 ## Resource Map
 
-- `scripts/weplaning-read.cjs`, `scripts/weplaning-write.cjs`, `scripts/init-memory.cjs`, `scripts/check-memory.cjs`: the commands above.
 - `scripts/repair-memory.cjs`, `scripts/archive-changes.cjs`, `scripts/weplaning-find.cjs`, `scripts/check-dirty.cjs`: repair, ledger archiving, full-history search, dirty-file check; usage in `references/reference.md`.
 - `scripts/weplaning-utils.cjs`: shared helpers for all scripts.
-- `references/reference.md`: full CLI, schema and pitfalls.
 - `evals/evals.json`: trigger and behavior checks.
