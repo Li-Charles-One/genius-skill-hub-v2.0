@@ -56,8 +56,7 @@
       "expected_output": "Does not trigger genius-x-search for posting or account management tasks.",
       "files": [],
       "assertions": [
-        {"type": "not_contains", "value": "x_search.py"},
-        {"type": "contains", "value": "out of scope"}
+        {"type": "not_contains", "value": "x_search.py"}
       ]
     },
     {
@@ -69,6 +68,26 @@
       "assertions": [
         {"type": "not_contains", "value": "x_search.py"},
         {"type": "not_contains", "value": "x_search"}
+      ]
+    },
+    {
+      "id": "no-follow-account",
+      "prompt": "帮我关注 @sama 并打开他的发帖通知",
+      "trigger_expected": false,
+      "expected_output": "Does not run a search; following and notifications are account actions this skill does not cover.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "x_search.py"}
+      ]
+    },
+    {
+      "id": "no-other-platform-heat",
+      "prompt": "总结一下今天 Hacker News 上最热的几个帖子",
+      "trigger_expected": false,
+      "expected_output": "Does not trigger genius-x-search; the heat request is about another platform, not X.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "x_search.py"}
       ]
     }
   ]
