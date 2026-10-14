@@ -1,6 +1,6 @@
 # Routing
 
-Use this table to choose which official embedded skill and `lark-cli` domain to inspect. Embedded skills change between CLI versions; if a named skill is missing, run `lark-cli skills list` and pick the closest match by description (for example, `lark-meeting` needs `lark-cli` 1.0.89+; older versions split it into `lark-vc`, `lark-minutes`, `lark-note`).
+Use this table to choose which official embedded skill and `lark-cli` domain to inspect. Embedded skills change between CLI versions; if a named skill is missing, run `lark-cli skills list` and pick the closest match by description (for example, `lark-meeting` needs `lark-cli` 1.0.89+; older versions split it into `lark-vc`, `lark-minutes`, `lark-note`; in 1.0.98 those plus `lark-vc-agent` remain only as aliases that redirect to `lark-meeting`).
 
 | User intent | Read official skill | CLI domain |
 | --- | --- | --- |
@@ -13,13 +13,13 @@ Use this table to choose which official embedded skill and `lark-cli` domain to 
 | Sheets / spreadsheet cells, worksheets, formulas, charts, filters, pivots, financial modeling (DCF, 3-statement) | `lark-sheets` | `sheets` |
 | Slides / presentations, pages, slide content | `lark-slides` | `slides` |
 | Whiteboard content, export image, edit board nodes | `lark-whiteboard` | `whiteboard` |
-| IM messages, groups, chat search, reactions, interactive cards, urgent messages | `lark-im` | `im` |
+| IM messages, groups, chat search, reactions, interactive cards, urgent messages, feed pins, card callbacks | `lark-im` | `im` |
 | Mail, drafts, send/reply/forward, mailbox search, folders, labels | `lark-mail` | `mail` |
 | Calendar agenda, events, attendees, free/busy, meeting rooms | `lark-calendar` | `calendar` |
-| Tasks, task lists, subtasks, assignment, reminders, task attachments | `lark-task` | `task` |
-| Contacts, user lookup by name/email/open_id, profile details | `lark-contact` | `contact` |
+| Tasks, task lists, subtasks, assignment, reminders, task attachments, task agents (register, homepage data, task records) | `lark-task` | `task` |
+| Contacts, user lookup by name/email/open_id, profile details, search visible bots / agents | `lark-contact` | `contact` |
 | Approval tasks, instances, approve/reject/transfer/cancel/CC | `lark-approval` | `approval` |
-| Video meetings, meeting records, summaries, minutes (妙记), notes, transcripts, live meeting participation & Q&A | `lark-meeting` | `vc`, `minutes`, `note` |
+| Video meetings, meeting records, summaries, minutes (妙记), notes, transcripts, live meeting participation & Q&A (also `lark-vc`, `lark-vc-agent`, `lark-minutes`, `lark-note` aliases) | `lark-meeting` | `vc`, `minutes`, `note` |
 | OKR objectives, key results, alignments, progress | `lark-okr` | `okr` |
 | Personal attendance check-in records | `lark-attendance` | `attendance` |
 | Spark/Miaoda apps, full-stack local/cloud dev, interactive prototype / mockup / deck, deploy, monitoring | `lark-apps` | `apps` |
