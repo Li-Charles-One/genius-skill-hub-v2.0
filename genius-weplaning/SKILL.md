@@ -1,7 +1,7 @@
 ---
 name: genius-weplaning
 metadata:
-  version: "3.6.1"
+  version: "3.6.2"
 description: "维护 .agent-memory 中的 WePlaning 3.0 项目记忆：读取状态快照、追加变更账本、推进里程碑与执行记忆校验修缮。不要用于普通聊天总结或临时一次性代码修改。"
 ---
 
@@ -55,6 +55,7 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 - Accepted Next Steps holds accepted actions: `none` / `无待执行事项` when nothing is pending, `unknown` when undecided; keep conditional triggers. Start a step only the user can do with `【待用户…】` or `[user]`; handoff skips it. Durable guidance belongs in Current Understanding.
 - One fact per item: concrete paths, decisions, verification method/time/result, blockers, exact next step.
 - CURRENT is the project's index, not a copy: keep the goal, routing (which skill or doc owns what), cross-cutting rules and facts with no other home. A fact a skill, README or the code already records gets a pointer, never a copy; when a fact moves there, drop it from CURRENT.
+- Where a new fact goes: ask "would someone maintaining this a year from now need it?" Yes → the skill, doc or code that owns that area (config, rules, gotchas, how-to). No, it only says what happened (a change, a measurement, a verification) → the ledger via `--changed` / `--verification`. Only facts with no other home go into CURRENT.
 - Never store secrets, tokens, passwords, cookies or private credentials.
 
 ## Workflow Handoff
