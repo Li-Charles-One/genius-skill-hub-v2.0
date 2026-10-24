@@ -1,0 +1,96 @@
+{
+  "skill_name": "genius-code-motion",
+  "evals": [
+    {
+      "id": "new-explainer-from-photos",
+      "prompt": "帮我用代码做一个空气净化器内部结构的拆解科普动画，照片在 photos/ 里，口播稿在 vo.txt。",
+      "trigger_expected": true,
+      "expected_output": "先读照片列出结构清单（部件、数量、排布、尺寸）并渲一张模型静帧交给用户确认；建模确认前不出分镜，分镜确认前不做动画。",
+      "files": ["SKILL.md", "references/look-dev.md", "references/storyboard.md"],
+      "assertions": [
+        {"type": "contains", "value": "建模确认"},
+        {"type": "contains", "value": "分镜"}
+      ]
+    },
+    {
+      "id": "storyboard-after-model-confirm",
+      "prompt": "结构没问题了，按这 5 句口播出一版分镜，口播太短讲不清的话你说。",
+      "trigger_expected": true,
+      "expected_output": "给出包含时长、口播、要讲明白什么、画面四列的分镜表；按中文每秒 4–5 字估时长；需要加长时作为选项提出，新增口播标为草稿。",
+      "files": ["SKILL.md", "references/storyboard.md"],
+      "assertions": [
+        {"type": "contains", "value": "要讲明白什么"}
+      ]
+    },
+    {
+      "id": "black-3d-layer",
+      "prompt": "Remotion 里用 three.js 渲染，3D 那层全黑，只有文字叠加层正常，怎么回事？",
+      "trigger_expected": true,
+      "expected_output": "先关掉后期确认 3D 能出图；若是 @react-three/postprocessing 的 EffectComposer 导致，改为 postprocessing 手动管线，并补 ToneMappingEffect、设 NoToneMapping。",
+      "files": ["SKILL.md", "references/postprocessing.md", "references/review-loop.md"],
+      "assertions": [
+        {"type": "contains", "value": "ToneMappingEffect"}
+      ]
+    },
+    {
+      "id": "parts-vanish-when-zooming-out",
+      "prompt": "镜头一拉远，灯珠的发光面就不见了，近的时候是好的。",
+      "trigger_expected": true,
+      "expected_output": "判断为深度精度问题：近裁剪面随拍摄距离变化，层间留足间距，加 polygonOffset；不先怀疑景深。",
+      "files": ["SKILL.md", "references/review-loop.md"],
+      "assertions": [
+        {"type": "contains", "value": "polygonOffset"}
+      ]
+    },
+    {
+      "id": "quality-threejs-only",
+      "prompt": "这条产品动画质感不够，我不想装 Blender，只用 three.js 怎么提升？",
+      "trigger_expected": true,
+      "expected_output": "按质感升级阶梯从环境光（RoomEnvironment）开始，依次 AO、真折射、材质细节、运动模糊、超采样调色，路径追踪只用于关键镜头；说明这些手法需先单镜试。",
+      "files": ["SKILL.md", "references/look-dev.md"],
+      "assertions": [
+        {"type": "contains", "value": "RoomEnvironment"}
+      ]
+    },
+    {
+      "id": "ai-video-generation",
+      "prompt": "用即梦帮我生成一段吸顶灯在客厅里亮起来的视频。",
+      "trigger_expected": false,
+      "expected_output": "不使用 genius-code-motion，改用 dreamina-cli。",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "genius-code-motion"}
+      ]
+    },
+    {
+      "id": "edit-live-footage",
+      "prompt": "把这段实拍素材剪短一点，加个淡入淡出，再调一下色。",
+      "trigger_expected": false,
+      "expected_output": "不使用 genius-code-motion：这是实拍剪辑和调色。",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "genius-code-motion"}
+      ]
+    },
+    {
+      "id": "web-ui-animation",
+      "prompt": "给网页的按钮加一个鼠标悬停的弹性动画。",
+      "trigger_expected": false,
+      "expected_output": "不使用 genius-code-motion：这是网页 UI 交互动效。",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "genius-code-motion"}
+      ]
+    },
+    {
+      "id": "blender-render",
+      "prompt": "帮我在 Blender 里用 Cycles 渲一张产品海报。",
+      "trigger_expected": false,
+      "expected_output": "不使用 genius-code-motion：需要外部 DCC 软件。",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "genius-code-motion"}
+      ]
+    }
+  ]
+}

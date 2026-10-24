@@ -1,0 +1,10 @@
+{
+  "name": "code-motion-project",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio",
+    "still": "remotion still Main out/check.png --frame=30",
+    "render": "remotion render Main out/video.mp4 --crf=16"
+  }
+}

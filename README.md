@@ -33,6 +33,7 @@
 |:--|:--|
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
+| [genius-code-motion](./genius-code-motion/) | Code-built 3D product explainer animations (Remotion + Three.js) |
 
 ### Tools
 
@@ -64,6 +65,7 @@ genius-brief-thinking  →  genius-impl-plans  →  implementation  →  genius-
 genius-skill-hub-v2.0/
 ├── genius-brief-thinking/
 ├── genius-design/
+├── genius-code-motion/
 ├── genius-omni/
 ├── genius-skill-creator/
 ├── genius-weplaning/
