@@ -1,0 +1,28 @@
+{
+  "audio": null,
+  "estimated": true,
+  "total": 6.811,
+  "cues": [
+    {
+      "id": "c1",
+      "text": "这是一颗灯珠。",
+      "subtitle": false,
+      "start": 0.5,
+      "end": 1.833
+    },
+    {
+      "id": "c2",
+      "text": "十二颗依次点亮，计数同步。",
+      "subtitle": true,
+      "start": 2.233,
+      "end": 4.678
+    },
+    {
+      "id": "c3",
+      "text": "最后收在全景。",
+      "subtitle": false,
+      "start": 5.078,
+      "end": 6.411
+    }
+  ]
+}

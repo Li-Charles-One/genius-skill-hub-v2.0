@@ -5,9 +5,23 @@ import {ThreeCanvas} from '@remotion/three';
 import {useCurrentFrame} from 'remotion';
 import {applyCam, getCam} from './camera';
 import {PostFX} from './PostFX';
+import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {Product} from './Product';
 import {BEAD, BEADS, FRONT_Z, HERO, beadLevel, litCount} from './state';
 import {HEIGHT, S2, WIDTH, clamp01, keys, lerp, prog, smooth} from './timeline';
+
+// 棚拍环境反射：白色塑料、金属、玻璃类产品建议设 0.2–0.4，质感提升最大。
+// 它会提亮整个画面，开了以后要同时调低主光；要保持暗调 TVC 气氛就设小一点或设 0
+const ENV_INTENSITY = 0;
+const Env: React.FC = () => {
+  const {gl, scene} = useThree();
+  useMemo(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = ENV_INTENSITY;
+  }, [gl, scene]);
+  return null;
+};
 
 const CameraRig: React.FC = () => {
   const f = useCurrentFrame();
@@ -58,6 +72,7 @@ export const Scene: React.FC = () => (
   <ThreeCanvas width={WIDTH} height={HEIGHT}>
     <color attach="background" args={['#030305']} />
     <CameraRig />
+    {ENV_INTENSITY > 0 && <Env />}
     <hemisphereLight args={['#e9eef7', '#2a2420', 0.25]} />
     <KeyLight />
     <SpillLights />

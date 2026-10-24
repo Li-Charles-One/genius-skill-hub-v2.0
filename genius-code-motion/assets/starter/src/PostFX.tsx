@@ -15,20 +15,22 @@ import {
 } from 'postprocessing';
 import {getCam} from './camera';
 import {HEIGHT, S2, WIDTH, lerp, prog, smooth} from './timeline';
+import {OPTS} from './options';
 
 // 手动后期管线：@react-three/postprocessing 的 <EffectComposer> 在 Remotion 逐帧渲染下会输出全黑
 export const PostFX: React.FC = () => {
   const f = useCurrentFrame();
   const {gl, scene, camera} = useThree();
   const fx = useMemo(() => {
-    const composer = new EffectComposer(gl, {frameBufferType: THREE.HalfFloatType, multisampling: 4});
+    // 小样模式：关掉多重采样和景深，换渲染速度
+    const composer = new EffectComposer(gl, {frameBufferType: THREE.HalfFloatType, multisampling: OPTS.draft ? 0 : 4});
     const dof = new DepthOfFieldEffect(camera, {focusDistance: 0.05, focusRange: 0.02, bokehScale: 1, resolutionScale: 1});
     const bloom = new BloomEffect({mipmapBlur: true, luminanceThreshold: 0.95, luminanceSmoothing: 0.2, intensity: 1.1, radius: 0.78});
     // 颗粒默认不透明度是 100%，必须压低
     const noise = new NoiseEffect({premultiply: true});
     noise.blendMode.opacity.value = 0.04;
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new EffectPass(camera, dof));
+    if (!OPTS.draft) composer.addPass(new EffectPass(camera, dof));
     composer.addPass(
       new EffectPass(
         camera,

@@ -1,10 +1,13 @@
 import * as THREE from 'three';
-import {AbsoluteFill, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Audio, staticFile, useCurrentFrame} from 'remotion';
 import {project} from './camera';
 import {Scene} from './Scene';
 import {BEAD, FRONT_Z, HERO, litCount} from './state';
 import {S1, S2, S3, envelope, prog, smooth} from './timeline';
 import {Callout, DIM, INK, MONO, Panel, SANS, Subtitle, rise} from './hud';
+import {OPTS} from './options';
+import {VO} from './vo';
+import {FPS} from './fps';
 
 const heroCorner = new THREE.Vector3(HERO.x + BEAD.w * 0.45, HERO.y + BEAD.h * 0.45, FRONT_Z + BEAD.d);
 
@@ -25,15 +28,26 @@ export const Overlay: React.FC = () => {
           </Panel>
         </AbsoluteFill>
       )}
-      <Subtitle f={f} from={S2.start + 20} to={S3.end} text="字幕：新增口播定稿前先放在这里" />
-      <AbsoluteFill style={{background: '#000', opacity: 1 - smooth(prog(f, 0, 20))}} />
+      {/* 新增口播（vo.txt 里行首带 +）定稿前显示成字幕 */}
+      {OPTS.subtitles &&
+        VO.cues
+          .filter((c) => c.subtitle)
+          .map((c) => <Subtitle key={c.id} f={f} from={Math.round(c.start * FPS)} to={Math.round(c.end * FPS) + 8} text={c.text} />)}
     </AbsoluteFill>
   );
 };
 
+const FadeIn: React.FC = () => {
+  const f = useCurrentFrame();
+  return <AbsoluteFill style={{background: '#000', opacity: 1 - smooth(prog(f, 0, 20))}} />;
+};
+
+// layer = all：完整成片；3d：只出 3D；hud：只出透明叠加层（导出带透明通道的格式）
 export const Video: React.FC = () => (
-  <AbsoluteFill style={{background: '#000'}}>
-    <Scene />
-    <Overlay />
+  <AbsoluteFill style={{background: OPTS.layer === 'hud' ? 'transparent' : '#000'}}>
+    {OPTS.layer !== 'hud' && <Scene />}
+    {OPTS.layer !== '3d' && <Overlay />}
+    {OPTS.layer !== 'hud' && <FadeIn />}
+    {OPTS.layer === 'all' && VO.audio && <Audio src={staticFile(VO.audio)} />}
   </AbsoluteFill>
 );
