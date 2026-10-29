@@ -30,3 +30,35 @@ export const keys = (f: number, ks: [number, number][], ease: (t: number) => num
   }
   return ks[ks.length - 1][1];
 };
+// 连续运镜用：平滑穿过所有关键帧（单调三次 Hermite，不过冲）。中间点速度连续、不减速到 0，只在首尾起步/停住。
+// keys() 是每段各自慢起慢停，用在一段连续运镜上会走走停停
+export const spline = (f: number, ks: [number, number][]) => {
+  const n = ks.length;
+  if (f <= ks[0][0]) return ks[0][1];
+  if (f >= ks[n - 1][0]) return ks[n - 1][1];
+  const d = ks.slice(1).map(([x, y], i) => (y - ks[i][1]) / (x - ks[i][0]));
+  const m = ks.map((_, i) => (i === 0 || i === n - 1 ? 0 : d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2));
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) {
+      m[i] = m[i + 1] = 0;
+      continue;
+    }
+    const a = m[i] / d[i];
+    const b = m[i + 1] / d[i];
+    const s = a * a + b * b;
+    if (s > 9) {
+      const t = 3 / Math.sqrt(s);
+      m[i] = t * a * d[i];
+      m[i + 1] = t * b * d[i];
+    }
+  }
+  let i = 0;
+  while (f > ks[i + 1][0]) i++;
+  const [x0, y0] = ks[i];
+  const [x1, y1] = ks[i + 1];
+  const h = x1 - x0;
+  const t = (f - x0) / h;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * h * m[i] + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * h * m[i + 1];
+};
