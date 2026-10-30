@@ -1,0 +1,126 @@
+{
+  "skill_name": "genius-motion-graphics",
+  "evals": [
+    {
+      "id": "title-from-reference",
+      "prompt": "参考这张截图的效果，帮我做 2K 16:9 透明通道的花字，文字是「送货上门 装好再走」。",
+      "trigger_expected": true,
+      "expected_output": "在公用工作台 公用2D动画工作台 里按项目建文件夹注册合成，不为小件新建工程；先用 stills.py 出关键帧拼图给用户确认，不直接出成片；说明本机缺参考字体时用思源黑体 Heavy 斜切近似。",
+      "files": [
+        "SKILL.md",
+        "references/workbench.md",
+        "references/title-recipes.md",
+        "references/delivery.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "关键帧"
+        },
+        {
+          "type": "contains",
+          "value": "公用2D动画工作台"
+        }
+      ]
+    },
+    {
+      "id": "reuse-title-one-line",
+      "prompt": "这个也做个花字，和刚才的字体一样，一行就行：规模化的集中采购模式，直接用 H.265 带通道出。",
+      "trigger_expected": true,
+      "expected_output": "复用 shared 里的花字组件，在项目文件夹加传 props 的单行合成并按字数调字号；用 deliver.py 预乘 Alpha 转 H.265 带透明并校验，关键帧一并发出；回归旧合成定版帧未变。",
+      "files": [
+        "SKILL.md",
+        "references/title-recipes.md",
+        "references/delivery.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "props"
+        },
+        {
+          "type": "contains",
+          "value": "预乘"
+        }
+      ]
+    },
+    {
+      "id": "alpha-red-blocks",
+      "prompt": "为什么我在 Mac 上打开透明的 mov，光晕变成一大块实心红色？",
+      "trigger_expected": true,
+      "expected_output": "判断为转 H.265 前未预乘 Alpha，而不是压缩画质问题；用 deliver.py 重转，用 check_alpha.swift 解帧叠灰底与关键帧对比后再交付，并请用户重新打开确认。",
+      "files": [
+        "SKILL.md",
+        "references/delivery.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "预乘"
+        }
+      ]
+    },
+    {
+      "id": "selection-table",
+      "prompt": "按这张截图做一张光通量选型表动画，黑底，推荐那行要突出一下。",
+      "trigger_expected": true,
+      "expected_output": "数据写成常量，表格按行依次入场；推荐行用细线框加「推荐」标签，不用红色；先出关键帧确认。",
+      "files": [
+        "SKILL.md",
+        "references/table-recipes.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "推荐"
+        },
+        {
+          "type": "not_contains",
+          "value": "推荐行用红色"
+        }
+      ]
+    },
+    {
+      "id": "big-project-own-repo",
+      "prompt": "这个新客户的片子要做二十多个信息图镜头，后面还要反复改好几轮，你看放哪做？",
+      "trigger_expected": true,
+      "expected_output": "判断属于重要项目，建议单独建独立工程：复制工作台配置，npm ci 走缓存，复制 node_modules/.remotion 免得重下 Chrome；不塞进公用工作台。",
+      "files": [
+        "SKILL.md",
+        "references/workbench.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "独立工程"
+        }
+      ]
+    },
+    {
+      "id": "near-miss-3d",
+      "prompt": "帮我用代码做一个吸顶灯内部结构的 3D 拆解科普动画，镜头要推进到灯珠。",
+      "trigger_expected": false,
+      "expected_output": "不使用本 skill，改用 genius-code-motion。",
+      "files": [],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "genius-motion-graphics"
+        }
+      ]
+    },
+    {
+      "id": "near-miss-ai-video",
+      "prompt": "用即梦帮我生成一段浴霸安装的视频。",
+      "trigger_expected": false,
+      "expected_output": "不使用本 skill，改用 dreamina-cli。",
+      "files": [],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "genius-motion-graphics"
+        }
+      ]
+    }
+  ]
+}
