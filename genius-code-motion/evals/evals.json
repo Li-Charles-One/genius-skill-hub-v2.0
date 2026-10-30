@@ -23,6 +23,22 @@
       ]
     },
     {
+      "id": "daily-project-in-workbench",
+      "prompt": "做一条 10 秒左右的小风扇内部结构演示，就一个镜头，照片在 fan/ 里。",
+      "trigger_expected": true,
+      "expected_output": "判断为日常项目，在公用3D动画工作台根目录用 new_project.mjs 新建 src/<项目>/，不另起工程；先列结构清单并渲模型静帧给用户确认。",
+      "files": [
+        "SKILL.md",
+        "references/architecture.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "new_project.mjs"
+        }
+      ]
+    },
+    {
       "id": "storyboard-after-model-confirm",
       "prompt": "结构没问题了，按这 5 句口播出一版分镜，口播太短讲不清的话你说。",
       "trigger_expected": true,
@@ -42,7 +58,7 @@
       "id": "deliver-layers",
       "prompt": "剪辑那边想要一个不带字幕的版本，再要一个只有标注的透明层。",
       "trigger_expected": true,
-      "expected_output": "用 render:nosub 出无字幕版，用 render:hud 出 ProRes 4444 透明叠加层，并用 ffprobe 确认像素格式带 alpha。",
+      "expected_output": "用 render:nosub 出无字幕版，用 render:hud 出 H.265 带 Alpha 的透明叠加层，并用 check_alpha.swift 确认带透明通道。",
       "files": [
         "SKILL.md",
         "references/architecture.md"
@@ -50,7 +66,7 @@
       "assertions": [
         {
           "type": "contains",
-          "value": "ProRes"
+          "value": "H.265"
         }
       ]
     },

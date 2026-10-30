@@ -5,10 +5,10 @@
   "scripts": {
     "studio": "remotion studio",
     "still": "remotion still Main out/check.png --frame=30",
-    "draft": "remotion render Main out/draft.mp4 --scale=0.5 --props=props/draft.json",
-    "render": "remotion render Main out/video.mp4 --crf=16",
-    "render:nosub": "remotion render Main out/video-nosub.mp4 --crf=16 --props=props/nosub.json",
-    "render:3d": "remotion render Main out/layer-3d.mp4 --crf=16 --props=props/3d.json",
-    "render:hud": "remotion render Main out/layer-hud.mov --codec=prores --prores-profile=4444 --image-format=png --pixel-format=yuva444p10le --props=props/hud.json"
+    "draft": "remotion render Main out/.draft.mp4 --codec=h265 --crf=24 --scale=0.5 --props=props/draft.json && ffmpeg -y -loglevel error -i out/.draft.mp4 -c copy -tag:v hvc1 -movflags +faststart out/draft.mp4 && node -e \"require('fs').rmSync('out/.draft.mp4')\"",
+    "render": "remotion render Main out/.video.mp4 --codec=h265 --crf=16 && ffmpeg -y -loglevel error -i out/.video.mp4 -c copy -tag:v hvc1 -movflags +faststart out/video.mp4 && node -e \"require('fs').rmSync('out/.video.mp4')\"",
+    "render:nosub": "remotion render Main out/.video-nosub.mp4 --codec=h265 --crf=16 --props=props/nosub.json && ffmpeg -y -loglevel error -i out/.video-nosub.mp4 -c copy -tag:v hvc1 -movflags +faststart out/video-nosub.mp4 && node -e \"require('fs').rmSync('out/.video-nosub.mp4')\"",
+    "render:3d": "remotion render Main out/.layer-3d.mp4 --codec=h265 --crf=16 --props=props/3d.json && ffmpeg -y -loglevel error -i out/.layer-3d.mp4 -c copy -tag:v hvc1 -movflags +faststart out/layer-3d.mp4 && node -e \"require('fs').rmSync('out/.layer-3d.mp4')\"",
+    "render:hud": "remotion render Main out/.layer-hud.mov --codec=prores --prores-profile=4444 --image-format=png --pixel-format=yuva444p10le --props=props/hud.json && ffmpeg -y -loglevel error -i out/.layer-hud.mov -vf format=rgba,premultiply=inplace=1,format=bgra -c:v hevc_videotoolbox -alpha_quality 0.9 -q:v 70 -tag:v hvc1 out/layer-hud.mov && node -e \"require('fs').rmSync('out/.layer-hud.mov')\""
   }
 }

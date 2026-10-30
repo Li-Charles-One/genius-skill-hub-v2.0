@@ -4,6 +4,7 @@
 //      node vo_timeline.mjs --clips <音频目录> --text <口播.txt> --audio public/vo.wav --out src/vo.json [--gap 0.4] [--lead 0.5]
 //   2) 只有文字：按字数估时长
 //      node vo_timeline.mjs --text <口播.txt> --out src/vo.json [--cps 4.5] [--gap 0.4] [--lead 0.5]
+// 公用3D动画工作台里按项目放：--text src/<项目>/vo.txt --audio public/<项目>/vo.wav --out src/<项目>/vo.json
 // 口播.txt 每行一句；行首写「+」表示新增口播（还没录音，要显示成字幕），例如：+ 驱动把交流电变成直流电
 import fs from 'node:fs';
 import path from 'node:path';
@@ -68,7 +69,9 @@ if (a.clips) {
   const outAudio = path.resolve(a.audio);
   fs.mkdirSync(path.dirname(outAudio), {recursive: true});
   run('ffmpeg', ['-v', 'error', '-y', ...inputs, '-filter_complex', [...chains, concat].join(';'), '-map', '[out]', outAudio]);
-  audio = path.basename(outAudio);
+  // staticFile() 认的是相对 public/ 的路径；公用工作台里配音在 public/<项目>/ 下
+  const rel = path.relative(path.resolve('public'), outAudio).split(path.sep).join('/');
+  audio = rel.startsWith('..') ? path.basename(outAudio) : rel;
   console.log(`audio → ${outAudio}`);
 } else {
   // 按字数估：只数汉字、字母和数字

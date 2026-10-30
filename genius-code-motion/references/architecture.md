@@ -1,6 +1,44 @@
 # 项目架构与渲染
 
-## 安装
+## 放哪里：公用3D动画工作台还是独立工程
+
+| 情况 | 放哪里 |
+|---|---|
+| 日常项目：一两条短片、单个原理演示、快速出图 | 公用3D动画工作台，按项目建文件夹 |
+| 大项目：镜头多、多个版本、要长期迭代、有自己的审片记录 | 独立工程（复制 `assets/starter/`） |
+| 已有独立工程的项目 | 在它自己的工程里做 |
+
+拿不准先放工作台；项目长大了再把文件夹搬出去成独立工程。
+
+### 公用3D动画工作台
+
+路径：`~/Documents/Genius_Sync_Projects/ChatWrok/公用3D动画工作台`。依赖和无头 Chrome 已装好，不要为日常项目另起工程。
+
+```text
+src/Root.tsx          每个项目挂一行（new_project.mjs 自动加）
+src/<项目>/           起步模板的 src 全套 + vo.txt + props/；入口 index.tsx 包在 <Folder name="<项目>"> 里
+src/demo/             起步模板原样，用来确认 WebGL 出图、改模板时对照
+public/<项目>/        该项目的配音 vo.wav
+out/<项目>/           该项目的成片和关键帧
+```
+
+- 新建：在工作台根目录运行 `node <skill>/scripts/new_project.mjs <项目名>`（小写英文和连字符），合成 ID 是 `<项目名>-main`。
+- 各项目的模型、镜头、配色互不引用；确实要跨项目复用的，提到 `src/shared/` 再引用，改 `shared/` 后回归所有用到它的项目。
+- 配音时间点：`node <skill>/scripts/vo_timeline.mjs --text src/<项目>/vo.txt [--clips <目录> --audio public/<项目>/vo.wav] --out src/<项目>/vo.json`。
+- 关键帧：`node <skill>/scripts/stills.mjs --comp <项目>-main --out out/<项目>/stills --frames ... [--props src/<项目>/props/x.json]`。
+- 出片没有每个项目单独的 npm 命令，统一用 genius-motion-graphics skill 的 `deliver.py`（会做 H.265 转码、预乘、`hvc1` 标签和系统解码校验），加 `--props` 传渲染参数：
+
+```bash
+python <motion-graphics skill>/scripts/deliver.py --comp <项目>-main --out out/<项目>/draft.mp4 --opaque --scale 0.5 --crf 24 --props src/<项目>/props/draft.json
+python <motion-graphics skill>/scripts/deliver.py --comp <项目>-main --out out/<项目>/video.mp4 --opaque --crf 16
+python <motion-graphics skill>/scripts/deliver.py --comp <项目>-main --out out/<项目>/video-nosub.mp4 --opaque --crf 16 --props src/<项目>/props/nosub.json
+python <motion-graphics skill>/scripts/deliver.py --comp <项目>-main --out out/<项目>/layer-3d.mp4 --opaque --crf 16 --props src/<项目>/props/3d.json
+python <motion-graphics skill>/scripts/deliver.py --comp <项目>-main --out out/<项目>/layer-hud-hevc.mov --props src/<项目>/props/hud.json
+```
+
+下面「安装」「渲染与交付」里的 npm 命令适用于独立工程。
+
+## 安装（独立工程）
 
 复制 `assets/starter/` 到新目录，在目录里装依赖。Remotion 的几个包版本必须一致，一条命令一起装最省事。
 
@@ -113,18 +151,22 @@ export const useStateFrame = () => useContext(CutContext).state(useCurrentFrame(
 
 ## 渲染与交付
 
-渲染参数通过 `--props=<json 文件>` 传入，代码里由 `options.ts` 读取。起步模板的 `package.json` 已经写好了这几条命令：
+渲染参数通过 `--props=<json 文件>` 传入，代码里由 `options.ts` 读取。**所有出片默认 H.265。** 起步模板的 `package.json` 已经写好了这几条命令，每条都是先渲到 `out/` 下以点开头的中间文件，转好后删掉：
 
 | 命令 | 产出 | 用途 |
 |---|---|---|
-| `npm run draft` | 半分辨率小样，关掉景深和多重采样，速度明显更快 | 审节奏和内容 |
-| `npm run render` | 完整成片，带配音和字幕 | 正式交付 |
+| `npm run draft` | 半分辨率小样（H.265 MP4），关掉景深和多重采样，速度明显更快 | 审节奏和内容 |
+| `npm run render` | 完整成片（H.265 MP4），带配音和字幕 | 正式交付 |
 | `npm run render:nosub` | 不带字幕的成片 | 给剪辑自己加字幕 |
 | `npm run render:3d` | 只有 3D 画面，不带标注和配音 | 剪辑自己合成 |
-| `npm run render:hud` | 只有标注和字幕的透明叠加层，ProRes 4444 带透明通道 | 叠在剪辑自己的画面上 |
+| `npm run render:hud` | 只有标注和字幕的透明叠加层（H.265 带 Alpha 的 MOV） | 叠在剪辑自己的画面上 |
 
 - 先出小样给用户审，节奏和内容定了再出正式成片。
-- 整片渲染放后台跑；渲完用 `ffprobe` 核对时长、分辨率、帧数，以及有没有音轨、透明层的像素格式是不是带 alpha（`yuva` 开头）。
+- H.265 的两个坑，模板命令已处理，手写命令时别漏：
+  - Remotion `--codec=h265` 出的标签是 `hev1`，QuickTime 和预览打不开；要 `ffmpeg -c copy -tag:v hvc1` 改标签。
+  - 透明层不能直接出 H.265：先渲 ProRes 4444，**预乘 Alpha** 后再用 macOS 的 `hevc_videotoolbox` 编码；不预乘的话，Mac 上半透明的光晕会变成实心色块。`hevc_videotoolbox` 只在 macOS 上有，其他系统或用户点名时改交 ProRes 4444。
+- 整片渲染放后台跑；渲完用 `ffprobe` 核对时长、分辨率、帧数、有没有音轨。ffprobe 会把 H.265 透明层报成 `yuv420p`（读不到透明层），透明要用 genius-motion-graphics 的 `scripts/check_alpha.swift` 检查：输出 `ContainsAlphaChannel: 1`，再解一帧叠灰底看光晕颜色正常。
+- H.265 带透明在 Windows 剪辑软件上多半显示黑底；成片要交给 Windows 剪辑时先提醒用户，按需改交 ProRes 4444。
 - 要交 4K：渲染时加 `--scale=2`，见 `look-dev.md` 的质感升级阶梯。
 - 要交 2K（2560×1440）：从 1080p 放大 4/3 倍，写成 `--scale=1.3333333333333333`（写满 16 位）。`--scale` 乘出来的宽高必须是整数，少写几位会得到 1439.9999 之类的高度，渲完所有帧后在合成视频这一步报错、白跑一遍。其他非整数倍同理，先用 `node -e` 算一下宽高是不是整数。
 - 改帧率、尺寸在 `fps.ts` 里改；改时长改 `timeline.ts` 或重新生成 `vo.json`。

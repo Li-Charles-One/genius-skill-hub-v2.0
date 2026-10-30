@@ -2,7 +2,7 @@
 name: genius-code-motion
 description: "用代码做 3D 产品科普 / TVC 质感动画：Remotion 逐帧渲染 + Three.js（React Three Fiber）建模运镜 + postprocessing 辉光景深 + HTML/SVG 标注字幕，配音锁节奏，输出 MP4 和分层素材。适用于任何产品（灯具、家电、数码、电池、净化器等）的原理动画、拆解爆炸图、内部结构科普、3D 产品展示片、带数据标注的动效，或用户明确要「用代码做动画 / 不用 AE、C4D、Blender」时；也用于这类 Remotion + Three.js 项目的改镜头、对配音、提质感、出小样或分层、排查黑屏或部件消失。不要用于 AI 生图生视频（用 dreamina-cli）、剪辑或调色实拍素材、网页 UI 交互动效、纯 2D 字幕条或 PPT 动画、需要安装 Blender/C4D 等外部 DCC 软件的流程。"
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 # Genius Code Motion
@@ -27,6 +27,7 @@ metadata:
 
 ## 硬规则
 
+- **日常项目在公用3D动画工作台做，按项目分文件夹；大项目单独建工程。** 判断标准和目录约定见 `references/architecture.md` 的「放哪里」。
 - **先要齐资料。** 开工时按 `references/kickoff.md` 给用户一张开工清单，逐项标出已有、缺、不需要；缺的项说清楚影响哪些镜头。影响建模或核心卖点的缺项，停下来等资料。
 - **两道确认关，过了才做动画。**
   1. **建模确认**：先列出从照片或资料读出的结构（部件、数量、排布、尺寸），再渲一张模型静帧，一起给用户确认。
@@ -43,14 +44,14 @@ metadata:
 ## 工作流
 
 1. **开工清单**：读 `references/kickoff.md`，一次要齐资料，并交叉核对有没有矛盾。
-2. **搭项目**：复制 `assets/starter/` 到新目录，按 `references/architecture.md` 安装依赖，先渲一帧确认 WebGL 出图。
+2. **搭项目**：日常项目在公用3D动画工作台根目录运行 `node <skill>/scripts/new_project.mjs <项目名>`；大项目复制 `assets/starter/` 到新目录单独建工程，按 `references/architecture.md` 安装依赖。先渲一帧确认 WebGL 出图。
 3. **建模**：读 `references/look-dev.md`。按实物资料还原结构、数量和排布，单位用米；贴图用 Canvas 程序化绘制。列出结构清单，渲一张模型静帧。**交用户确认。**
-4. **配音时间点**：读 `references/audio-sync.md`，用 `scripts/vo_timeline.mjs` 生成 `src/vo.json`。有配音用真实时长，没有就按字数估。
+4. **配音时间点**：读 `references/audio-sync.md`，用 `scripts/vo_timeline.mjs` 生成 `vo.json`（工作台里在 `src/<项目>/`）。有配音用真实时长，没有就按字数估。
 5. **静帧分镜**：读 `references/storyboard.md`。每镜只讲一件事，科普点用图形讲。只摆关键姿态，用 `scripts/stills.mjs --html` 渲出图册，和分镜表一起**交用户确认**。
 6. **动画与后期**：补全运镜、转场、动画；后期按 `references/postprocessing.md` 手动搭管线。
 7. **抽帧检查**：`scripts/stills.mjs` 批量渲关键帧并拼对照图，按 `references/review-loop.md` 的清单逐镜看。
-8. **小样审片**：`npm run draft` 出半分辨率小样，带配音给用户审节奏和内容。
-9. **成片与分层交付**：`npm run render`，再按用户需要出无字幕版、纯 3D 版、透明叠加层。渲完用 ffprobe 核对，再抽一张对照图确认。
+8. **小样审片**：出半分辨率小样（独立工程 `npm run draft`，工作台命令见 `references/architecture.md`），带配音给用户审节奏和内容。
+9. **成片与分层交付**：出成片（独立工程 `npm run render`，工作台命令见 `references/architecture.md`），再按用户需要出无字幕版、纯 3D 版、透明叠加层，全部默认 H.265（透明层是 H.265 带 Alpha，模板命令已做预乘和 `hvc1` 标签）。渲完用 ffprobe 核对，再抽一张对照图确认。
 
 ## Gotchas
 
@@ -84,6 +85,7 @@ metadata:
 - `references/postprocessing.md`：手动后期管线、景深、辉光、色调映射、颗粒。
 - `references/review-loop.md`：批量抽帧、逐镜检查清单、排查顺序、流畅度检查（逐帧画面差、逐帧相机像素位移）、给用户审片、出片核对。
 - `scripts/stills.mjs`：在项目根目录运行，批量渲关键帧，可选拼对照图（`--sheet`）、出图册页（`--html`）、带渲染参数（`--props`）。
+- `scripts/new_project.mjs`：在公用3D动画工作台根目录运行，把起步模板复制成 `src/<项目>/`，生成带 `<Folder>` 的入口并挂到 `src/Root.tsx`，合成 ID 为 `<项目>-main`。
 - `scripts/vo_timeline.mjs`：由按句的配音音频或口播文本生成 `src/vo.json`，有音频时同时拼出 `public/vo.wav`。
 - `assets/starter/`：最小可运行项目，包含配音时间点、小样和分层渲染命令。文件：`assets/starter/package.json`、`assets/starter/remotion.config.ts`、`assets/starter/tsconfig.json`、`assets/starter/vo.txt`、`assets/starter/props/draft.json`、`assets/starter/props/nosub.json`、`assets/starter/props/3d.json`、`assets/starter/props/hud.json`、`assets/starter/src/index.ts`、`assets/starter/src/Root.tsx`、`assets/starter/src/fps.ts`、`assets/starter/src/vo.json`、`assets/starter/src/vo.ts`、`assets/starter/src/timeline.ts`、`assets/starter/src/options.ts`、`assets/starter/src/state.ts`、`assets/starter/src/camera.ts`、`assets/starter/src/Scene.tsx`、`assets/starter/src/PostFX.tsx`、`assets/starter/src/Product.tsx`、`assets/starter/src/Overlay.tsx`、`assets/starter/src/hud.tsx`。
 - `evals/evals.json`：触发和行为测试用例。

@@ -14,7 +14,7 @@
 
 ## 生成时间点：`scripts/vo_timeline.mjs`
 
-在项目根目录运行，输出 `src/vo.json`。
+在项目根目录运行，输出 `src/vo.json`。公用3D动画工作台里把 `vo.txt`、`src/vo.json`、`public/vo.wav` 换成 `src/<项目>/vo.txt`、`src/<项目>/vo.json`、`public/<项目>/vo.wav`。
 
 **有配音，每句一个音频文件**（推荐让配音员或 TTS 按句交付）：
 
