@@ -2,7 +2,7 @@
 name: genius-motion-graphics
 description: "用 Remotion 写代码做 2D 视频包装：花字（标题字、口播关键词、科技光效字）、表格 / 选型表 / 参数对比表、柱状图 / 数据信息图、带透明窗口的对比叠加层，16:9 2K 或 4K，成片默认 H.265（透明的交 H.265 带 Alpha 的 MOV）。用户发参考截图说「照这个效果做个花字」「做个表格动画」「出个透明通道的字幕 / 信息图」「把这句话做成动效字」，或要改已有花字、表格的文字、颜色、节奏、重新出片、转透明格式、排查透明视频发黑发红色块时使用。不要用于 3D 产品原理动画和三维建模（用 genius-code-motion）、AI 生图生视频（用 dreamina-cli）、剪辑或调色实拍素材、品牌 VI 规范（用 genius-design）、PPT 文件、网页 UI 交互动效。"
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Genius Motion Graphics
@@ -14,10 +14,11 @@ metadata:
 | 用户要 | 做法 |
 |---|---|
 | 照参考图做花字 | `references/title-recipes.md`：拆参考图的层次，再按配方组合 |
-| 已有花字换文字、改行数、改字号 | 复用 `src/shared/` 的组件，在项目文件夹里加一个传 props 的合成，不复制组件 |
-| 表格、选型表、参数总览、柱状图 | `references/table-recipes.md` |
+| 已有花字换文字、改行数、改字号 | 复用 `src/shared/` 的组件，在项目文件夹里加一个传 props 的合成，不复制组件；字多就用 `fit` 自动缩字号 |
+| 表格、选型表、参数总览、柱状图、数字跳动 | 先用工作台 `src/shared/` 的公用组件传 props，见 `references/table-recipes.md` |
 | 对比叠加层（中间挖透明窗口放实拍） | `references/table-recipes.md` 的「透明窗口」 |
 | 改颜色、透明度、节奏 | 只改对应常量或 props，改完重出关键帧 |
+| 动效显得平、生硬，或要提升质感 | `references/aesthetics.md`，用工作台 `src/shared/motion.ts` 的工具 |
 | 出成片、换透明格式 | `references/delivery.md` |
 | 透明视频在播放器里发黑、光晕变实心色块 | `references/delivery.md` 的「排查」 |
 
@@ -36,7 +37,7 @@ metadata:
 1. 读 `references/workbench.md`，确认工作台依赖已装好（`node_modules` 存在）。
 2. 看参考图或需求，按 `references/title-recipes.md` 或 `references/table-recipes.md` 拆出层次和动画节奏；有歧义（比如「背景偏红」指光效还是底色）先问一句再动手。
 3. 在 `src/<项目>/` 里写组件或加 props 合成，包在 `<Folder name="<项目>">` 里并在 `src/Root.tsx` 挂上，2560×1440、30fps；要 4K 时渲染加 `--scale 1.5`，不另做一套布局。
-4. 在工作台根目录运行 `python <skill>/scripts/stills.py --comp <ID> --project <项目>`，看拼图自查，再发给用户。
+4. 在工作台根目录运行 `python <skill>/scripts/stills.py --comp <ID> --project <项目>`，按 `references/aesthetics.md` 的「发图前自查」看拼图，再发给用户。
 5. 按反馈修改，每轮重出关键帧。
 6. 确认后运行 `python <skill>/scripts/deliver.py --comp <ID> --out out/<项目>/<名字>-2k-hevc.mov`；自带背景的画面加 `--opaque`、输出 `.mp4`；4K 加 `--scale 1.5`，文件名用 `-4k-`。脚本会渲染、转码、用系统解码校验并删掉中间文件。
 7. 更新工作台 README 的项目清单，按「交付时报告」回复。
@@ -59,6 +60,7 @@ metadata:
 - `references/workbench.md`：公用工作台与独立工程的分界、目录与隔离规矩、新建独立工程、画布与坐标、通用视觉规范。
 - `references/title-recipes.md`：花字的层次拆解、各层配方、入场节奏、单行与多行排版、可调参数。
 - `references/table-recipes.md`：表格、总览、柱状图、透明窗口叠加层的做法和配色禁忌。
+- `references/aesthetics.md`：版式和动效标准（安全区、层级、缓动分档、错峰、回弹、运动模糊、次级动作、出场）和发图前自查清单。
 - `references/delivery.md`：关键帧拼图、格式选择与兼容性、预乘转码、校验、排查。
 - `scripts/stills.py`：批量出关键帧、铺灰底、拼 2×N 对照图；`--scale` 可出 4K 静帧查细节。
 - `scripts/render_stills.mjs`：`stills.py` 调用的渲染部分，一次打包、一个浏览器连续出多帧透明 PNG。

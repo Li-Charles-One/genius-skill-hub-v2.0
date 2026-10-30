@@ -1,6 +1,15 @@
 # 表格与信息图配方
 
-参考实现在工作台的吸顶灯项目文件夹 `src/ceiling-light/`：`GuideTables.tsx`（单表、分组表、三表同屏）、`SpecGrid.tsx`（四列总览）、`LuxCompare.tsx`（读数对比 + 透明窗口）、`MainLightPriceBand.tsx`（柱状图，白底和透明两用）。新做一张表，先找最像的一个照着改。
+**先用工作台 `src/shared/` 里的公用组件，传 props 就能出**，示例合成在 `src/shared/demos.tsx`：
+
+| 组件 | 用途 | 关键 props |
+|---|---|---|
+| `SpecTable` | 选型表、参数表 | `columns`、`widths`、`rows`（`group` 分组、`hot` 推荐行）、`theme` |
+| `BarChart` | 柱状图 | `data`、`unit`、`decimals`、`highlight`、`max`（不填自动取整齐刻度）、`theme` |
+| `WindowOverlay` | 透明窗口叠加层 | `windows`（1920 坐标的 x、y、w、h、label）、`theme` |
+| `CountUp` | 数字跳动，放进任意版式 | `to`、`start`、`dur`、`decimals`、`suffix` |
+
+公用组件满足不了的版式，再参考吸顶灯项目文件夹 `src/ceiling-light/` 的原始实现：`GuideTables.tsx`（单表、分组表、三表同屏）、`SpecGrid.tsx`（四列总览）、`LuxCompare.tsx`（读数对比 + 透明窗口）、`MainLightPriceBand.tsx`（柱状图，白底和透明两用）。新做一张表，先找最像的一个照着改。
 
 ## 数据先行
 
