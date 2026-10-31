@@ -338,7 +338,7 @@ def write_audio(wav_bytes: bytes, out: Path) -> None:
     if out.suffix.lower() == ".wav":
         out.write_bytes(wav_bytes)
         return
-    proc = _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0", str(out)],
+    proc = _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0", "-b:a", "64k", str(out)],
                 600, stdin=wav_bytes)
     if proc.returncode != 0:
         raise VoiceError("UNSUPPORTED_FORMAT", f"ffmpeg could not write {out}: {proc.stderr.decode(errors='replace')[:300]}")

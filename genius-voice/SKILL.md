@@ -35,6 +35,7 @@ python3 "<skill_dir>/scripts/voice.py" tts "<text>" | --text-file F | -  [--voic
 - ASR accepts anything ffmpeg decodes (video too: the audio track is used). Do not transcode or split it yourself; the script cuts at silences into ≤120s segments and re-splits a segment that hits the output limit.
 - Set `--language zh` or `en` when known; it is more accurate than `auto`.
 - TTS splits text into ≤150-char sentence chunks and joins the audio. A leading style tag such as `(温柔)` or `（粤语）` applies to every chunk; inline tags such as `（深呼吸）` stay where they are. `--style` is a natural-language direction (with `--design` it is appended to the description).
+- `--clone` sends the whole reference file, so pass a prepared clip: one speaker, no music or overlapping voices, about 5–15s, cut at pauses (`ffmpeg -ss START -to END -i IN -vn -ac 1 ref.wav`). To clone one person from a multi-speaker recording or video, first find their stretches with genius-omni `audio-transcribe` (timestamps + speaker labels), then cut and clone.
 - Output defaults to `genius-voice-<time>.wav` in the current directory; any other extension (`.mp3`, `.m4a`…) is converted by ffmpeg. TTS prints `{"out": ..., "seconds": ...}`.
 - Run one job at a time.
 
