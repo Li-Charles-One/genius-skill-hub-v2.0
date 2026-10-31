@@ -110,7 +110,7 @@ OPENROUTER_API_STYLE=openai    # gemini | openai (optional; inferred from host/m
 | `{NAME}_MODEL` | yes | model id |
 | `{NAME}_API_STYLE` | no | `gemini` or `openai` |
 
-One-off override without editing `.env`: `--provider <name> --base-url <url> --api-key <key> --model <id>`. Not every OpenAI-compatible gateway handles video/audio; YouTube is only reliable on `gemini` style.
+One-off override without editing `.env`: `--provider <name> --base-url <url> --api-key <key> --model <id>`. `--api-key` leaves the key in shell history and `ps`; prefer `scripts/.env`. Not every OpenAI-compatible gateway handles video/audio; YouTube is only reliable on `gemini` style.
 
 ### Common env
 

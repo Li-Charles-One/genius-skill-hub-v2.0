@@ -9,7 +9,7 @@ metadata:
 
 This skill exists to **analyze images**, **analyze video/audio**, and **OCR**. Nothing else.
 
-Default: CPA `gemini-3.8-flash-high` via native Gemini `generateContent`. Alternative: Xiaomi MiMo `mimo-v2.6-flash`, or any multimodal endpoint configured as a custom provider.
+Default: CPA via native Gemini `generateContent`. Alternative: Xiaomi MiMo, or any multimodal endpoint configured as a custom provider. `--check` shows the model each provider will actually use.
 
 Config, providers, proxy and verification: `references/usage.md`. Trigger checks: `evals/evals.json`.
 
@@ -43,7 +43,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 
 `<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`, plus `pdftoppm` only for MiMo or page-mode PDF. No Python packages to install. Keys live in `scripts/.env`, never in the package.
 
-- Before running, confirm the file or URL exists and note the video length or PDF page count.
+- Note the video length or PDF page count before running. A missing local file fails with `INPUT_NOT_FOUND`; URLs are not pre-checked.
 - Local video ≥ 15 min is segmented and indexed (`--no-long-video` disables); ffprobe injects the real duration.
 - PDF: CPA reads the whole document in one request; MiMo (or `VISION_PDF_PAGES=1`) renders pages and analyzes them one by one.
 - Local media over 20MB is compressed into an analysis proxy automatically.

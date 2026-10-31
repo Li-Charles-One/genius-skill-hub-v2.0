@@ -114,7 +114,7 @@ PROMPTS = {
         "- Include numbers, units, IDs, watermarks, stamps, and low-contrast text.\n"
         "- Do NOT translate; do NOT summarize; do NOT invent missing characters.\n"
         "- If a region is unreadable, write [illegible] for that span.\n"
-        "- If no text is found, say so."
+        "- If no text is found, output exactly `NO_TEXT_FOUND` and nothing else."
     ),
     "ui-review": (
         "You are a senior UI/UX design reviewer. Analyze this interface mockup or design. "
@@ -161,7 +161,7 @@ PROMPTS = {
         "For each item use: `mm:ss | text` (or `mm:ss–mm:ss | text` if it stays on screen).\n"
         "Include: slides, captions, subtitles, signs, UI labels, logos, watermarks, "
         "and overlaid graphics text. Quote verbatim; do not invent text.\n"
-        "If no text is found, say so."
+        "If no text is found, output exactly `NO_TEXT_FOUND` and nothing else."
     ),
     "video-review": (
         "You are a senior video production reviewer. Analyze this video or screen recording.\n"
