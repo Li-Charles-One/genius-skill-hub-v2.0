@@ -46,6 +46,7 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 
 ## Rules
 
+- Read memory only through `weplaning-read.cjs`, never `cat` the files: the script checks structure and Syncthing `*.sync-conflict-*` copies first.
 - Never hand-edit `.agent-memory/`. For one fact use `--replace/--with`, `--add-state` or `--drop`: each must match exactly once or the write fails with nothing changed.
 - `--state` / `--next-step` / `--blockers` / `--goal` / `--understanding` replace the whole section: re-read it first and keep every still-valid item.
 - `--changed` only appends the ledger and never touches Current State. Every CURRENT patch needs `--changed` saying what happened in one line; without it the write fails with nothing changed.
