@@ -1,0 +1,60 @@
+{
+  "skill_name": "genius-motion-ref",
+  "evals": [
+    {
+      "id": "find-product-promo-shot",
+      "prompt": "我想给网站做一个像大厂宣传片那样的网页 3D 爆炸拆解镜头，去我们的动画参考库里找找配方，做成能在 Studio 里鼠标拖拽的",
+      "trigger_expected": true,
+      "expected_output": "Locates exploded-view in motion-reference/video-shotcraft, loads remotion-best-practices alongside genius-motion-ref, and rewrites the shot using <Interactive.*> elements with inline styles and interpolate() keyframes.",
+      "files": ["SKILL.md", "references/catalog.md"],
+      "assertions": [
+        {"type": "contains", "value": "video-shotcraft"},
+        {"type": "contains", "value": "Interactive"},
+        {"type": "contains", "value": "remotion-best-practices"}
+      ]
+    },
+    {
+      "id": "find-talkcraft-infographic",
+      "prompt": "帮我从 motion-reference 里找个口播视频用的数据对比卡或花字，搬到 2D 工作台里",
+      "trigger_expected": true,
+      "expected_output": "Checks video-talkcraft/references/taxonomy.md and template/cards/, then adapts the selected card into an Interactive Remotion component without installing node_modules inside motion-reference.",
+      "files": ["SKILL.md", "references/catalog.md"],
+      "assertions": [
+        {"type": "contains", "value": "video-talkcraft"},
+        {"type": "contains", "value": "taxonomy.md"},
+        {"type": "contains", "value": "Interactive"}
+      ]
+    },
+    {
+      "id": "black-canvas-explainer",
+      "prompt": "我要做一段黑底科技风的浴霸加热原理流向图动画，参考库里有合适的模板吗？",
+      "trigger_expected": true,
+      "expected_output": "Routes to anything2explainer in motion-reference, reads its motion-vocabulary and style-guide, and builds an Interactive Remotion composition.",
+      "files": ["SKILL.md", "references/catalog.md"],
+      "assertions": [
+        {"type": "contains", "value": "anything2explainer"},
+        {"type": "contains", "value": "motion-vocabulary.md"}
+      ]
+    },
+    {
+      "id": "negative-ai-video-gen",
+      "prompt": "用即梦帮我生成一段海边日落的 AI 实拍感视频",
+      "trigger_expected": false,
+      "expected_output": "Does not use genius-motion-ref; routes to dreamina-cli for AI video generation.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "dreamina-cli"}
+      ]
+    },
+    {
+      "id": "negative-static-brand-vi",
+      "prompt": "帮我给新品牌写一份 DESIGN.md 静态网页视觉规范文档",
+      "trigger_expected": false,
+      "expected_output": "Does not use genius-motion-ref; routes to genius-design.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "genius-design"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Motion Ref"
+  short_description: "Search motion-reference recipes for Remotion projects"
+  default_prompt: "Use $genius-motion-ref together with remotion-best-practices to find a motion recipe in motion-reference and build an Interactive Remotion composition."
