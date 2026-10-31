@@ -1,4 +1,0 @@
-interface:
-  display_name: "Genius Code Motion"
-  short_description: "Code-built 3D product explainer animations"
-  default_prompt: "Use $genius-code-motion to build a 3D product explainer animation with Remotion and Three.js."

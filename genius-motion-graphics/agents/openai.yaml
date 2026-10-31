@@ -1,4 +1,0 @@
-interface:
-  display_name: "Genius Motion Graphics"
-  short_description: "Code-built 2D titles, tables and infographics with alpha"
-  default_prompt: "Use $genius-motion-graphics to build a transparent 2K or 4K title or table animation with Remotion."
