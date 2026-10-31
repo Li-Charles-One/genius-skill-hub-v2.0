@@ -23,8 +23,6 @@
 
 | Skill | Purpose |
 |:--|:--|
-| [genius-brief-thinking](./genius-brief-thinking/) | Turn an unclear idea into a design brief (formerly brainstorming) |
-| [genius-impl-plans](./genius-impl-plans/) | Turn a brief/spec into an implementation plan |
 | [genius-weplaning](./genius-weplaning/) | Project memory lifecycle (`.agent-memory/`) |
 
 ### Creative / media
@@ -44,26 +42,10 @@
 | [genius-x-search](./genius-x-search/) | Real-time X/Twitter search via Grok-compatible relay |
 | [genius-skill-creator](./genius-skill-creator/) | Create, repair, validate, evaluate, port skills |
 
-## Skill pipeline
-
-复杂多步工作建议：
-
-```
-genius-brief-thinking  →  genius-impl-plans  →  implementation  →  genius-weplaning
-   (WHAT/WHY)            (HOW)            (do the work)      (record state)
-```
-
-- `genius-brief-thinking` — 方案不清时先收成 brief（旧名 brainstorming）
-- `genius-impl-plans` — 有 brief/spec 之后，拆成可执行步骤；未叫执行就停
-- `genius-weplaning` — 持久化项目记忆和工作流状态
-- 交接协议见 [`WORKFLOW.md`](./WORKFLOW.md)：brief 用 R1/R2 编号，plan 标注覆盖需求，memory 记录阶段状态
-- 其余 skill 为叶子工具，不强制进这条流水线
-
 ## Layout
 
 ```
 genius-skill-hub-v2.0/
-├── genius-brief-thinking/
 ├── genius-design/
 ├── genius-motion-ref/
 ├── genius-omni/
@@ -71,9 +53,7 @@ genius-skill-hub-v2.0/
 ├── genius-weplaning/
 ├── genius-github-usage/
 ├── genius-lark-use/
-├── genius-impl-plans/
 ├── genius-x-search/
-├── WORKFLOW.md          # brief → plan → memory 交接协议
 └── hermes-install.md    # Hermes Agent 安装说明
 ```
 

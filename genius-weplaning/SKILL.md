@@ -59,10 +59,6 @@ Full CLI, schema and pitfalls: `references/reference.md`.
 - Where a new fact goes: ask "would someone maintaining this a year from now need it?" Yes → the skill, doc or code that owns that area (config, rules, gotchas, how-to). No, it only says what happened (a change, a measurement, a verification) → the ledger via `--changed` / `--verification`. Only facts with no other home go into CURRENT.
 - Never store secrets, tokens, passwords, cookies or private credentials.
 
-## Workflow Handoff
-
-Planning states shared with `genius-brief-thinking` and `genius-impl-plans`: `BRIEF_APPROVED`, `PLAN_DRAFT`, `PLAN_APPROVED`, `IMPLEMENTING`, `BLOCKED`, `DONE`. On approvals, implementation start, blockers or verified completion, record `Brief`, `Plan`, `Status` and `Current Task` in the existing Current State / Accepted Next Steps sections. Never create another state file.
-
 ## Output
 
 - Read: memory update time, goal, understanding, recorded state, next steps, blockers (including unknown), latest ledger lines. It is recorded state, not a live verification. `--brief` cuts long understanding/state items to their label: run a full read before acting on one. Handoff adds recorded verification/file references; no pending tasks means stop, unknown means clarify, every step waiting on the user means report that and stop, and an invalid task number is an error, never a fallback to #1. A sync-conflict warning means the read shows this device's live copy: relay it, and do not write until the copies are resolved.

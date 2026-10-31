@@ -91,11 +91,11 @@
       "id": "no-trigger-impl-plan",
       "prompt": "把 brief 拆成实施计划",
       "trigger_expected": false,
-      "expected_output": "Implementation planning. Use genius-impl-plans, not genius-design.",
+      "expected_output": "Implementation planning. Use sureforge, not genius-design.",
       "files": ["SKILL.md"],
       "assertions": [
         {"type": "contains", "value": "实施计划"},
-        {"type": "contains", "value": "impl-plans"}
+        {"type": "contains", "value": "sureforge"}
       ]
     },
     {

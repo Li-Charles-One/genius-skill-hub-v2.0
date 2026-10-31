@@ -1,6 +1,6 @@
 ---
 name: genius-design
-description: "生成、审查或更新 DESIGN.md 品牌视觉与 UI 设计规范；支持品牌资料适配、网站设计逆向和按产品场景推荐方向。需要设计系统、语义 tokens 或可交给开发 Agent 的视觉规范时使用。不要用于单个按钮改色等局部 UI 修改；不要直接实现页面；不要把 brief 拆成实施计划（用 genius-impl-plans）；不要普通截图内容识别（用 genius-omni）；不要营销文案；不要图片视频生成（用 dreamina-cli）。"
+description: "生成、审查或更新 DESIGN.md 品牌视觉与 UI 设计规范；支持品牌资料适配、网站设计逆向和按产品场景推荐方向。需要设计系统、语义 tokens 或可交给开发 Agent 的视觉规范时使用。不要用于单个按钮改色等局部 UI 修改；不要直接实现页面；不要把 brief 拆成实施计划（用 sureforge）；不要普通截图内容识别（用 genius-omni）；不要营销文案；不要图片视频生成（用 dreamina-cli）。"
 license: Apache-2.0
 metadata:
   version: "3.4.2"
