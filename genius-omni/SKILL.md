@@ -2,7 +2,7 @@
 name: genius-omni
 description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与语音转写。"
 metadata:
-  version: "2.9.0"
+  version: "2.9.1"
 ---
 
 # Genius Omni（视听）
@@ -56,7 +56,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Audio: `Summary`, `Transcript or Key Segments`, `Speakers or Sound Events`, `Uncertainty`.
 - Compare: `Unchanged`, `Added`, `Removed`, `Uncertain`.
 
-Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text was found; pass `NO_SPEECH_DETECTED` through unchanged. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
+Analysis modes answer in Simplified Chinese; quoted text, speech, names and brands stay verbatim. `ocr`, `video-ocr` and `audio-transcribe` keep the source language. Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text was found; pass `NO_SPEECH_DETECTED` through unchanged. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
 
 Failures print `Error [CODE]: …` with a non-zero exit. Report the code and message as-is; the code table is in `references/usage.md`.
 

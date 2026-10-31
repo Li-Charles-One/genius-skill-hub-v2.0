@@ -267,6 +267,17 @@ PROMPTS = {
     ),
 }
 
+# Verbatim modes keep the source language; every analysis mode answers in Chinese.
+VERBATIM_MODES = {"ocr", "video-ocr", "audio-transcribe"}
+LANGUAGE_RULE = (
+    "\n\nOUTPUT LANGUAGE (mandatory): write the whole answer, headings included, in "
+    "Simplified Chinese (简体中文). Quote on-screen text, spoken lines, names and brand "
+    "names verbatim in their original language; do not translate quotes."
+)
+for _mode in PROMPTS:
+    if _mode not in VERBATIM_MODES:
+        PROMPTS[_mode] += LANGUAGE_RULE
+
 # ── File type detection ───────────────────────────────────────────────
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}

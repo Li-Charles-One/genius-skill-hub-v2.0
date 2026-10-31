@@ -62,7 +62,7 @@ The first existing file wins: `scripts/.env`, then `~/.hermes/.env`. Process env
 
 ## Output
 
-Text mode (default) prints `## <Mode> Analysis` followed by the model's markdown. `--output json` prints `{"mode": ..., "file": ..., "result": ...}`. Local audio/video results end with a `⏱ 时长校验` footer comparing the ffprobe duration with the duration the model claims.
+Text mode (default) prints `## <Mode> Analysis` followed by the model's markdown. Analysis modes answer in Simplified Chinese (quotes, names and brands stay in the original language, also in long-media synthesis); `ocr`, `video-ocr` and `audio-transcribe` keep the source language. `--output json` prints `{"mode": ..., "file": ..., "result": ...}`. Local audio/video results end with a `⏱ 时长校验` footer comparing the ffprobe duration with the duration the model claims.
 
 Failures go to stderr as `Error [CODE]: message`:
 
