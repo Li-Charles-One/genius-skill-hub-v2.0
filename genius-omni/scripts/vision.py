@@ -4,7 +4,6 @@ Genius Omni (视听) — Image / video / audio / PDF analysis.
 
 Built-in providers:
   cpa     (default) — Gemini native generateContent via CPA
-  mimo              — Xiaomi MiMo OpenAI-compatible chat.completions
 
 Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
   and optional {NAME}_API_STYLE=gemini|openai
@@ -12,7 +11,7 @@ Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
 Usage:
     python3 vision.py --list-providers
     python3 vision.py --check
-    python3 vision.py <file_or_url> <mode> [--provider cpa|mimo|custom]
+    python3 vision.py <file_or_url> <mode> [--provider cpa|custom]
     python3 vision.py https://www.youtube.com/watch?v=... video-summary
     python3 vision.py report.pdf ocr
     python3 vision.py long.mp4 video-summary   # auto segment when long
@@ -45,7 +44,7 @@ import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
-# Local base64: leave headroom under MiMo ~50MB encoded limit (×1.33).
+# Local base64: hard cap on raw bytes (×1.33 once encoded).
 MAX_RAW_BYTES = int(os.environ.get("VISION_MAX_RAW_MB", "35")) * 1024 * 1024
 # Images / whole-PDF: re-encode or page-split above this size.
 PROXY_TRIGGER_BYTES = int(os.environ.get("VISION_PROXY_TRIGGER_MB", "20")) * 1024 * 1024
@@ -379,7 +378,7 @@ def check_system() -> dict:
     return {
         "ffmpeg": ff or "MISSING",
         "ffprobe": fp or "MISSING",
-        "pdftoppm": shutil.which("pdftoppm") or "MISSING (only needed for MiMo / page-mode PDF)",
+        "pdftoppm": shutil.which("pdftoppm") or "MISSING (only needed for page-mode PDF)",
         "active_provider": _active_provider(),
         "providers": providers,
         "video_encoder": _first_listed_encoder(),
@@ -786,13 +785,6 @@ BUILTIN_PROVIDERS = {
         "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
         "note": "CPA Gemini relay (native generateContent)",
     },
-    "mimo": {
-        "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
-        "model": "mimo-v2.6-flash",
-        "api_style": "openai",
-        "key_envs": ("MIMO_API_KEY", "VISION_API_KEY", "ARK_API_KEY"),
-        "note": "Xiaomi MiMo Token Plan (OpenAI-compatible)",
-    },
 }
 DEFAULT_PROVIDER = "cpa"
 
@@ -971,19 +963,18 @@ def _gemini_part(path_or_url: str, kind: str) -> dict:
     return {"inline_data": {"mime_type": mime, "data": b64}}
 
 
-def _openai_part(path_or_url: str, kind: str, model: str) -> dict:
+def _openai_part(path_or_url: str, kind: str) -> dict:
     url = path_or_url
     if not path_or_url.startswith(("http://", "https://")):
         b64, mime = encode_file(path_or_url)
+        if kind == "audio":
+            fmt = {"audio/mpeg": "mp3"}.get(mime, mime.split("/")[1])
+            return {"type": "input_audio", "input_audio": {"data": b64, "format": fmt}}
         url = f"data:{mime};base64,{b64}"
     if kind == "audio":
         return {"type": "input_audio", "input_audio": {"data": url}}
     if kind == "video":
-        part = {"type": "video_url", "video_url": {"url": url}}
-        if model.startswith("mimo"):
-            part["fps"] = float(os.environ.get("VISION_VIDEO_FPS", "2"))
-            part["media_resolution"] = os.environ.get("VISION_VIDEO_RESOLUTION", "default")
-        return part
+        return {"type": "video_url", "video_url": {"url": url}}
     return {"type": "image_url", "image_url": {"url": url}}
 
 
@@ -1077,9 +1068,12 @@ def _post_json_once(url: str, headers: dict, data: bytes, timeout: float) -> dic
         text = e.read().decode("utf-8", errors="replace")
         try:
             err = json.loads(text).get("error")
-            msg = (err.get("message") if isinstance(err, dict) else err) or text[:300]
+            msg = (err.get("message") if isinstance(err, dict) else err) or text
         except Exception:
-            msg = text[:300]
+            msg = text
+        msg = str(msg)
+        if len(msg) > 300:
+            msg = msg[:300] + f"… [truncated, {len(msg)} chars total]"
         error = OmniError("PROVIDER_ERROR", f"API error {e.code}: {msg}")
         error.http_status = e.code
         raise error from e
@@ -1091,8 +1085,8 @@ def _post_json_once(url: str, headers: dict, data: bytes, timeout: float) -> dic
         raise OmniError("PROVIDER_ERROR", f"Network error: {e.reason}") from e
 
 
-# Short canned refusals (e.g. MiMo "The request was rejected because it was considered high risk").
-REFUSAL_RE = re.compile(r"request was rejected|considered high risk|content (?:policy|filter)", re.I)
+# Short canned refusals (e.g. "blocked by content policy").
+REFUSAL_RE = re.compile(r"content (?:policy|filter)", re.I)
 
 
 def call_model(conf: dict, media: list, prompt: str, timeout: float, show_think: bool = False) -> str:
@@ -1116,16 +1110,13 @@ def _call_model_once(conf: dict, media: list, prompt: str, timeout: float, show_
             timeout,
         )
         return _extract_gemini_text(data, show_think)
-    content = [_openai_part(src, kind, model) for src, kind in media] + [{"type": "text", "text": prompt}]
+    content = [_openai_part(src, kind) for src, kind in media] + [{"type": "text", "text": prompt}]
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": content}],
         "max_completion_tokens": max_out,
         "max_tokens": max_out,
     }
-    if model.startswith("mimo"):
-        # MiMo thinking is mandatory and cannot be disabled.
-        payload["thinking"] = {"type": "enabled"}
     data = _post_json(
         f"{conf['base_url']}/chat/completions",
         {"Authorization": f"Bearer {key}", "api-key": key},
@@ -1191,6 +1182,8 @@ def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h2
                 cached.get("duration") == round(duration, 1)
                 and cached.get("mode") == mode
                 and cached.get("count") == n
+                and cached.get("provider") == conf["id"]
+                and cached.get("model") == conf["model"]
             ):
                 segments = cached.get("segments") or []
                 print(f"[genius-omni] segment index hit: {len(segments)}/{n} done", file=sys.stderr)
@@ -1233,6 +1226,8 @@ def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h2
             json.dumps({
                 "file": str(Path(src).resolve()),
                 "mode": mode,
+                "provider": conf["id"],
+                "model": conf["model"],
                 "duration": round(duration, 1),
                 "count": n,
                 "segment_sec": seg_len,
@@ -1299,7 +1294,7 @@ def analyze_media(
 
     Gemini style (CPA): native /v1beta/models/{model}:generateContent
       - local → inline_data base64; YouTube / URL → file_data.file_uri
-    OpenAI style (MiMo): /chat/completions
+    OpenAI style (custom providers): /chat/completions
     """
     conf = _conf or provider_conf(provider, model=model, base_url=base_url, api_key=api_key)
     if not conf["api_key"]:
@@ -1442,7 +1437,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Genius Omni (视听) — multimodal analysis. "
-            "Built-in providers: cpa (default), mimo. "
+            "Built-in provider: cpa (default). "
             "Custom: set {NAME}_BASE_URL / _API_KEY / _MODEL."
         )
     )
@@ -1454,7 +1449,7 @@ def main():
         "--output", "-o", choices=["text", "json"], default="text", help="Output format (default: text)",
     )
     parser.add_argument(
-        "--provider", "-p", default=None, help="Provider id: cpa|mimo or custom name (default: cpa)",
+        "--provider", "-p", default=None, help="Provider id: cpa or custom name (default: cpa)",
     )
     parser.add_argument("--model", "-m", default=None, help="Model override")
     parser.add_argument("--base-url", default=None, help="API base URL override")

@@ -75,26 +75,6 @@
       ]
     },
     {
-      "id": "no-image-generation",
-      "prompt": "生成一张赛博朋克风格的产品海报",
-      "trigger_expected": false,
-      "expected_output": "Image generation is out of scope; points to dreamina-cli.",
-      "files": [],
-      "assertions": [
-        {"type": "not_contains", "value": "vision.py"}
-      ]
-    },
-    {
-      "id": "no-design-md",
-      "prompt": "参考这个网站的风格出一份 DESIGN.md",
-      "trigger_expected": false,
-      "expected_output": "Brand design specification belongs to genius-design.",
-      "files": [],
-      "assertions": [
-        {"type": "not_contains", "value": "vision.py"}
-      ]
-    },
-    {
       "id": "no-media-convert",
       "prompt": "把这个 mp4 转成 gif，宽度压到 480",
       "trigger_expected": false,

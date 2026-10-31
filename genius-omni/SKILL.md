@@ -1,15 +1,15 @@
 ---
 name: genius-omni
-description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与语音转写。不要用于生成图片视频（用 dreamina-cli）或品牌设计规范（用 genius-design）。"
+description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与语音转写。"
 metadata:
-  version: "2.8.0"
+  version: "2.9.0"
 ---
 
 # Genius Omni（视听）
 
 This skill exists to **analyze images**, **analyze video/audio**, and **OCR**. Nothing else.
 
-Default: CPA via native Gemini `generateContent`. Alternative: Xiaomi MiMo, or any multimodal endpoint configured as a custom provider. `--check` shows the model each provider will actually use.
+Default: CPA via native Gemini `generateContent`. Alternative: any multimodal endpoint configured as a custom provider. `--check` shows the model each provider will actually use.
 
 Config, providers, proxy and verification: `references/usage.md`. Trigger checks: `evals/evals.json`.
 
@@ -37,15 +37,15 @@ PDF accepts `ocr` (default), `describe`, `chart-data`, `ui-review`. Generic mode
 ## Run
 
 ```bash
-python3 "<skill_dir>/scripts/vision.py" <file_or_url> <mode> [--output json|text] [--provider cpa|mimo]
+python3 "<skill_dir>/scripts/vision.py" <file_or_url> <mode> [--output json|text] [--provider cpa|<custom>]
 python3 "<skill_dir>/scripts/vision.py" --check
 ```
 
-`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`, plus `pdftoppm` only for MiMo or page-mode PDF. No Python packages to install. Keys live in `scripts/.env`, never in the package.
+`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`, plus `pdftoppm` only for page-mode PDF. No Python packages to install. Keys live in `scripts/.env`, never in the package.
 
 - Note the video length or PDF page count before running. A missing local file fails with `INPUT_NOT_FOUND`; URLs are not pre-checked.
 - Local audio/video of any size or codec needs no preparation: the script probes it, prints `plan: …` (as-is, one proxy, or N segments), encodes once and caches the proxy. Do not transcode or split it yourself.
-- PDF: CPA reads the whole document in one request; MiMo (or `VISION_PDF_PAGES=1`) renders pages and analyzes them one by one.
+- PDF: CPA reads the whole document in one request; OpenAI-style providers (or `VISION_PDF_PAGES=1`) render pages and analyze them one by one.
 - Run one media analysis at a time; parallel runs make the CPA gateway return 502 (retried automatically, but slower).
 - `audio-transcribe` first asks the model whether a human voice is audible (one short extra request; `VISION_VOICE_CHECK=0` disables) and answers `NO_SPEECH_DETECTED` without transcribing when there is none.
 
@@ -62,6 +62,5 @@ Failures print `Error [CODE]: …` with a non-zero exit. Report the code and mes
 
 ## Gotchas
 
-- MiMo multimodal is `mimo-v2.6-flash` (image, audio and video verified). Do not switch to a `-pro` model: `mimo-v2.5-pro` cannot see or hear, and `mimo-v2.6-pro` is unverified.
 - YouTube works on Gemini-style providers (CPA), not on every OpenAI-compatible gateway.
 - Proxy, PDF page and segment index files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`) and are purged after 30 days.

@@ -11,7 +11,7 @@ winget install Gyan.FFmpeg        # PDF page mode: install poppler and put pdfto
 sudo apt install ffmpeg poppler-utils
 ```
 
-Verify with `python3 scripts/vision.py --check`. `pdftoppm` (poppler) is only needed for MiMo or page-mode PDF. The script uses only the Python standard library (3.9+).
+Verify with `python3 scripts/vision.py --check`. `pdftoppm` (poppler) is only needed for page-mode PDF. The script uses only the Python standard library (3.9+).
 
 ## Usage
 
@@ -56,9 +56,6 @@ CPA_API_KEY=sk-your-cpa-key
 # CPA_MODEL=gemini-3.8-flash-high
 # CPA_BASE_URL=https://cpa-jp.charles-ai.space/v1
 
-# Optional: MiMo
-# MIMO_API_KEY=tp-your-token-plan-key
-# MIMO_MODEL=mimo-v2.6-flash
 ```
 
 The first existing file wins: `scripts/.env`, then `~/.hermes/.env`. Process environment variables override both. `--check` and `--list-providers` show the model that requests will actually use.
@@ -84,11 +81,9 @@ Other errors exit 1; `--check` with missing tools exits 2.
 | Provider | API style | Default model | Base URL | Key env |
 |---|---|---|---|---|
 | **`cpa`（默认）** | `gemini` native | `gemini-3.8-flash-high` | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
-| `mimo` | `openai` | `mimo-v2.6-flash` | `https://token-plan-cn.xiaomimimo.com/v1` | `MIMO_API_KEY` |
 
 - `gemini` → `POST {root}/v1beta/models/{model}:generateContent`; local media `inline_data`, YouTube / URLs `file_data.file_uri`, PDF `application/pdf`.
 - `openai` → `POST {base}/chat/completions`; `image_url` / `video_url` / `input_audio`.
-- MiMo thinking is forced on (`"thinking": {"type": "enabled"}`) and cannot be disabled. `mimo-v2.5-pro` cannot see or hear; `mimo-v2.6-pro` is unverified.
 
 ### Custom provider
 
@@ -121,7 +116,6 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 | `VISION_MAX_TOKENS` | `32768` | output limit |
 | `VISION_SHOW_THINKING` | off | `1` prints thinking before the answer |
 | `VISION_VOICE_CHECK` | `1` | `audio-transcribe` runs a yes/no voice check first; `0` skips it |
-| `VISION_VIDEO_FPS` / `VISION_VIDEO_RESOLUTION` | `2` / `default` | MiMo video sampling |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` | — | HTTP proxy for API calls (first one set wins) |
 
 ## Media, proxies, PDF, long video
@@ -133,24 +127,24 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 | Audio | mp3 / wav / flac / m4a / ogg / aac / wma / opus / aiff (wma / aiff are converted to AAC first) |
 | PDF | pdf |
 
-Local media is sent as base64. A public URL is passed through and skips base64 and proxies (MiMo: video ≤300MB, audio ≤100MB).
+Local media is sent as base64. A public URL is passed through and skips base64 and proxies.
 
 **Audio / video are planned, not retried.** One `ffprobe` call reads duration, codec and size; the plan is computed from the per-request budget and printed as `[genius-omni] plan: …`:
 
 | Case | Action |
 |---|---|
-| H.264 `.mp4/.mov/.m4v` (MiMo: also HEVC) or common audio, ≤ budget, ≤ `VISION_MAX_SINGLE_SEC` | upload as-is |
+| H.264 `.mp4/.mov/.m4v` (OpenAI style: also HEVC) or common audio, ≤ budget, ≤ `VISION_MAX_SINGLE_SEC` | upload as-is |
 | fits one request at ≥ `VISION_VIDEO_MIN_KBPS` | one proxy, bitrate = budget ÷ duration |
 | otherwise | N equal segments, N = ⌈duration ÷ max segment⌉; each segment is encoded straight from the source |
 
-- Video proxy: H.264 (MiMo: HEVC first), long edge ≤ `VISION_PROXY_SCALE` (never upscaled), `VISION_PROXY_FPS` fps, mono AAC. Encoder: VideoToolbox on macOS → NVENC/QSV/AMF → `libx264`; a failing encoder is skipped for the rest of the run. Gemini samples video at ~1 fps, so 2 fps keeps text sharp at a low bitrate. An API codec rejection of an as-is upload retries once with a proxy.
+- Video proxy: H.264 (OpenAI style: HEVC first), long edge ≤ `VISION_PROXY_SCALE` (never upscaled), `VISION_PROXY_FPS` fps, mono AAC. Encoder: VideoToolbox on macOS → NVENC/QSV/AMF → `libx264`; a failing encoder is skipped for the rest of the run. Gemini samples video at ~1 fps, so 2 fps keeps text sharp at a low bitrate. An API codec rejection of an as-is upload retries once with a proxy.
 - Audio proxy: mono AAC `m4a` at `VISION_PROXY_AUDIO_KBPS`; 64k fits 30 min (`VISION_MAX_SINGLE_SEC`) in ~15MB.
 - Image: over `VISION_PROXY_TRIGGER_MB` → JPEG, long edge ≤2048; still too large → 1280.
 - Proxies are cached per source file + spec, so a rerun does not re-encode.
 - Segments: one API call each, then one synthesis call; `audio-transcribe` and `video-frame-analysis` join segment outputs instead. The index is saved after every segment, so a failed run resumes from the next segment.
-- Gateway errors (HTTP 429/5xx, network) retry after 5s / 15s / 30s. A canned refusal (e.g. MiMo "considered high risk") is `PROVIDER_ERROR`, not a result.
+- Gateway errors (HTTP 429/5xx, network) retry after 5s / 15s / 30s. A canned refusal (e.g. "content policy") is `PROVIDER_ERROR`, not a result.
 
-PDF: Gemini style sends the whole file in one request when it is ≤ `VISION_PROXY_TRIGGER_MB`. Otherwise (MiMo, larger files, or `VISION_PDF_PAGES=1`) `pdftoppm` renders up to `VISION_PDF_MAX_PAGES` pages and each page is analyzed separately. Rendered pages are cached per file.
+PDF: Gemini style sends the whole file in one request when it is ≤ `VISION_PROXY_TRIGGER_MB`. Otherwise (OpenAI-style providers, larger files, or `VISION_PDF_PAGES=1`) `pdftoppm` renders up to `VISION_PDF_MAX_PAGES` pages and each page is analyzed separately. Rendered pages are cached per file.
 
 | Env | Default | Meaning |
 |---|---|---|
@@ -179,6 +173,5 @@ Cache files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`).
 - [ ] Video: `python3 scripts/vision.py test.mp4 video-summary`
 - [ ] Audio: `python3 scripts/vision.py test.wav audio-transcribe`
 - [ ] PDF: `python3 scripts/vision.py test.pdf ocr` (whole document) and `VISION_PDF_PAGES=1 …` (pages)
-- [ ] MiMo: `python3 scripts/vision.py test.png describe --provider mimo`
 - [ ] Proxies: `--proxy-only` on a large video / long audio / png (expect a `plan=` line, `h264_videotoolbox` on macOS, `.m4a` segments, `.jpg`)
 - [ ] Errors: a missing file exits 3 with `INPUT_NOT_FOUND`
