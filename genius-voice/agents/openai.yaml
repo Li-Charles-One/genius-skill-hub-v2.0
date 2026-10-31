@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Voice"
+  short_description: "Speech-to-text and text-to-speech via MiMo"
+  default_prompt: "Use $genius-voice to transcribe this recording, or to read this text aloud in a chosen, cloned, or designed voice."

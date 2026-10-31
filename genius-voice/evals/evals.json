@@ -1,0 +1,88 @@
+{
+  "skill_name": "genius-voice",
+  "evals": [
+    {
+      "id": "interview-transcribe",
+      "prompt": "把这段采访录音转成文字 interview.m4a",
+      "trigger_expected": true,
+      "expected_output": "Runs scripts/voice.py asr on the file (no manual transcoding or splitting) and returns the transcript unedited.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "voice.py"},
+        {"type": "contains", "value": "asr"}
+      ]
+    },
+    {
+      "id": "narration-preset",
+      "prompt": "用温柔的女声把这段文案读出来，导出 mp3：晚安，今天辛苦了。",
+      "trigger_expected": true,
+      "expected_output": "Runs tts with a Chinese female preset (冰糖 or 茉莉), a 温柔 style tag or --style, and --out ending in .mp3; reports path and duration.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "tts"},
+        {"type": "contains", "value": ".mp3"}
+      ]
+    },
+    {
+      "id": "voice-clone",
+      "prompt": "用 me.wav 里我的声音，把这句话读一遍：欢迎来到我的频道。",
+      "trigger_expected": true,
+      "expected_output": "Runs tts with --clone me.wav and the sentence as text.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "--clone"}
+      ]
+    },
+    {
+      "id": "voice-design",
+      "prompt": "帮我设计一个低沉沙哑的老人声音，用它念这段旁白 story.txt",
+      "trigger_expected": true,
+      "expected_output": "Runs tts --text-file story.txt --design with a description of the voice.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "--design"},
+        {"type": "contains", "value": "--text-file"}
+      ]
+    },
+    {
+      "id": "missing-file-error",
+      "prompt": "转写一下 /tmp/does-not-exist.mp3",
+      "trigger_expected": true,
+      "expected_output": "Reports INPUT_NOT_FOUND instead of producing a transcript.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "INPUT_NOT_FOUND"}
+      ]
+    },
+    {
+      "id": "timeline-speakers-near-miss",
+      "prompt": "这段会议录音帮我总结一下，按时间轴标出每个人说了什么 meeting.mp3",
+      "trigger_expected": false,
+      "expected_output": "Routes to genius-omni (timeline, speaker labels, summary), not genius-voice.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "voice.py"}
+      ]
+    },
+    {
+      "id": "video-understanding-near-miss",
+      "prompt": "这个视频讲了什么？demo.mp4",
+      "trigger_expected": false,
+      "expected_output": "Routes to genius-omni video-summary.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "voice.py"}
+      ]
+    },
+    {
+      "id": "audio-edit-near-miss",
+      "prompt": "把这个 wav 转成 mp3，顺便把开头 3 秒剪掉",
+      "trigger_expected": false,
+      "expected_output": "Does not use genius-voice; a plain ffmpeg command is enough.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "not_contains", "value": "voice.py"}
+      ]
+    }
+  ]
+}

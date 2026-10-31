@@ -1,8 +1,8 @@
 ---
 name: genius-omni
-description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与语音转写。"
+description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与带时间轴/说话人的转写。不要用于纯语音转文字、朗读配音或声音克隆（用 genius-voice）。"
 metadata:
-  version: "2.9.1"
+  version: "2.9.2"
 ---
 
 # Genius Omni（视听）
@@ -28,7 +28,7 @@ Config, providers, proxy and verification: `references/usage.md`. Trigger checks
 | Critique a recording | `video-review` |
 | Shot-by-shot video | `video-frame-analysis` |
 | What is in this audio | `audio-summary` |
-| Transcribe speech | `audio-transcribe` |
+| Transcript with timestamps / speaker labels | `audio-transcribe` |
 | Critique audio production | `audio-review` |
 | Soundscape / events | `audio-scene` |
 
