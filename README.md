@@ -32,7 +32,6 @@
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
 | [genius-voice](./genius-voice/) | Speech-to-text and text-to-speech via Xiaomi MiMo（语音） |
-| [genius-motion-ref](./genius-motion-ref/) | Navigate `motion-reference` shot/component recipes and adapt them to Interactive Remotion code |
 
 ### Tools
 
@@ -48,7 +47,6 @@
 ```
 genius-skill-hub-v2.0/
 ├── genius-design/
-├── genius-motion-ref/
 ├── genius-omni/
 ├── genius-skill-creator/
 ├── genius-voice/
