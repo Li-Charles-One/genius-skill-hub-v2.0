@@ -5,10 +5,11 @@
       "id": "find-product-promo-shot",
       "prompt": "我想给网站做一个像大厂宣传片那样的网页 3D 爆炸拆解镜头，去我们的动画参考库里找找配方，做成能在 Studio 里鼠标拖拽的",
       "trigger_expected": true,
-      "expected_output": "Locates exploded-view in motion-reference/video-shotcraft, loads remotion-best-practices alongside genius-motion-ref, and rewrites the shot using <Interactive.*> elements with inline styles and interpolate() keyframes.",
+      "expected_output": "Searches video-shotcraft/references/shots, finds the exploded view in camera/space-camera-moves.md with source demos/camera/space-camera-moves/ExplodedView.tsx, loads remotion-best-practices (routing to remotion-interactivity), and rewrites the shot using <Interactive.*> elements with inline styles and interpolate() keyframes.",
       "files": ["SKILL.md", "references/catalog.md"],
       "assertions": [
-        {"type": "contains", "value": "video-shotcraft"},
+        {"type": "contains", "value": "space-camera-moves"},
+        {"type": "contains", "value": "ExplodedView"},
         {"type": "contains", "value": "Interactive"},
         {"type": "contains", "value": "remotion-best-practices"}
       ]
@@ -17,11 +18,11 @@
       "id": "find-talkcraft-infographic",
       "prompt": "帮我从 motion-reference 里找个口播视频用的数据对比卡或花字，搬到 2D 工作台里",
       "trigger_expected": true,
-      "expected_output": "Checks video-talkcraft/references/taxonomy.md and template/cards/, then adapts the selected card into an Interactive Remotion component without installing node_modules inside motion-reference.",
+      "expected_output": "Queries video-talkcraft/references/cards-index.json (or taxonomy.md) and template/cards/, then adapts the selected card into an Interactive Remotion component without installing node_modules inside motion-reference.",
       "files": ["SKILL.md", "references/catalog.md"],
       "assertions": [
         {"type": "contains", "value": "video-talkcraft"},
-        {"type": "contains", "value": "taxonomy.md"},
+        {"type": "contains", "value": "cards-index.json"},
         {"type": "contains", "value": "Interactive"}
       ]
     },
