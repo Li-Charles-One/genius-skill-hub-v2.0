@@ -31,6 +31,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -46,16 +47,23 @@ from pathlib import Path
 
 # Local base64: leave headroom under MiMo ~50MB encoded limit (×1.33).
 MAX_RAW_BYTES = int(os.environ.get("VISION_MAX_RAW_MB", "35")) * 1024 * 1024
-# Re-encode local media when larger than this (analysis proxy, not master).
+# Images / whole-PDF: re-encode or page-split above this size.
 PROXY_TRIGGER_BYTES = int(os.environ.get("VISION_PROXY_TRIGGER_MB", "20")) * 1024 * 1024
+# Audio/video planning: each request carries at most BUDGET bytes of media.
+# Measured on CPA: 29.8MB inline video accepted.
+BUDGET_BYTES = int(float(os.environ.get("VISION_BUDGET_MB", "30")) * 1024 * 1024)
 PROXY_SCALE = int(os.environ.get("VISION_PROXY_SCALE", "1280"))
-PROXY_AUDIO_K = os.environ.get("VISION_PROXY_AUDIO_K", "64k")
+# Gemini samples video at ~1 fps, so 2 fps loses nothing and leaves bitrate for legible text.
+PROXY_FPS = float(os.environ.get("VISION_PROXY_FPS", "2"))
+PROXY_AUDIO_KBPS = int(os.environ.get("VISION_PROXY_AUDIO_KBPS", "64"))
+# Below this video bitrate (1280 wide @ 2 fps) subtitles start to blur → split instead.
+VIDEO_MIN_KBPS = int(os.environ.get("VISION_VIDEO_MIN_KBPS", "200"))
+VIDEO_MAX_KBPS = int(os.environ.get("VISION_VIDEO_MAX_KBPS", "1500"))
+# Hard cap per request regardless of size (context window / output length).
+MAX_SINGLE_SEC = float(os.environ.get("VISION_MAX_SINGLE_SEC", "1800"))
 # Large still images: max long-edge px for analysis proxy.
 PROXY_IMAGE_MAX_EDGE = int(os.environ.get("VISION_PROXY_IMAGE_MAX_EDGE", "2048"))
 PROXY_DIR = Path(tempfile.gettempdir()) / "genius-omni-proxy"
-# Long-video segment QA (lightweight memory): default 15 min threshold, 5 min chunks
-LONG_VIDEO_SEC = float(os.environ.get("VISION_LONG_VIDEO_SEC", "900"))
-LONG_SEGMENT_SEC = float(os.environ.get("VISION_LONG_SEGMENT_SEC", "300"))
 PDF_MAX_PAGES = int(os.environ.get("VISION_PDF_MAX_PAGES", "30"))
 PDF_DPI = int(os.environ.get("VISION_PDF_DPI", "180"))
 INDEX_DIR = Path(tempfile.gettempdir()) / "genius-omni-index"
@@ -275,10 +283,6 @@ VIDEO_MODES = {
 AUDIO_MODES = {
     "audio-summary", "audio-transcribe", "audio-review", "audio-scene",
 }
-# Modes that benefit from long-video segment indexing
-LONG_VIDEO_MODES = {
-    "video-summary", "video-ocr", "video-review", "describe", "ocr",
-}
 
 
 def _path_suffix(path_or_url: str) -> str:
@@ -352,22 +356,7 @@ def resolve_mode(mode: str, kind: str) -> str:
     return mode
 
 
-# ── ffprobe duration ──────────────────────────────────────────────────
-
-def get_media_duration(file_path: str) -> float | None:
-    """Get media duration in seconds using ffprobe. Returns None on failure."""
-    try:
-        result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "csv=p=0", file_path],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return float(result.stdout.strip())
-    except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
-        pass
-    return None
-
+# ── Duration formatting ──────────────────────────────────────────────────
 
 def format_duration(seconds: float) -> str:
     """Format seconds to mm:ss or hh:mm:ss."""
@@ -393,8 +382,10 @@ def check_system() -> dict:
         "pdftoppm": shutil.which("pdftoppm") or "MISSING (only needed for MiMo / page-mode PDF)",
         "active_provider": _active_provider(),
         "providers": providers,
-        "long_video_sec": LONG_VIDEO_SEC,
-        "long_segment_sec": LONG_SEGMENT_SEC,
+        "video_encoder": _first_listed_encoder(),
+        "budget_mb": round(BUDGET_BYTES / 1024 / 1024, 1),
+        "proxy_fps": PROXY_FPS,
+        "video_min_kbps": VIDEO_MIN_KBPS,
         "pdf_max_pages": PDF_MAX_PAGES,
         "pdf_dpi": PDF_DPI,
         "ok": bool(ff and fp),
@@ -455,43 +446,13 @@ def render_pdf_pages(pdf_path: str, max_pages: int | None = None, dpi: int | Non
     return [str(p) for p in pages]
 
 
-def cut_video_segment(src: str, start: float, duration: float) -> str:
-    """Extract a short video segment for long-video indexing."""
-    src_path = Path(src)
-    out = _proxy_dir() / (
-        f"{src_path.stem}.{int(start)}s-{int(start + duration)}s."
-        f"{int(time.time() * 1000)}.seg.mp4"
-    )
-    head = [
-        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
-        "-ss", str(max(0.0, start)),
-        "-i", str(src_path),
-        "-t", str(max(1.0, duration)),
-    ]
-    # stream copy first (fast); fallback re-encode
-    proc = _run([*head, "-c", "copy", "-avoid_negative_ts", "make_zero", str(out)], 180)
-    if proc.returncode == 0 and out.is_file() and out.stat().st_size > 0:
-        return str(out)
-    out.unlink(missing_ok=True)
-    proc = _run([
-        *head,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32",
-        "-c:a", "aac", "-b:a", "64k",
-        str(out),
-    ], 300)
-    if proc.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
-        out.unlink(missing_ok=True)
-        raise RuntimeError(f"Segment cut failed: {_proc_err(proc)[:300]}")
-    return str(out)
-
-
 def _index_path(video_path: str, mode: str) -> Path:
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     maybe_cleanup_cache()
     return INDEX_DIR / f"{_file_fingerprint(video_path)}-{mode}.json"
 
 
-# ── Analysis proxies (HEVC GPU → H.264 → CPU; audio AAC; image scale) ──
+# ── Cache and image proxies ──
 
 def _ffmpeg_bin() -> str:
     return os.environ.get("FFMPEG_BIN", "ffmpeg")
@@ -544,118 +505,230 @@ def maybe_cleanup_cache(force: bool = False) -> dict:
     return {"removed": removed, "bytes": freed, "skipped": False, "disabled": False}
 
 
-# Ordered encoder recipes: HEVC GPU → H.264 GPU → libx264.
-VIDEO_ENCODERS = [
-    ("hevc_qsv", ["-c:v", "hevc_qsv", "-global_quality", "28", "-look_ahead", "0"]),
-    ("hevc_nvenc", ["-c:v", "hevc_nvenc", "-preset", "p1", "-cq", "28", "-b:v", "0"]),
-    ("hevc_amf", ["-c:v", "hevc_amf", "-quality", "speed", "-qp_i", "28", "-qp_p", "28"]),
-    ("h264_qsv", ["-c:v", "h264_qsv", "-global_quality", "28", "-look_ahead", "0"]),
-    ("h264_nvenc", ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28", "-b:v", "0"]),
-    ("h264_amf", ["-c:v", "h264_amf", "-quality", "speed", "-qp_i", "28", "-qp_p", "28"]),
-    ("libx264", ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "32"]),
+# ── Media planning: probe once, compute the plan, encode once ──────────
+#
+# Audio/video never go through trial-and-error encoding. One ffprobe call gives
+# duration/codec/size; the request budget then fixes the bitrate and whether the
+# media is split into segments. Proxies are cached per source + spec.
+
+PASSTHROUGH_VIDEO = {".mp4", ".mov", ".m4v"}
+PASSTHROUGH_AUDIO = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
+
+# Bitrate-targeted recipes, hardware first. The first one that works is remembered.
+H264_ENCODERS = [
+    ("h264_videotoolbox", ["-c:v", "h264_videotoolbox"]),
+    ("h264_nvenc", ["-c:v", "h264_nvenc", "-preset", "p1"]),
+    ("h264_qsv", ["-c:v", "h264_qsv"]),
+    ("h264_amf", ["-c:v", "h264_amf"]),
+    ("libx264", ["-c:v", "libx264", "-preset", "veryfast"]),
 ]
+HEVC_ENCODERS = [
+    ("hevc_videotoolbox", ["-c:v", "hevc_videotoolbox", "-tag:v", "hvc1"]),
+    ("hevc_nvenc", ["-c:v", "hevc_nvenc", "-preset", "p1"]),
+    ("hevc_qsv", ["-c:v", "hevc_qsv"]),
+    ("hevc_amf", ["-c:v", "hevc_amf"]),
+]
+_BROKEN_ENCODERS: set = set()
 
 
-def make_video_proxy(src: str, scale: int | None = None, h264_only: bool = False) -> tuple[str, str]:
-    """Build a smaller video analysis proxy. Returns (path, encoder_name).
+def probe_media(path: str) -> dict:
+    """One ffprobe call: duration, size, first real video stream, audio presence."""
+    info = {
+        "duration": None, "size": Path(path).stat().st_size,
+        "vcodec": None, "width": 0, "height": 0, "has_audio": False,
+    }
+    proc = _run([
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
+        "-of", "json", path,
+    ], 30)
+    if proc.returncode != 0:
+        return info
+    data = json.loads(proc.stdout or "{}")
+    try:
+        info["duration"] = float((data.get("format") or {}).get("duration"))
+    except (TypeError, ValueError):
+        pass
+    for s in data.get("streams") or []:
+        if s.get("codec_type") == "audio":
+            info["has_audio"] = True
+        elif (
+            s.get("codec_type") == "video"
+            and info["vcodec"] is None
+            and s.get("codec_name") not in ("mjpeg", "png", "bmp")  # cover art
+        ):
+            info.update(vcodec=s.get("codec_name"), width=s.get("width") or 0, height=s.get("height") or 0)
+    return info
 
-    Preference: HEVC GPU → H.264 GPU → libx264 (h264_only skips HEVC for API
-    codec fallback). Steps down to 720p then 480p when every encoder fails or
-    the result is still too large.
-    """
-    scale = scale or PROXY_SCALE
-    src_path = Path(src)
-    if not src_path.is_file():
+
+def plan_media(path: str, kind: str, api_style: str, force_proxy: bool = False) -> dict:
+    """Decide passthrough / one proxy / N segments from probe numbers alone."""
+    info = probe_media(path)
+    dur = info["duration"] or 0.0
+    audio_kbps = PROXY_AUDIO_KBPS if (kind == "audio" or info["has_audio"]) else 0
+    budget_kbit = BUDGET_BYTES * 8 / 1000 * 0.92  # container overhead headroom
+    if kind == "video":
+        ok_codecs = {"h264"} if api_style == "gemini" else {"h264", "hevc"}
+        native = info["vcodec"] in ok_codecs and _path_suffix(path) in PASSTHROUGH_VIDEO
+        floor_kbps = VIDEO_MIN_KBPS + audio_kbps
+    else:
+        native = _path_suffix(path) in PASSTHROUGH_AUDIO
+        floor_kbps = audio_kbps
+    if dur <= 0:
+        if info["size"] <= BUDGET_BYTES:
+            return {**info, "action": "passthrough", "segments": 1, "segment_sec": 0.0,
+                    "video_kbps": VIDEO_MAX_KBPS, "audio_kbps": audio_kbps}
+        raise OmniError("UNSUPPORTED_FORMAT", f"ffprobe cannot read the duration of {path}")
+
+    split = os.environ.get("VISION_LONG_VIDEO", "1").strip().lower() not in ("0", "false", "no", "off")
+    max_seg = min(MAX_SINGLE_SEC, budget_kbit / floor_kbps)
+    n = max(1, math.ceil(dur / max_seg)) if split else 1
+    seg = dur / n
+    video_kbps = int(max(50, min(VIDEO_MAX_KBPS, budget_kbit / seg - audio_kbps))) if kind == "video" else 0
+    if n == 1 and native and not force_proxy and info["size"] <= BUDGET_BYTES:
+        action = "passthrough"
+    else:
+        action = "proxy" if n == 1 else "segments"
+    return {**info, "action": action, "segments": n, "segment_sec": seg,
+            "video_kbps": video_kbps, "audio_kbps": audio_kbps}
+
+
+def describe_plan(plan: dict, kind: str) -> str:
+    size = plan["size"] / 1024 / 1024
+    src = f"{kind} {format_duration(plan['duration'] or 0)} {size:.1f}MB"
+    if kind == "video" and plan["vcodec"]:
+        src += f" {plan['vcodec']} {plan['width']}x{plan['height']}"
+    if plan["action"] == "passthrough":
+        return f"{src} → upload as-is"
+    target = f"{plan['video_kbps']}k video @{PROXY_FPS:g}fps + " if kind == "video" else ""
+    target += f"{plan['audio_kbps']}k audio"
+    if plan["action"] == "proxy":
+        return f"{src} → one proxy ({target})"
+    return f"{src} → {plan['segments']} segments × {format_duration(plan['segment_sec'])} ({target})"
+
+
+def _first_listed_encoder() -> str:
+    """First H.264 encoder this ffmpeg build lists (hardware before libx264)."""
+    try:
+        listed = _run([_ffmpeg_bin(), "-hide_banner", "-encoders"], 15).stdout
+    except OmniError:
+        return "MISSING"
+    for name, _ in _encoder_chain(True):
+        if f" {name} " in listed:
+            return name
+    return "none"
+
+
+def _encoder_chain(h264_only: bool) -> list:
+    chain = H264_ENCODERS if h264_only else HEVC_ENCODERS + H264_ENCODERS
+    if sys.platform != "darwin":
+        chain = [e for e in chain if "videotoolbox" not in e[0]]
+    return [e for e in chain if e[0] not in _BROKEN_ENCODERS]
+
+
+def _cached_proxy(src: str, tag: str, suffix: str) -> tuple[Path, bool]:
+    out = _proxy_dir() / f"{_file_fingerprint(src)}-{tag}{suffix}"
+    return out, out.is_file() and out.stat().st_size > 0
+
+
+def make_video_proxy(
+    src: str,
+    start: float = 0.0,
+    duration: float | None = None,
+    video_kbps: int = VIDEO_MAX_KBPS,
+    audio_kbps: int = PROXY_AUDIO_KBPS,
+    h264_only: bool = True,
+) -> tuple[str, str]:
+    """Encode one analysis proxy at a computed bitrate. Returns (path, encoder)."""
+    if not Path(src).is_file():
         raise FileNotFoundError(f"File not found: {src}")
-
-    out_dir = _proxy_dir()
-    stamp = int(time.time() * 1000)
+    tag = (
+        f"v{start:.0f}+{duration or 0:.0f}-{video_kbps}k-a{audio_kbps}k-"
+        f"{PROXY_FPS:g}fps-{PROXY_SCALE}-{'h264' if h264_only else 'any'}"
+    )
+    out, hit = _cached_proxy(src, tag, ".mp4")
+    if hit:
+        print(f"[genius-omni] proxy cache hit → {out}", file=sys.stderr)
+        return str(out), "cache"
+    s = PROXY_SCALE
+    vf = (
+        f"fps={PROXY_FPS:g},"
+        f"scale='if(gte(iw,ih),min({s},iw),-2)':'if(gte(iw,ih),-2,min({s},ih))'"
+    )
+    rate = ["-b:v", f"{video_kbps}k", "-maxrate", f"{int(video_kbps * 1.25)}k",
+            "-bufsize", f"{video_kbps * 2}k"]
+    audio = ["-c:a", "aac", "-b:a", f"{audio_kbps}k", "-ac", "1"] if audio_kbps else ["-an"]
+    head = [_ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error"]
+    if start:
+        head += ["-ss", f"{start:.3f}"]
+    head += ["-i", src]
+    if duration:
+        head += ["-t", f"{duration:.3f}"]
+    tmp = out.with_suffix(".part.mp4")
     last_err = ""
-    for name, vcodec in VIDEO_ENCODERS:
-        if h264_only and name.startswith("hevc"):
-            continue
-        out = out_dir / f"{src_path.stem}.{stamp}.{name}.mp4"
-        cmd = [
-            _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
-            "-i", str(src_path),
-            "-vf", f"scale={scale}:-2",
-            *vcodec,
-            "-c:a", "aac", "-b:a", PROXY_AUDIO_K,
-            "-movflags", "+faststart",
-            str(out),
-        ]
+    for name, vcodec in _encoder_chain(h264_only):
+        t0 = time.perf_counter()
         try:
-            t0 = time.perf_counter()
-            proc = _run(cmd, 600)
+            proc = _run([*head, "-vf", vf, *vcodec, *rate, *audio,
+                         "-movflags", "+faststart", str(tmp)], 900)
         except subprocess.TimeoutExpired as e:
-            last_err = str(e)
-            out.unlink(missing_ok=True)
-            continue
-        if proc.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+            tmp.unlink(missing_ok=True)
+            raise OmniError("TIMEOUT", f"{name} encode exceeded 900s") from e
+        if proc.returncode != 0 or not tmp.is_file() or tmp.stat().st_size == 0:
             last_err = _proc_err(proc)
-            out.unlink(missing_ok=True)
+            tmp.unlink(missing_ok=True)
+            _BROKEN_ENCODERS.add(name)
             continue
-        size = out.stat().st_size
+        size = tmp.stat().st_size
+        if size > MAX_RAW_BYTES and video_kbps > 60:
+            # Encoder overshot its target: one deterministic retry, scaled down.
+            tmp.unlink(missing_ok=True)
+            return make_video_proxy(src, start, duration, int(video_kbps * 0.7 * MAX_RAW_BYTES / size),
+                                    audio_kbps, h264_only)
+        tmp.replace(out)
         print(
-            f"[genius-omni] video proxy via {name}: "
-            f"{size / 1024 / 1024:.1f}MB in {time.perf_counter() - t0:.1f}s → {out}",
+            f"[genius-omni] video proxy via {name}: {size / 1024 / 1024:.1f}MB "
+            f"in {time.perf_counter() - t0:.1f}s → {out}",
             file=sys.stderr,
         )
-        if size > MAX_RAW_BYTES:
-            print(
-                f"[genius-omni] proxy still {size / 1024 / 1024:.1f}MB "
-                f"(>{MAX_RAW_BYTES / 1024 / 1024:.0f}MB), trying next encoder…",
-                file=sys.stderr,
-            )
-            continue
         return str(out), name
-
-    for smaller in (720, 480):
-        if scale > smaller:
-            return make_video_proxy(src, scale=smaller, h264_only=h264_only)
-    chain = "H.264 GPU → libx264" if h264_only else "HEVC/H.264 GPU → libx264"
-    raise RuntimeError(f"Failed to build video proxy ({chain}). Last error: {last_err[:400]}")
+    raise RuntimeError(f"No working video encoder. Last error: {last_err[:400]}")
 
 
-def make_audio_proxy(src: str) -> tuple[str, str]:
-    """Re-encode large audio to AAC m4a for base64 upload. Returns (path, codec)."""
-    src_path = Path(src)
-    if not src_path.is_file():
+def make_audio_proxy(src: str, start: float = 0.0, duration: float | None = None) -> tuple[str, str]:
+    """Encode mono AAC at PROXY_AUDIO_KBPS. Returns (path, codec)."""
+    if not Path(src).is_file():
         raise FileNotFoundError(f"File not found: {src}")
-    out = _proxy_dir() / f"{src_path.stem}.{int(time.time() * 1000)}.proxy.m4a"
+    out, hit = _cached_proxy(src, f"a{start:.0f}+{duration or 0:.0f}-{PROXY_AUDIO_KBPS}k", ".m4a")
+    if hit:
+        print(f"[genius-omni] proxy cache hit → {out}", file=sys.stderr)
+        return str(out), "cache"
+    cmd = [_ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error"]
+    if start:
+        cmd += ["-ss", f"{start:.3f}"]
+    cmd += ["-i", src]
+    if duration:
+        cmd += ["-t", f"{duration:.3f}"]
+    tmp = out.with_suffix(".part.m4a")
     t0 = time.perf_counter()
-    proc = _run([
-        _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
-        "-i", str(src_path),
-        "-vn", "-c:a", "aac", "-b:a", PROXY_AUDIO_K,
-        str(out),
-    ], 600)
-    if proc.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
-        out.unlink(missing_ok=True)
+    proc = _run([*cmd, "-vn", "-c:a", "aac", "-b:a", f"{PROXY_AUDIO_KBPS}k", "-ac", "1", str(tmp)], 900)
+    if proc.returncode != 0 or not tmp.is_file() or tmp.stat().st_size == 0:
+        tmp.unlink(missing_ok=True)
         raise RuntimeError(f"Audio proxy failed: {_proc_err(proc)[:400]}")
+    tmp.replace(out)
     print(
-        f"[genius-omni] audio proxy aac/{PROXY_AUDIO_K}: "
+        f"[genius-omni] audio proxy aac/{PROXY_AUDIO_KBPS}k mono: "
         f"{out.stat().st_size / 1024 / 1024:.1f}MB in {time.perf_counter() - t0:.1f}s → {out}",
         file=sys.stderr,
     )
-    if out.stat().st_size > MAX_RAW_BYTES:
-        # second pass lower rate
-        out2 = _proxy_dir() / f"{src_path.stem}.{int(time.time() * 1000)}.proxy32.m4a"
-        proc2 = _run([
-            _ffmpeg_bin(), "-y", "-hide_banner", "-loglevel", "error",
-            "-i", str(src_path),
-            "-vn", "-c:a", "aac", "-b:a", "32k", "-ac", "1",
-            str(out2),
-        ], 600)
-        if proc2.returncode == 0 and out2.is_file() and out2.stat().st_size > 0:
-            out.unlink(missing_ok=True)
-            print(
-                f"[genius-omni] audio proxy aac/32k mono: "
-                f"{out2.stat().st_size / 1024 / 1024:.1f}MB → {out2}",
-                file=sys.stderr,
-            )
-            return str(out2), "aac-32k"
     return str(out), "aac"
+
+
+def build_proxy(src: str, kind: str, plan: dict, h264_only: bool, start: float = 0.0,
+                duration: float | None = None) -> str:
+    if kind == "video":
+        return make_video_proxy(src, start, duration, plan["video_kbps"], plan["audio_kbps"], h264_only)[0]
+    return make_audio_proxy(src, start, duration)[0]
 
 
 def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
@@ -690,27 +763,6 @@ def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
     if out.stat().st_size > MAX_RAW_BYTES and max_edge > 1280:
         return make_image_proxy(src, max_edge=1280)
     return str(out), f"jpeg-{max_edge}"
-
-
-def ensure_media_under_limit(
-    path: str,
-    kind: str,
-    force_proxy: bool = False,
-    prefer_h264: bool = False,
-) -> str:
-    """Return path suitable for base64 upload; may create analysis proxy."""
-    size = Path(path).stat().st_size
-    if not (force_proxy or size > PROXY_TRIGGER_BYTES or size > MAX_RAW_BYTES):
-        return path
-    reason = "forced" if force_proxy else f"{size / 1024 / 1024:.1f}MB > trigger"
-    if kind not in ("video", "audio", "image"):
-        return path
-    print(f"[genius-omni] compressing {kind} ({reason})…", file=sys.stderr)
-    if kind == "video":
-        return make_video_proxy(path, h264_only=prefer_h264)[0]
-    if kind == "audio":
-        return make_audio_proxy(path)[0]
-    return make_image_proxy(path)[0]
 
 
 # ── Providers ─────────────────────────────────────────────────────────────
@@ -891,9 +943,8 @@ def encode_file(file_path: str) -> tuple[str, str]:
         raise ValueError(
             f"File too large: {file_size / 1024 / 1024:.1f}MB "
             f"(max ~{MAX_RAW_BYTES / 1024 / 1024:.0f}MB raw for base64). "
-            "vision.py auto-proxies oversize local media "
-            f"(>{PROXY_TRIGGER_BYTES / 1024 / 1024:.0f}MB): "
-            "video HEVC→H.264, audio AAC, image JPEG downscale. "
+            "Audio/video are planned to fit the request budget; images over "
+            f"{PROXY_TRIGGER_BYTES / 1024 / 1024:.0f}MB are downscaled. "
             "Or pass a public URL (video ≤300MB, audio ≤100MB)."
         )
     data = base64.b64encode(path.read_bytes()).decode("utf-8")
@@ -985,7 +1036,29 @@ def _http_proxy() -> str | None:
     return None
 
 
+RETRY_HTTP = {429, 500, 502, 503, 504}
+RETRY_DELAYS = (5, 15, 30)
+
+
 def _post_json(url: str, headers: dict, body: dict, timeout: float) -> dict:
+    """POST with retries on gateway errors (e.g. CPA 502 under concurrent load)."""
+    data = json.dumps(body).encode("utf-8")
+    for attempt, delay in enumerate((*RETRY_DELAYS, None), 1):
+        try:
+            return _post_json_once(url, headers, data, timeout)
+        except OmniError as e:
+            # Timeouts are not retried: a slow multi-minute request would only repeat.
+            transient = getattr(e, "http_status", None) in RETRY_HTTP or str(e).startswith("Network error")
+            if delay is None or not transient:
+                raise
+            print(
+                f"[genius-omni] {e} — retry {attempt}/{len(RETRY_DELAYS)} in {delay}s…",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+
+
+def _post_json_once(url: str, headers: dict, data: bytes, timeout: float) -> dict:
     """POST JSON with the standard library; errors become PROVIDER_ERROR / TIMEOUT."""
     proxy = _http_proxy()
     opener = urllib.request.build_opener(
@@ -993,7 +1066,7 @@ def _post_json(url: str, headers: dict, body: dict, timeout: float) -> dict:
     )
     request = urllib.request.Request(
         url,
-        data=json.dumps(body).encode("utf-8"),
+        data=data,
         headers={**headers, "Content-Type": "application/json"},
         method="POST",
     )
@@ -1007,7 +1080,9 @@ def _post_json(url: str, headers: dict, body: dict, timeout: float) -> dict:
             msg = (err.get("message") if isinstance(err, dict) else err) or text[:300]
         except Exception:
             msg = text[:300]
-        raise OmniError("PROVIDER_ERROR", f"API error {e.code}: {msg}") from e
+        error = OmniError("PROVIDER_ERROR", f"API error {e.code}: {msg}")
+        error.http_status = e.code
+        raise error from e
     except (socket.timeout, TimeoutError) as e:
         raise OmniError("TIMEOUT", f"No response within {timeout:g}s") from e
     except urllib.error.URLError as e:
@@ -1016,7 +1091,19 @@ def _post_json(url: str, headers: dict, body: dict, timeout: float) -> dict:
         raise OmniError("PROVIDER_ERROR", f"Network error: {e.reason}") from e
 
 
+# Short canned refusals (e.g. MiMo "The request was rejected because it was considered high risk").
+REFUSAL_RE = re.compile(r"request was rejected|considered high risk|content (?:policy|filter)", re.I)
+
+
 def call_model(conf: dict, media: list, prompt: str, timeout: float, show_think: bool = False) -> str:
+    """Send one request; a canned refusal is a PROVIDER_ERROR, never a result."""
+    text = _call_model_once(conf, media, prompt, timeout, show_think)
+    if len(text) < 300 and REFUSAL_RE.search(text):
+        raise OmniError("PROVIDER_ERROR", f"Model refused ({conf['id']}): {text.strip()}")
+    return text
+
+
+def _call_model_once(conf: dict, media: list, prompt: str, timeout: float, show_think: bool = False) -> str:
     """Send one request. media = [(path_or_url, kind), ...] placed before the prompt."""
     max_out = int(os.environ.get("VISION_MAX_TOKENS", "32768"))
     key, model = conf["api_key"], conf["model"]
@@ -1085,19 +1172,17 @@ def _analyze_pdf(pdf_path: str, mode: str, conf: dict, force_proxy: bool = False
     return header + "\n\n---\n\n".join(chunks)
 
 
-def _analyze_long_video(
-    video_path: str,
-    mode: str,
-    duration: float,
-    conf: dict,
-    force_proxy: bool = False,
-) -> str:
-    """Lightweight long-video memory: segment → index → synthesize."""
-    mode = resolve_mode(mode, "video")
-    if mode not in LONG_VIDEO_MODES and mode not in VIDEO_MODES:
-        mode = "video-summary"
-    seg_len = max(60.0, LONG_SEGMENT_SEC)
-    idx_file = _index_path(video_path, mode)
+# Modes whose per-segment output is the deliverable: join instead of re-summarizing.
+CONCAT_MODES = {"audio-transcribe", "video-frame-analysis"}
+
+
+def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h264_only: bool) -> str:
+    """Planned long media: encode each segment once → analyze → index → join/synthesize.
+
+    The index is written after every segment, so a failed run resumes where it stopped.
+    """
+    n, seg_len, duration = plan["segments"], plan["segment_sec"], plan["duration"]
+    idx_file = _index_path(src, mode)
     segments = []
     if idx_file.is_file():
         try:
@@ -1105,88 +1190,79 @@ def _analyze_long_video(
             if (
                 cached.get("duration") == round(duration, 1)
                 and cached.get("mode") == mode
-                and cached.get("segments")
+                and cached.get("count") == n
             ):
-                segments = cached["segments"]
-                print(
-                    f"[genius-omni] long-video index hit: {len(segments)} segment(s)",
-                    file=sys.stderr,
-                )
+                segments = cached.get("segments") or []
+                print(f"[genius-omni] segment index hit: {len(segments)}/{n} done", file=sys.stderr)
         except Exception:
             segments = []
 
-    if not segments:
-        starts = []
-        t = 0.0
-        while t < duration:
-            starts.append(t)
-            t += seg_len
-        for i, start in enumerate(starts, 1):
-            dur = min(seg_len, max(1.0, duration - start))
-            end = start + dur
-            print(
-                f"[genius-omni] long-video segment {i}/{len(starts)} "
-                f"{format_duration(start)}–{format_duration(end)}…",
-                file=sys.stderr,
+    label = "VIDEO" if kind == "video" else "AUDIO"
+    for i in range(len(segments) + 1, n + 1):
+        start = (i - 1) * seg_len
+        end = min(duration, start + seg_len)
+        print(
+            f"[genius-omni] segment {i}/{n} {format_duration(start)}–{format_duration(end)}…",
+            file=sys.stderr,
+        )
+        seg_path = build_proxy(src, kind, plan, h264_only, start, end - start)
+        try:
+            note = analyze_media(
+                seg_path,
+                mode=mode,
+                _conf=conf,
+                _skip_long_video=True,
+                _segment_label=(
+                    f"SEGMENT {i}/{n} absolute time "
+                    f"{format_duration(start)}–{format_duration(end)} "
+                    f"(offset +{format_duration(start)} from media start). "
+                    f"Report timestamps as ABSOLUTE media time, not segment-local."
+                ),
             )
-            seg_path = cut_video_segment(video_path, start, dur)
-            try:
-                # Prefer compact segment notes for indexing
-                seg_mode = mode if mode in VIDEO_MODES else "video-summary"
-                note = analyze_media(
-                    seg_path,
-                    mode=seg_mode,
-                    force_proxy=force_proxy,
-                    _conf=conf,
-                    _skip_long_video=True,
-                    _segment_label=(
-                        f"SEGMENT {i}/{len(starts)} absolute time "
-                        f"{format_duration(start)}–{format_duration(end)} "
-                        f"(offset +{format_duration(start)} from media start). "
-                        f"Report timestamps as ABSOLUTE media time, not segment-local."
-                    ),
-                )
-            finally:
-                Path(seg_path).unlink(missing_ok=True)
-            segments.append({
-                "index": i,
-                "start": round(start, 2),
-                "end": round(end, 2),
-                "start_label": format_duration(start),
-                "end_label": format_duration(end),
-                "note": note,
-            })
+        finally:
+            Path(seg_path).unlink(missing_ok=True)
+        segments.append({
+            "index": i,
+            "start": round(start, 2),
+            "end": round(end, 2),
+            "start_label": format_duration(start),
+            "end_label": format_duration(end),
+            "note": note,
+        })
         idx_file.write_text(
             json.dumps({
-                "file": str(Path(video_path).resolve()),
+                "file": str(Path(src).resolve()),
                 "mode": mode,
                 "duration": round(duration, 1),
+                "count": n,
                 "segment_sec": seg_len,
                 "segments": segments,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        print(f"[genius-omni] long-video index saved → {idx_file}", file=sys.stderr)
 
-    # Synthesize final answer from segment notes (text-only, no media reupload)
     index_blob = "\n\n".join(
         f"### Segment {s['index']}: {s['start_label']} – {s['end_label']}\n{s['note']}"
         for s in segments
     )
-    synth_prompt = (
-        f"[VIDEO GROUND TRUTH — total duration {format_duration(duration)} "
-        f"({duration:.1f}s). Segment notes below cover the full timeline.]\n\n"
-        f"{PROMPTS.get(mode, PROMPTS['video-summary'])}\n\n"
-        "You are given chronological segment notes already extracted from the video. "
-        "Synthesize ONE coherent answer for the whole video. "
-        "Merge duplicates, keep absolute timestamps, do not invent content "
-        "not supported by the notes.\n\n"
-        f"--- SEGMENT NOTES ---\n{index_blob}"
-    )
-    result = call_model(conf, [], synth_prompt, timeout=180)
+    if mode in CONCAT_MODES:
+        result = index_blob
+    else:
+        # Synthesize from segment notes (text-only, no media re-upload)
+        synth_prompt = (
+            f"[{label} GROUND TRUTH — total duration {format_duration(duration)} "
+            f"({duration:.1f}s). Segment notes below cover the full timeline.]\n\n"
+            f"{PROMPTS.get(mode, PROMPTS['video-summary'])}\n\n"
+            f"You are given chronological segment notes already extracted from the {kind}. "
+            f"Synthesize ONE coherent answer for the whole {kind}. "
+            "Merge duplicates, keep absolute timestamps, do not invent content "
+            "not supported by the notes.\n\n"
+            f"--- SEGMENT NOTES ---\n{index_blob}"
+        )
+        result = call_model(conf, [], synth_prompt, timeout=300)
     result += (
         f"\n\n---\n⏱ **时长校验** — ffprobe 实测: **{format_duration(duration)}** "
-        f"| segments: {len(segments)} × ~{int(seg_len)}s "
+        f"| segments: {n} × ~{format_duration(seg_len)} "
         f"| index: `{idx_file}`"
     )
     return result
@@ -1258,51 +1334,26 @@ def analyze_media(
 
     is_video_input = kind == "video"
     is_audio_input = kind == "audio"
-    timeout = 300 if (is_video_input or is_audio_input) else 60
+    timeout = 60
     upload_path = media_input
-
     actual_duration = None
+    plan = None
+    h264_only = conf["api_style"] == "gemini"  # Gemini decodes H.264 most reliably
+
     if is_local and (is_video_input or is_audio_input):
-        actual_duration = get_media_duration(media_input)
-
-    # Long local video → segment index (lightweight memory)
-    if (
-        not _skip_long_video
-        and is_local
-        and is_video_input
-        and actual_duration is not None
-        and actual_duration >= LONG_VIDEO_SEC
-        and mode in LONG_VIDEO_MODES
-        and os.environ.get("VISION_LONG_VIDEO", "1").strip().lower()
-        not in ("0", "false", "no", "off")
-    ):
-        print(
-            f"[genius-omni] long video detected ({format_duration(actual_duration)} "
-            f">= {format_duration(LONG_VIDEO_SEC)}); using segment index…",
-            file=sys.stderr,
-        )
-        return _analyze_long_video(media_input, mode, actual_duration, conf, force_proxy)
-
-    if is_local:
-        try:
-            # --force-proxy is video-oriented; audio/image still size-trigger.
-            # Gemini-style local video prefers H.264 for broader decoder support.
-            # OpenAI-style (MiMo) rejects AIFF, so it always gets an AAC proxy.
-            upload_path = ensure_media_under_limit(
-                media_input,
-                kind=kind,
-                force_proxy=bool(force_proxy and is_video_input) or (
-                    is_audio_input
-                    and conf["api_style"] == "openai"
-                    and _path_suffix(media_input) in (".aiff", ".aif")
-                ),
-                prefer_h264=conf["api_style"] == "gemini",
-            )
-        except Exception as e:
-            if Path(media_input).stat().st_size > MAX_RAW_BYTES:
-                raise
-            print(f"[genius-omni] proxy skipped: {e}", file=sys.stderr)
-            upload_path = media_input
+        plan = plan_media(media_input, kind, conf["api_style"], force_proxy=force_proxy)
+        actual_duration = plan["duration"]
+        if not _skip_long_video:
+            print(f"[genius-omni] plan: {describe_plan(plan, kind)}", file=sys.stderr)
+        if plan["action"] == "segments" and not _skip_long_video:
+            return _analyze_segments(media_input, kind, mode, plan, conf, h264_only)
+        if plan["action"] != "passthrough":
+            upload_path = build_proxy(media_input, kind, plan, h264_only)
+        timeout = max(300, min(900, (actual_duration or 0) * 0.6))
+    elif is_video_input or is_audio_input:
+        timeout = 300
+    elif is_local and Path(media_input).stat().st_size > PROXY_TRIGGER_BYTES:
+        upload_path = make_image_proxy(media_input)[0]
 
     if actual_duration is not None:
         label = "AUDIO" if is_audio_input else "VIDEO"
@@ -1336,6 +1387,7 @@ def analyze_media(
                 e.code == "PROVIDER_ERROR"
                 and is_local
                 and is_video_input
+                and upload_path == media_input
                 and (any(s in err for s in ("400", "Param", "Invalid"))
                      or "corrupted" in err.lower() or "decode" in err.lower())
             )
@@ -1345,13 +1397,16 @@ def analyze_media(
                 f"[genius-omni] API failed ({err[:120]}); retrying with H.264 video proxy…",
                 file=sys.stderr,
             )
-            proxy_path, enc = make_video_proxy(media_input, h264_only=True)
+            proxy_path, enc = make_video_proxy(
+                media_input, video_kbps=plan["video_kbps"], audio_kbps=plan["audio_kbps"], h264_only=True,
+            )
             print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
             media[0] = (proxy_path, kind)
             result_text = call_model(conf, media, prompt, timeout, show_think)
 
 
-    if actual_duration is not None:
+    # Segments get one footer on the joined result, not one each.
+    if actual_duration is not None and not _segment_label:
         footer_parts = [f"ffprobe 实测: **{format_duration(actual_duration)}**"]
         dur_patterns = [
             r'(?:total\s+)?duration[:\s]*(\d+)[:：](\d+)(?:[:：](\d+))?',
@@ -1408,7 +1463,7 @@ def main():
     parser.add_argument(
         "--force-proxy",
         action="store_true",
-        help="Force video analysis proxy (HEVC GPU first) even if under size trigger",
+        help="Always build an analysis proxy, even when the file could be uploaded as-is",
     )
     parser.add_argument(
         "--proxy-only", action="store_true", help="Only build analysis proxy and print path (no API call)",
@@ -1477,8 +1532,8 @@ def main():
                 print(f"pdftoppm: {info['pdftoppm']}")
                 print(f"active:   {info['active_provider']}")
                 print(
-                    f"long-video: threshold={info['long_video_sec']}s "
-                    f"segment={info['long_segment_sec']}s"
+                    f"media: budget={info['budget_mb']}MB/request fps={info['proxy_fps']:g} "
+                    f"min_video={info['video_min_kbps']}k encoder={info['video_encoder']}"
                 )
                 print(f"pdf: max_pages={info['pdf_max_pages']} dpi={info['pdf_dpi']}")
                 for p in info["providers"]:
@@ -1511,21 +1566,29 @@ def main():
                 else:
                     print(f"kind=pdf\npages={len(pages)}\n" + "\n".join(pages))
                 return
-            builder = {"video": make_video_proxy, "audio": make_audio_proxy}.get(kind, make_image_proxy)
-            proxy, enc = builder(args.file)
-            if args.output == "json":
-                print(json.dumps({
-                    "file": args.file,
-                    "kind": kind,
-                    "proxy": proxy,
-                    "encoder": enc,
-                    "bytes": Path(proxy).stat().st_size,
-                }, ensure_ascii=False, indent=2))
+            if kind == "image":
+                proxy, enc = make_image_proxy(args.file)
+                built = {"kind": kind, "proxies": [proxy], "encoder": enc}
             else:
-                print(
-                    f"kind={kind}\nproxy={proxy}\nencoder={enc}\n"
-                    f"bytes={Path(proxy).stat().st_size}"
-                )
+                conf = provider_conf(args.provider)
+                h264_only = conf["api_style"] == "gemini"
+                plan = plan_media(args.file, kind, conf["api_style"], force_proxy=True)
+                if plan["action"] == "segments":
+                    proxies = [
+                        build_proxy(args.file, kind, plan, h264_only, i * plan["segment_sec"],
+                                    min(plan["duration"], (i + 1) * plan["segment_sec"]) - i * plan["segment_sec"])
+                        for i in range(plan["segments"])
+                    ]
+                else:
+                    proxies = [build_proxy(args.file, kind, plan, h264_only)]
+                built = {"kind": kind, "plan": describe_plan(plan, kind), "proxies": proxies}
+            sizes = [Path(p).stat().st_size for p in built["proxies"]]
+            if args.output == "json":
+                print(json.dumps({"file": args.file, **built, "bytes": sizes}, ensure_ascii=False, indent=2))
+            else:
+                print("\n".join(f"{k}={v}" for k, v in built.items() if k != "proxies"))
+                for p, b in zip(built["proxies"], sizes):
+                    print(f"proxy={p} bytes={b}")
             return
 
         result = analyze_media(

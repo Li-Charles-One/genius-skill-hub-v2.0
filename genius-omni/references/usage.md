@@ -25,7 +25,7 @@ python3 "<skill_dir>/scripts/vision.py" screenshot.png ui-review
 python3 "<skill_dir>/scripts/vision.py" document.jpg ocr --output json
 python3 "<skill_dir>/scripts/vision.py" before.png compare --compare-with after.png
 
-# Video / YouTube (local ≥15 min is segmented automatically)
+# Video / YouTube (long local media is split by the computed plan)
 python3 "<skill_dir>/scripts/vision.py" meeting.mp4 video-summary
 python3 "<skill_dir>/scripts/vision.py" lecture-2h.mp4 video-summary --no-long-video
 python3 "<skill_dir>/scripts/vision.py" "https://www.youtube.com/watch?v=..." video-summary
@@ -38,7 +38,7 @@ python3 "<skill_dir>/scripts/vision.py" clip.mp3 describe          # → audio-s
 python3 "<skill_dir>/scripts/vision.py" report.pdf ocr
 VISION_PDF_PAGES=1 python3 "<skill_dir>/scripts/vision.py" scan.pdf ocr   # force page-by-page
 
-# Oversize media: only build the analysis proxy (no API call)
+# Show the plan and build proxies / segments only (no API call)
 python3 "<skill_dir>/scripts/vision.py" big.mp4 --proxy-only
 python3 "<skill_dir>/scripts/vision.py" report.pdf --proxy-only           # render pages
 
@@ -130,36 +130,44 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 |---|---|
 | Image | jpg / png / gif / webp / bmp (SVG: convert to PNG first) |
 | Video | mp4 / mov / avi / mkv / webm / flv / wmv / m4v / YouTube |
-| Audio | mp3 / wav / flac / m4a / ogg / aac / wma / opus / aiff (MiMo: aiff is converted to AAC first) |
+| Audio | mp3 / wav / flac / m4a / ogg / aac / wma / opus / aiff (wma / aiff are converted to AAC first) |
 | PDF | pdf |
 
-Local media is sent as base64 (raw ≤35MB, leaving headroom under MiMo's ~50MB encoded limit). A public URL is passed through and skips base64 and proxies (MiMo: video ≤300MB, audio ≤100MB).
+Local media is sent as base64. A public URL is passed through and skips base64 and proxies (MiMo: video ≤300MB, audio ≤100MB).
 
-Local media over `VISION_PROXY_TRIGGER_MB` is compressed into an analysis proxy (not a master):
+**Audio / video are planned, not retried.** One `ffprobe` call reads duration, codec and size; the plan is computed from the per-request budget and printed as `[genius-omni] plan: …`:
 
-| Kind | Strategy |
+| Case | Action |
 |---|---|
-| Video | `hevc_qsv/nvenc/amf` → `h264_qsv/nvenc/amf` → `libx264`, width 1280, then 720p / 480p. Gemini style prefers H.264; an API codec rejection retries once with H.264. No AV1 (MiMo base64 often rejects it). |
-| Audio | AAC `m4a` at `VISION_PROXY_AUDIO_K`; still too large → 32k mono |
-| Image | JPEG, long edge ≤2048; still too large → 1280 |
+| H.264 `.mp4/.mov/.m4v` (MiMo: also HEVC) or common audio, ≤ budget, ≤ `VISION_MAX_SINGLE_SEC` | upload as-is |
+| fits one request at ≥ `VISION_VIDEO_MIN_KBPS` | one proxy, bitrate = budget ÷ duration |
+| otherwise | N equal segments, N = ⌈duration ÷ max segment⌉; each segment is encoded straight from the source |
 
-PDF: Gemini style sends the whole file in one request when it is ≤ the proxy trigger size. Otherwise (MiMo, larger files, or `VISION_PDF_PAGES=1`) `pdftoppm` renders up to `VISION_PDF_MAX_PAGES` pages and each page is analyzed separately. Rendered pages are cached per file.
+- Video proxy: H.264 (MiMo: HEVC first), long edge ≤ `VISION_PROXY_SCALE` (never upscaled), `VISION_PROXY_FPS` fps, mono AAC. Encoder: VideoToolbox on macOS → NVENC/QSV/AMF → `libx264`; a failing encoder is skipped for the rest of the run. Gemini samples video at ~1 fps, so 2 fps keeps text sharp at a low bitrate. An API codec rejection of an as-is upload retries once with a proxy.
+- Audio proxy: mono AAC `m4a` at `VISION_PROXY_AUDIO_KBPS`; 64k fits 30 min (`VISION_MAX_SINGLE_SEC`) in ~15MB.
+- Image: over `VISION_PROXY_TRIGGER_MB` → JPEG, long edge ≤2048; still too large → 1280.
+- Proxies are cached per source file + spec, so a rerun does not re-encode.
+- Segments: one API call each, then one synthesis call; `audio-transcribe` and `video-frame-analysis` join segment outputs instead. The index is saved after every segment, so a failed run resumes from the next segment.
+- Gateway errors (HTTP 429/5xx, network) retry after 5s / 15s / 30s. A canned refusal (e.g. MiMo "considered high risk") is `PROVIDER_ERROR`, not a result.
 
-Long video: local video ≥ `VISION_LONG_VIDEO_SEC` is cut into `VISION_LONG_SEGMENT_SEC` segments (one API call each plus one synthesis call). Notes are indexed per file and mode, so a rerun only synthesizes.
+PDF: Gemini style sends the whole file in one request when it is ≤ `VISION_PROXY_TRIGGER_MB`. Otherwise (MiMo, larger files, or `VISION_PDF_PAGES=1`) `pdftoppm` renders up to `VISION_PDF_MAX_PAGES` pages and each page is analyzed separately. Rendered pages are cached per file.
 
 | Env | Default | Meaning |
 |---|---|---|
-| `VISION_PROXY_TRIGGER_MB` | `20` | compress above this size |
-| `VISION_MAX_RAW_MB` | `35` | base64 raw upload limit |
-| `VISION_PROXY_SCALE` | `1280` | video proxy width |
-| `VISION_PROXY_AUDIO_K` | `64k` | audio proxy bitrate |
+| `VISION_BUDGET_MB` | `30` | media bytes per request (29.8MB verified on CPA) |
+| `VISION_MAX_RAW_MB` | `35` | hard base64 raw limit |
+| `VISION_PROXY_FPS` | `2` | video proxy frame rate |
+| `VISION_PROXY_SCALE` | `1280` | video proxy long edge |
+| `VISION_PROXY_AUDIO_KBPS` | `64` | proxy audio bitrate (mono) |
+| `VISION_VIDEO_MIN_KBPS` | `200` | below this, split instead of squeezing |
+| `VISION_VIDEO_MAX_KBPS` | `1500` | proxy video bitrate cap |
+| `VISION_MAX_SINGLE_SEC` | `1800` | max media seconds per request |
+| `VISION_LONG_VIDEO` | `1` | `0` never splits (same as `--no-long-video`) |
+| `VISION_PROXY_TRIGGER_MB` | `20` | image downscale / whole-PDF threshold |
 | `VISION_PROXY_IMAGE_MAX_EDGE` | `2048` | image proxy long edge |
 | `VISION_PDF_PAGES` | off | `1` forces page-by-page PDF |
 | `VISION_PDF_MAX_PAGES` | `30` | page mode page limit |
 | `VISION_PDF_DPI` | `180` | page mode render DPI |
-| `VISION_LONG_VIDEO` | `1` | `0` disables segmentation (same as `--no-long-video`) |
-| `VISION_LONG_VIDEO_SEC` | `900` | segmentation threshold |
-| `VISION_LONG_SEGMENT_SEC` | `300` | segment length (min 60) |
 | `VISION_CACHE_MAX_AGE_DAYS` | `30` | purge proxies/indexes older than N days; `0` disables |
 
 Cache files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`). Old files are purged at most once per run; `--cleanup-cache` purges immediately.
@@ -172,5 +180,5 @@ Cache files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`).
 - [ ] Audio: `python3 scripts/vision.py test.wav audio-transcribe`
 - [ ] PDF: `python3 scripts/vision.py test.pdf ocr` (whole document) and `VISION_PDF_PAGES=1 …` (pages)
 - [ ] MiMo: `python3 scripts/vision.py test.png describe --provider mimo`
-- [ ] Proxies: `--proxy-only` on a large video / wav / png (expect `h264_*`/`hevc_*`/`libx264`, `.m4a`, `.jpg`)
+- [ ] Proxies: `--proxy-only` on a large video / long audio / png (expect a `plan=` line, `h264_videotoolbox` on macOS, `.m4a` segments, `.jpg`)
 - [ ] Errors: a missing file exits 3 with `INPUT_NOT_FOUND`
