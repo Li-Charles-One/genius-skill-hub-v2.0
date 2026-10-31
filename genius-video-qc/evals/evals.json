@@ -1,0 +1,78 @@
+{
+  "skill_name": "genius-video-qc",
+  "evals": [
+    {
+      "id": "full-qc",
+      "prompt": "这条成片 final_cut.mp4 交付前帮我检查一遍，有没有问题",
+      "trigger_expected": true,
+      "expected_output": "Runs qc.py --check, then qc.py run on the file, views the overview sheets, confirms flash candidates and high/pattern subtitle differences with zoom and recheck, and reports must-fix / should-fix / needs-confirmation items with timecodes (wrong terms or homophones in subtitles, stock-footage watermarks, unfinished placeholders, stray frames at cuts, true peak above -1 dBTP).",
+      "files": ["SKILL.md", "references/review-guide.md"],
+      "assertions": [
+        {"type": "contains", "value": "qc.py"},
+        {"type": "contains", "value": "run"}
+      ]
+    },
+    {
+      "id": "subtitle-typos",
+      "prompt": "帮我看看这个视频的字幕有没有错别字 promo.mp4",
+      "trigger_expected": true,
+      "expected_output": "Runs qc.py run, works through the subtitle ↔ speech differences, and only reports a typo after zoom shows the burnt-in text and recheck confirms what was said.",
+      "files": ["SKILL.md", "references/review-guide.md"],
+      "assertions": [
+        {"type": "contains", "value": "zoom"},
+        {"type": "contains", "value": "recheck"}
+      ]
+    },
+    {
+      "id": "custom-ocr",
+      "prompt": "质检的时候 OCR 换成我自己的 PaddleOCR 脚本 /opt/ocr/paddle_dir.py",
+      "trigger_expected": true,
+      "expected_output": "Passes --ocr-cmd \"python3 /opt/ocr/paddle_dir.py {dir} {lang}\" (or sets QC_OCR_CMD) and points to the JSON-lines contract in references/backends.md.",
+      "files": ["SKILL.md", "references/backends.md"],
+      "assertions": [
+        {"type": "contains", "value": "--ocr-cmd"},
+        {"type": "contains", "value": "{dir}"}
+      ]
+    },
+    {
+      "id": "missing-file",
+      "prompt": "检查一下 /tmp/does-not-exist.mp4 这条成片",
+      "trigger_expected": true,
+      "expected_output": "Reports INPUT_NOT_FOUND instead of inventing findings.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "INPUT_NOT_FOUND"}
+      ]
+    },
+    {
+      "id": "plain-transcribe-near-miss",
+      "prompt": "把这段采访视频的语音转成文字 interview.mp4",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-voice ASR, not a QC run.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "qc.py"}
+      ]
+    },
+    {
+      "id": "edit-near-miss",
+      "prompt": "把这条视频的字幕改一下，把 PVC 改成 PTC 再导出",
+      "trigger_expected": false,
+      "expected_output": "Explains that burnt-in subtitles must be fixed in the editing project; does not run a QC pass.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "qc.py run"}
+      ]
+    },
+    {
+      "id": "summary-near-miss",
+      "prompt": "这个视频讲了什么，帮我按时间轴总结一下",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-omni for video understanding, not genius-video-qc.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "qc.py"}
+      ]
+    }
+  ]
+}

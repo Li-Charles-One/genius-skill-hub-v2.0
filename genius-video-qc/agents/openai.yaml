@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Video QC"
+  short_description: "Pre-delivery QC of a finished video with timecodes"
+  default_prompt: "Use $genius-video-qc to check this finished video for subtitle typos, watermarks, placeholders, flash frames and loudness before delivery."
