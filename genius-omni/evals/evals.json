@@ -54,6 +54,17 @@
       ]
     },
     {
+      "id": "footage-brief",
+      "prompt": "给这条原始素材做一份素材说明书，方便剪辑 A001_C003.mov，脚本在 script.txt",
+      "trigger_expected": true,
+      "expected_output": "Runs footage with --script script.txt; reports the status, counts, the .footage.md path and any review items.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "footage"},
+        {"type": "contains", "value": "--script"}
+      ]
+    },
+    {
       "id": "interview-transcribe-timeline-near-miss",
       "prompt": "把这段采访录音逐字转写，标上时间和说话人 interview.wav",
       "trigger_expected": false,

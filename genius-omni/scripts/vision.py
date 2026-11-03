@@ -17,7 +17,7 @@ Usage:
     python3 vision.py long.mp4 video-summary   # auto segment when long
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
-Video modes (5):  video-summary, video-ocr, video-review, video-frame-analysis, video-shots
+Video modes (6):  video-summary, video-ocr, video-review, video-frame-analysis, video-shots, footage
 Audio modes (3):  audio-summary, audio-review, audio-scene
 PDF:              ocr / describe / chart-data / ui-review
 
@@ -44,6 +44,7 @@ import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
+import footage
 import measure
 import storyboard
 
@@ -161,7 +162,7 @@ PROMPTS = {
         "(2) Timeline — bullet list `mm:ss – mm:ss | what happens` covering the whole video\n"
         "(3) Key people, objects, or scenes shown\n"
         "(4) On-screen text / captions (quote important ones with timestamps)\n"
-        "(5) Speech / audio content with speaker labels when possible\n"
+        "(5) Speech / audio content — what is said, in brief, with speaker labels when possible (not verbatim)\n"
         "(6) Overall tone, style, and production quality\n"
         "Be detailed and chronological. Do not invent events outside the video."
     ),
@@ -206,13 +207,14 @@ PROMPTS = {
         "- **摄影机运动**: Static / Pan left-right / Tilt up-down / Zoom in-out / "
         "Dolly / Handheld / Crane / Drone / etc. Describe direction and speed.\n"
         "- **场景**: Where does this shot take place?\n"
-        "- **对白/旁白**: Transcribe spoken words verbatim with speaker labels. If none, '无'.\n"
+        "- **对白/旁白**: Gist of what is said, with speaker labels (not verbatim). If none, '无'.\n"
         "- **屏显文字**: Any text/graphics/subtitles. If none, '无'.\n\n"
         "After all shots, append:\n"
         "- **总镜数**: N\n"
         "- **总时长**: X.Xs\n"
         "- **整体风格**: 1-2 sentence style description"
     ),
+    "footage": "AG_FOOTAGE/1.0 brief: measure + storyboard + transcript + whole-clip overview (see FOOTAGE_PROMPT).",
     # Storyboard sheets, not the video: shots and timing were measured locally (measure.py).
     "video-shots": (
         "These images are storyboard sheets of one video. Every cell is one exact frame, labelled at its "
@@ -225,7 +227,8 @@ PROMPTS = {
         '"angle": "平视/俯拍/仰拍/顶拍/斜角…", '
         '"movement": "固定/推/拉/摇/移/跟/升降/变焦/手持晃动…，看不出写 无法判断", '
         '"people": "人数与外观特征，没有人写 无", "scene": "场景", '
-        '"action": "画面：谁在哪里做什么", "performance": "情绪、动作、因果，没有人写 无"}\n'
+        '"action": "画面：谁在哪里做什么", "performance": "情绪、动作、因果，没有人写 无", '
+        '"flags": "废片/跑焦/打板/说错重来/最佳 中适用的，用顿号分隔，没有写空字符串"}\n'
         "Keep each value under 40 characters. Shots on these sheets: {ids}"
     ),
     # ── Audio prompts ──────────────────────────────────────────────
@@ -299,7 +302,7 @@ IMAGE_MODES = {
     "describe", "ocr", "ui-review", "chart-data", "object-detect", "compare",
 }
 VIDEO_MODES = {
-    "video-summary", "video-ocr", "video-review", "video-frame-analysis", "video-shots",
+    "video-summary", "video-ocr", "video-review", "video-frame-analysis", "video-shots", "footage",
 }
 AUDIO_MODES = {
     "audio-summary", "audio-review", "audio-scene",
@@ -1295,7 +1298,7 @@ def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h2
 
 
 SHOT_FIELDS = [("shot_size", "景别"), ("angle", "角度"), ("movement", "运镜"), ("people", "人物"),
-               ("scene", "场景"), ("action", "画面"), ("performance", "表演")]
+               ("scene", "场景"), ("action", "画面"), ("performance", "表演"), ("flags", "标记")]
 SHOT_MIDDLE_SEC = 4.0  # shots at least this long get a middle frame on the storyboard
 
 
@@ -1308,7 +1311,7 @@ def _json_array(text: str) -> list | None:
     return data if isinstance(data, list) else None
 
 
-def _analyze_shots(src: str, conf: dict) -> dict:
+def _analyze_shots(src: str, conf: dict, out_dir: Path | None = None) -> dict:
     """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
     from labelled storyboard sheets, never times or counts them."""
     try:
@@ -1316,7 +1319,7 @@ def _analyze_shots(src: str, conf: dict) -> dict:
     except measure.MeasureError as e:
         raise OmniError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
     seek = measure.frame_times(src, for_seek=True)
-    out_dir = _proxy_dir() / "storyboards" / _file_fingerprint(src)
+    out_dir = out_dir or _proxy_dir() / "storyboards" / _file_fingerprint(src)
     last = r["frames"] - 1
     print(f"[genius-omni] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
           f"{len(r['suspects'])} suspects", file=sys.stderr)
@@ -1374,6 +1377,97 @@ def _analyze_shots(src: str, conf: dict) -> dict:
     return r
 
 
+# footage, step 4: whole-clip view. The model answers with IDs only; frames and timecode are computed.
+FOOTAGE_PROMPT = (
+    "You are logging one raw video clip for an editor. Watch the clip. Below are its shot list and "
+    "transcript, measured frame by frame (IDs: S### shots, U### utterances; ASR speakers are 1, 2, …)."
+    "{script}\n\nSHOTS\n{shots}\n\nTRANSCRIPT\n{utts}\n\n"
+    "Return ONLY one JSON object with these keys. Refer to shots and lines ONLY by their IDs, never by time; "
+    "use only IDs listed above.\n"
+    '{"summary": "2–3 sentences: what this clip is, who, where, what is said",\n'
+    ' "people": [{"id": "P1", "appearance": "", "identity": "role, with evidence (badge, caption, what they say)", '
+    '"speakers": ["1"], "shots": "S001–S012, S020"}],\n'
+    ' "segments": [{"id": "G01", "shots": "S001–S006", "content": "", "emotion": "", "use": "what an editor could use it for"}],\n'
+    ' "highlights": {"quotes": [{"u": "U014", "person": "P2", "why": ""}], "best_reaction": [{"s": "S023", "why": ""}], '
+    '"retakes": [{"us": ["U007", "U009"], "pick": "U009", "why": ""}], "unusable": [{"shots": "S030–S031", "why": "跑焦/杂音/说错/打板…"}]},\n'
+    ' "suspect_words": [{"u": "U003", "heard": "as transcribed", "likely": "correct form", '
+    '"evidence": "script keyword / on-screen text in S004 / context"}],\n'
+    ' "uncertain": ["anything you are unsure of; mark estimates with ~"]}\n'
+    "Rules: P1, P2… in order of first appearance; map every ASR speaker to a person. Segments are runs of "
+    "consecutive shots that cover all shots in order without overlap. Retakes: the same line said more than "
+    "once. suspect_words: likely mishearings (homophones, names, brands, models) — propose, do not rewrite. "
+    "Empty lists are fine."
+)
+
+
+def _analyze_footage(src: str, conf: dict, script: str | None = None) -> dict:
+    """AG_FOOTAGE/1.0 brief next to the clip: <stem>.footage.md, <stem>.footage.json, <stem>.footage/."""
+    from datetime import datetime
+    clip = Path(src)
+    base = clip.with_suffix("")
+    if not os.access(clip.parent, os.W_OK):
+        raise OmniError("UNSUPPORTED_FORMAT", f"cannot write the footage brief next to the clip: {clip.parent}")
+    r = _analyze_shots(src, conf, Path(f"{base}.footage"))
+    seek = measure.frame_times(src, for_seek=True)
+
+    asr_note, utts, asr_model = None, [], None
+    try:
+        print("[genius-omni] transcribing with genius-voice…", file=sys.stderr)
+        asr = footage.transcribe(src)
+        asr_model = asr.get("model")
+        utts = footage.utterances(asr, seek, r["shots"], r["frames"])
+        footage.cut_points(utts, r["frames"])
+    except (footage.FootageError, ValueError) as e:
+        asr_note = str(e)
+        print(f"[genius-omni] {asr_note}", file=sys.stderr)
+
+    ov = {}
+    plan = plan_media(src, "video", conf["api_style"])
+    if plan["action"] == "segments":
+        r["warnings"].append(f"clip longer than {format_duration(MAX_SINGLE_SEC)}: whole-clip overview skipped")
+    else:
+        shot_lines = "\n".join(
+            f"{s['id']} {s['tc_in']} {s['end'] - s['start']:.1f}s | "
+            + " | ".join(s.get("desc", {}).get(k, "") for k in ("shot_size", "scene", "action")) for s in r["shots"])
+        utt_lines = "\n".join(f"{u['id']} [{u.get('speaker') or '?'}] {u['shots'][0] if u['shots'] else ''} | {u['text']}"
+                              for u in utts) or "(no transcript)"
+        prompt = (FOOTAGE_PROMPT.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
+                  .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + LANGUAGE_RULE
+        upload = src if plan["action"] == "passthrough" else build_proxy(src, "video", plan, conf["api_style"] == "gemini")
+        print("[genius-omni] whole-clip overview…", file=sys.stderr)
+        text = call_model(conf, [(upload, "video")], prompt, max(300, min(900, plan["duration"] * 0.6)))
+        a, b = text.find("{"), text.rfind("}")
+        try:
+            ov = json.loads(text[a:b + 1]) if a != -1 and b > a else {}
+        except ValueError:
+            ov = {}
+        if not ov:
+            r["warnings"].append("whole-clip overview returned no JSON")
+
+    doc = footage.build(r, utts, ov, asr_note,
+                        {"measure": "genius-omni measure.py", "asr": asr_model, "storyboard": conf["model"],
+                         "overview": conf["model"] if ov else None},
+                        _file_fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
+                        footage.audio_info(src))
+    md_path, json_path = Path(f"{base}.footage.md"), Path(f"{base}.footage.json")
+    md_path.write_text(footage.render_md(doc, md_path.parent), encoding="utf-8")
+    json_path.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"footage_md": str(md_path), "footage_json": str(json_path), "status": doc["status"],
+            "counts": doc["counts"], "review": doc["review"], "validation": doc["validation"],
+            "warnings": doc["warnings"]}
+
+
+def render_footage(res: dict) -> str:
+    c, rv = res["counts"], res["review"]
+    lines = [f"状态：**{res['status']}** · {c['shots']} 镜头 · {c['utterances']} 句台词 · {c['people']} 人 · {c['segments']} 段",
+             f"说明书：`{res['footage_md']}`", f"数据：`{res['footage_json']}`"]
+    if any(rv.values()):
+        lines.append(f"待复核：未复核切点 {rv['unresolved_suspects']} · 可能听错的词 {rv['uncertain_words']} · "
+                     f"缺描述镜头 {rv['missing_descriptions']}")
+    lines += [f"校验未通过：{x}" for x in res["validation"]] + [f"⚠️ {w}" for w in res["warnings"]]
+    return "\n".join(lines)
+
+
 def render_shots(r: dict) -> str:
     unresolved = [s for s in r["suspects"] if "check" not in s]
     lines = [f"**{r['shot_count']} 个镜头** · {r['frames']} 帧 @ {r['fps']} fps（{r['fps_rational']}） · "
@@ -1415,6 +1509,7 @@ def analyze_media(
     _skip_long_video: bool = False,
     _page_label: str | None = None,
     _segment_label: str | None = None,
+    script: str | None = None,
 ) -> str:
     """Analyze image / video / audio / PDF.
 
@@ -1442,10 +1537,10 @@ def analyze_media(
             f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
         )
 
-    if mode == "video-shots":
+    if mode in ("video-shots", "footage"):
         if kind != "video" or not is_local:
-            raise OmniError("UNSUPPORTED_FORMAT", "video-shots needs a local video file")
-        return _analyze_shots(media_input, conf)
+            raise OmniError("UNSUPPORTED_FORMAT", f"{mode} needs a local video file")
+        return _analyze_shots(media_input, conf) if mode == "video-shots" else _analyze_footage(media_input, conf, script)
 
     # PDF: whole-document or page-by-page path (before generic image pipeline)
     if kind == "pdf" and is_local:
@@ -1577,6 +1672,7 @@ def main():
     parser.add_argument("--base-url", default=None, help="API base URL override")
     parser.add_argument("--api-key", "-k", default=None, help="API key override")
     parser.add_argument("--compare-with", "-c", default=None, help="Second image for 'compare' mode")
+    parser.add_argument("--script", default=None, help="footage: script or keyword file (correct spellings of names, brands)")
     parser.add_argument(
         "--force-proxy",
         action="store_true",
@@ -1717,6 +1813,7 @@ def main():
             provider=args.provider,
             compare_with=args.compare_with,
             force_proxy=args.force_proxy,
+            script=Path(args.script).read_text(encoding="utf-8") if args.script else None,
         )
 
         if args.output == "json":
@@ -1726,7 +1823,8 @@ def main():
                 "result": result,
             }, ensure_ascii=False, indent=2)
         else:
-            body = render_shots(result) if isinstance(result, dict) else result
+            body = (render_footage(result) if "footage_md" in result else render_shots(result)) \
+                if isinstance(result, dict) else result
             output = f"## {args.mode.replace('-', ' ').title()} Analysis\n\n{body}"
 
         print(output)
