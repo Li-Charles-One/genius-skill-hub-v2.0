@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -102,6 +103,8 @@ def _post(url: str, key: str, body: dict, timeout: float) -> dict:
             if isinstance(e.reason, (socket.timeout, TimeoutError)):
                 raise FootageError("TIMEOUT", f"No response within {timeout:g}s") from e
             err, transient = FootageError("PROVIDER_ERROR", f"Network error: {e.reason}"), True
+        except (http.client.HTTPException, ConnectionError) as e:  # getresponse() bypasses URLError
+            err, transient = FootageError("PROVIDER_ERROR", f"Connection dropped: {e}"), True
         if delay is None or not transient:  # timeouts are not retried: a slow request would only repeat
             raise err
         print(f"[genius-footage] {err} — retry {attempt}/{len(RETRY_DELAYS)} in {delay}s…", file=sys.stderr)
