@@ -138,14 +138,21 @@ def _runs(mask: list, gap: int) -> list[tuple[int, int]]:
 def detect(d1: list, dk: list, y: list, area: list, fps: float) -> tuple[dict, dict, list]:
     """Return ({frame: kind} confirmed shot starts, {frame: (first, last)} transition spans, [suspects])."""
     n = len(d1)
+    level = lambda vals: (lambda v: v[len(v) // 2] if v else 0.0)(sorted(v for v in vals if v > DUP_D1))
     cuts, suspects, starts, spans = [], [], {}, {}
     for i in range(1, n):
-        nb = sorted(v for v in d1[max(1, i - LOCAL):i] + d1[i + 1:i + 1 + LOCAL] if v > DUP_D1)
-        ratio = d1[i] / max(nb[len(nb) // 2] if nb else 0.0, MOTION_FLOOR)
+        # Also take the level from this shot alone (since the last cut): a still shot before a cut into a
+        # whip pan would otherwise drag the level down and turn the pan's next frames into cuts as well.
+        lo, right = max(1, i - LOCAL), d1[i + 1:i + 1 + LOCAL]
+        since = max(lo, cuts[-1] + 1) if cuts else lo
+        ratio = d1[i] / max(level(d1[lo:i] + right), level(d1[since:i] + right), MOTION_FLOOR)
         if d1[i] >= CUT_MIN and ratio >= CUT_RATIO and area[i] >= CUT_AREA:
             cuts.append(i)
         elif d1[i] >= WEAK_MIN and ratio >= WEAK_RATIO:  # a spike over part of the picture, or a dark/low-contrast cut
-            suspects.append({"first": i, "last": i, "kind": "weak-cut", "change": round(d1[i], 1)})
+            if suspects and suspects[-1]["last"] == i - 1:  # back-to-back spikes are one short dissolve
+                suspects[-1].update(last=i, change=max(suspects[-1]["change"], round(d1[i], 1)))
+            else:
+                suspects.append({"first": i, "last": i, "kind": "weak-cut", "change": round(d1[i], 1)})
 
     # Fades through black: the black frames plus the change leading in and out (≤1s each side) are one
     # transition; the next shot starts on the first frame after the black.
