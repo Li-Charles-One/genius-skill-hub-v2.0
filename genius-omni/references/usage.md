@@ -52,7 +52,7 @@ python3 "<skill_dir>/scripts/vision.py" --list-providers
 VISION_PROVIDER=cpa
 CPA_API_KEY=sk-your-cpa-key
 # optional overrides:
-# CPA_MODEL=gemini-3.8-flash-high
+# CPA_MODEL=gemini-4-argon-high
 # CPA_BASE_URL=https://cpa-jp.charles-ai.space/v1
 
 ```
@@ -79,7 +79,7 @@ Other errors exit 1; `--check` with missing tools exits 2.
 
 | Provider | API style | Default model | Base URL | Key env |
 |---|---|---|---|---|
-| **`cpa`（默认）** | `gemini` native | `gemini-3.8-flash-high` | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
+| **`cpa`（默认）** | `gemini` native | `gemini-4-argon-high` | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
 
 - `gemini` → `POST {root}/v1beta/models/{model}:generateContent`; local media `inline_data`, YouTube / URLs `file_data.file_uri`, PDF `application/pdf`.
 - `openai` → `POST {base}/chat/completions`; `image_url` / `video_url` / `input_audio`.

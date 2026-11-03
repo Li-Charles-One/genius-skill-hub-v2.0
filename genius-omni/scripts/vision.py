@@ -774,7 +774,7 @@ def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
 BUILTIN_PROVIDERS = {
     "cpa": {
         "base_url": "https://cpa-jp.charles-ai.space/v1",
-        "model": "gemini-3.8-flash-high",
+        "model": "gemini-4-argon-high",
         "api_style": "gemini",
         "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
         "note": "CPA Gemini relay (native generateContent)",
