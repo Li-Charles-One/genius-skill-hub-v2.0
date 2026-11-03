@@ -747,7 +747,7 @@ BUILTIN_PROVIDERS = {
     "cpa": {
         "base_url": "https://cpa-jp.charles-ai.space/v1",
         "model": "gemini-3.8-flash-high",  # images / PDF
-        "media_model": "gemini-4-argon-high",  # video / audio: fewer timeline gaps and invented sounds
+        "media_model": "gemini-3.8-flash-high",  # video / audio
         "api_style": "gemini",
         "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
         "note": "CPA Gemini relay (native generateContent)",
