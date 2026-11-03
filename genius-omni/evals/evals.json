@@ -44,6 +44,16 @@
       ]
     },
     {
+      "id": "exact-shot-list",
+      "prompt": "这条素材一共几个镜头？每个镜头从第几帧到第几帧，顺便描述一下 footage.mov",
+      "trigger_expected": true,
+      "expected_output": "Runs video-shots (not video-frame-analysis); reports the measured shot count, frame ranges and timecode with per-shot descriptions.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "video-shots"}
+      ]
+    },
+    {
       "id": "interview-transcribe-timeline-near-miss",
       "prompt": "把这段采访录音逐字转写，标上时间和说话人 interview.wav",
       "trigger_expected": false,
