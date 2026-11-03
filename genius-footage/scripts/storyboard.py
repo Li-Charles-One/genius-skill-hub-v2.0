@@ -1,5 +1,5 @@
 """
-Storyboards: exact frames, labelled with their id (S012a, X03b…), tiled into sheets.
+Storyboards: exact frames, labelled with their id (S012a, X03b, X04-7…), tiled into sheets.
 
 Labels are drawn into the pixels with a built-in 5x7 font, so no ffmpeg drawtext / fonts / PIL
 are needed. Frames are grabbed by pts, so each cell is exactly the frame the shot list names.
@@ -32,6 +32,7 @@ FONT = {  # 5x7, '#' = ink
     "a": ["     ", "     ", " ### ", "    #", " ####", "#   #", " ####"],
     "b": ["#    ", "#    ", "# ## ", "##  #", "#   #", "#   #", "#### "],
     "m": ["     ", "     ", "## # ", "# # #", "# # #", "#   #", "#   #"],
+    "-": ["     ", "     ", "     ", "#####", "     ", "     ", "     "],
 }
 
 
