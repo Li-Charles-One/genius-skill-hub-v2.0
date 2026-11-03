@@ -44,13 +44,13 @@
       ]
     },
     {
-      "id": "exact-shot-list",
+      "id": "exact-shot-list-near-miss",
       "prompt": "这条素材一共几个镜头？每个镜头从第几帧到第几帧，顺便描述一下 footage.mov",
-      "trigger_expected": true,
-      "expected_output": "Runs video-shots (not video-frame-analysis); reports the measured shot count, frame ranges and timecode with per-shot descriptions.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "trigger_expected": false,
+      "expected_output": "Routes to genius-footage (frame-accurate shots), not a genius-omni mode.",
+      "files": [],
       "assertions": [
-        {"type": "contains", "value": "video-shots"}
+        {"type": "contains", "value": "genius-footage"}
       ]
     },
     {

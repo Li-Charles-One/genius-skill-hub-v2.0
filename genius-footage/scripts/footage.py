@@ -2,13 +2,13 @@
 """
 Genius Footage — AG_FOOTAGE/1.0 brief for one clip (`<clip>.footage.md` + `.footage.json` + `.footage/`).
 
-    python3 footage.py <clip> [--script FILE] [--provider ID] [--model M] [--output text|json]
+    python3 footage.py <clip> [--script FILE] [--model M] [--output text|json]
     python3 footage.py --check
 
-Steps: genius-omni video-shots (frame measurement, storyboard check, per-shot description) →
-genius-voice asr --speakers (words → frames, cut points) → one whole-clip request where the model
-answers with IDs only (S001, U001, P1, G01) → IDs converted to frames and timecode → validate.
-Uses genius-omni and genius-voice from sibling folders (FOOTAGE_OMNI_DIR / FOOTAGE_VOICE_SCRIPT override).
+Steps: measure.py (cuts frame by frame) → storyboard check of doubtful cuts → per-shot description from
+storyboards → genius-voice asr --speakers (words → frames, cut points) → one whole-clip request where
+the model answers with IDs only (S001, U001, P1, G01) → IDs converted to frames and timecode → validate.
+Speech comes from genius-voice in a sibling folder (FOOTAGE_VOICE_SCRIPT overrides); models via client.py.
 Protocol: ArtisticCut/AG_FOOTAGE.md.
 """
 
@@ -18,29 +18,26 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from bisect import bisect_left, bisect_right
 from datetime import datetime
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-OMNI_DIR = Path(os.environ.get("FOOTAGE_OMNI_DIR", str(HERE.parent.parent / "genius-omni" / "scripts")))
-DEFAULT_VOICE = HERE.parent.parent / "genius-voice" / "scripts" / "voice.py"
-sys.path.insert(0, str(OMNI_DIR))
-try:
-    import measure
-    import vision
-except ImportError:
-    print(f"Error [DEPENDENCY_MISSING]: genius-omni not found at {OMNI_DIR} (set FOOTAGE_OMNI_DIR)", file=sys.stderr)
-    sys.exit(5)
+import client
+import measure
+import storyboard
+from client import FootageError
 
+HERE = Path(__file__).resolve().parent
+DEFAULT_VOICE = HERE.parent.parent / "genius-voice" / "scripts" / "voice.py"
 PROTOCOL = "AG_FOOTAGE/1.0"
 CUT_GAP, JOINED_GAP = 4, 2     # frames: a pause ≥4 is a clean cut; <2 at punctuation is run-together
 PUNCT = set("，。！？；：、,.!?;:…—")
 
 
-class FootageError(RuntimeError):
+class SpeechError(RuntimeError):
     pass
 
 
@@ -52,14 +49,14 @@ def voice_script() -> Path | None:
 
 
 def transcribe(src: str) -> dict:
-    """genius-voice ASR with speaker labels; raises FootageError with its message on failure."""
+    """genius-voice ASR with speaker labels; raises SpeechError with its message on failure."""
     script = voice_script()
     if not script:
-        raise FootageError(f"genius-voice not found at {DEFAULT_VOICE} (set FOOTAGE_VOICE_SCRIPT)")
+        raise SpeechError(f"genius-voice not found at {DEFAULT_VOICE} (set FOOTAGE_VOICE_SCRIPT)")
     p = subprocess.run([sys.executable, str(script), "asr", src, "--speakers", "--output", "json"],
                        capture_output=True, text=True)
     if p.returncode != 0:
-        raise FootageError(f"genius-voice asr failed: {(p.stderr or p.stdout).strip()[-300:]}")
+        raise SpeechError(f"genius-voice asr failed: {(p.stderr or p.stdout).strip()[-300:]}")
     return json.loads(p.stdout)
 
 
@@ -330,6 +327,115 @@ def validate(doc: dict) -> list[str]:
     return errs
 
 
+# ── Shots: storyboard check of doubtful cuts, then one description per shot ──
+
+LANGUAGE_RULE = (
+    "\n\nOUTPUT LANGUAGE (mandatory): write the whole answer, headings included, in "
+    "Simplified Chinese (简体中文). Quote on-screen text, spoken lines, names and brand "
+    "names verbatim in their original language; do not translate quotes."
+)
+SHOT_CHECK_PROMPT = (
+    "These images are storyboard cells around possible shot changes in one video. Each group X## has "
+    "three exact frames: X##a just before, X##m in the middle, X##b just after. The time between a and b "
+    "is given per group: a large change in very little time (a person in a new place 0.1s later) is a cut.\n"
+    "For each group decide whether X##a and X##b belong to the same continuous take. Same take: camera "
+    "or subject movement, a hand or object crossing, a lighting or focus change, a zoom within the take. "
+    "Different shots: a cut, jump cut, dissolve or wipe, or a change of angle or framing that is not "
+    "continuous camera movement.\n"
+    'Return ONLY a JSON array: [{"id": "X01", "new_shot": true, "reason": "under 20 characters"}]. '
+    "Groups: {ids}" + LANGUAGE_RULE
+)
+# Storyboard sheets, not the video: shots and timing were measured locally (measure.py).
+SHOT_PROMPT = (
+    "These images are storyboard sheets of one video. Every cell is one exact frame, labelled at its "
+    "top-left: S###a = first frame of shot S###, S###m = a middle frame (long shots only), "
+    "S###b = last frame. Shot boundaries and timing were measured frame by frame and are correct: "
+    "do not add, merge, renumber or re-time shots.\n"
+    "Describe every shot listed below from its own frames. Infer camera movement by comparing a → m → b.\n"
+    "Return ONLY a JSON array, one object per shot in the given order, keys exactly as written:\n"
+    '{"id": "S001", "shot_size": "大远景/远景/全景/中景/近景/特写/大特写", '
+    '"angle": "平视/俯拍/仰拍/顶拍/斜角…", '
+    '"movement": "固定/推/拉/摇/移/跟/升降/变焦/手持晃动…，看不出写 无法判断", '
+    '"people": "人数与外观特征，没有人写 无", "scene": "场景", '
+    '"action": "画面：谁在哪里做什么", "performance": "情绪、动作、因果，没有人写 无", '
+    '"flags": "废片/跑焦/打板/说错重来/最佳 中适用的，用顿号分隔，没有写空字符串"}\n'
+    "Keep each value under 40 characters. Shots on these sheets: {ids}" + LANGUAGE_RULE
+)
+SHOT_FIELDS = ("shot_size", "angle", "movement", "people", "scene", "action", "performance", "flags")
+SHOT_MIDDLE_SEC = 4.0  # shots at least this long get a middle frame on the storyboard
+
+
+def _json(text: str, open_ch: str, close_ch: str):
+    a, b = text.find(open_ch), text.rfind(close_ch)
+    try:
+        return json.loads(text[a:b + 1]) if a != -1 and b > a else None
+    except ValueError:
+        return None
+
+
+def shots(src: str, c: dict, out_dir: Path) -> dict:
+    """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
+    from labelled storyboard sheets, never times or counts them."""
+    try:
+        r = measure.measure(src)
+    except measure.MeasureError as e:
+        raise FootageError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
+    seek = measure.frame_times(src, for_seek=True)
+    last = r["frames"] - 1
+    print(f"[genius-footage] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
+          f"{len(r['suspects'])} suspects", file=sys.stderr)
+    r["storyboards"] = []
+
+    # 1. Suspects: before / middle / after frames decide whether a new shot starts.
+    if r["suspects"]:
+        ids = {f"X{i:02d}": s for i, s in enumerate(r["suspects"], 1)}
+        groups = [(x, [(x + "a", max(0, s["first"] - 1)), (x + "m", (s["first"] + s["last"]) // 2),
+                       (x + "b", min(last, s["last"] + 1))]) for x, s in ids.items()]
+        extra, spans = {}, {}
+        for sheet, gids in storyboard.sheets(src, seek, r["fps"], groups, out_dir, "suspects"):
+            r["storyboards"].append(str(sheet))
+            print(f"[genius-footage] checking {len(gids)} suspects on {sheet.name}…", file=sys.stderr)
+            listing = ", ".join(f"{x} (a→b {g} frames, {g / r['fps']:.2f}s)" for x in gids
+                                for g in [min(last, ids[x]["last"] + 1) - max(0, ids[x]["first"] - 1)])
+            answer = _json(client.call(c, [str(sheet)], SHOT_CHECK_PROMPT.replace("{ids}", listing), 300), "[", "]")
+            for item in answer if isinstance(answer, list) else []:
+                s = ids.get(str(item.get("id")))
+                if not s:
+                    continue
+                s["check"] = "new shot" if item.get("new_shot") else "same shot"
+                s["reason"] = item.get("reason", "")
+                if item.get("new_shot"):
+                    at = s["first"] if s["kind"] == "weak-cut" else (s["first"] + s["last"]) // 2
+                    extra[at] = "storyboard"
+                    if s["last"] > s["first"]:
+                        spans[at] = (s["first"], s["last"])
+        if extra:
+            measure.add_boundaries(r, extra, spans)
+
+    # 2. Describe every shot from its first / (middle) / last frames.
+    groups = []
+    for s in r["shots"]:
+        cells = [(s["id"] + "a", s["first"])]
+        if s["frames"] >= SHOT_MIDDLE_SEC * r["fps"]:
+            cells.append((s["id"] + "m", (s["first"] + s["last"]) // 2))
+        if s["last"] != s["first"]:
+            cells.append((s["id"] + "b", s["last"]))
+        groups.append((s["id"], cells))
+    by_id = {s["id"]: s for s in r["shots"]}
+    for sheet, gids in storyboard.sheets(src, seek, r["fps"], groups, out_dir, "shots"):
+        r["storyboards"].append(str(sheet))
+        print(f"[genius-footage] describing {gids[0]}–{gids[-1]} on {sheet.name}…", file=sys.stderr)
+        answer = _json(client.call(c, [str(sheet)], SHOT_PROMPT.replace("{ids}", ", ".join(gids)), 300), "[", "]")
+        for item in answer if isinstance(answer, list) else []:
+            s = by_id.get(str(item.get("id")))
+            if s:
+                s["desc"] = {k: str(item.get(k, "")) for k in SHOT_FIELDS}
+    missing = [s["id"] for s in r["shots"] if "desc" not in s]
+    if missing:
+        r["warnings"].append(f"no description returned for {', '.join(missing)}")
+    return r
+
+
 # ── Whole clip (model answers with IDs only; frames and timecode are computed) ──
 
 OVERVIEW_PROMPT = (
@@ -354,10 +460,9 @@ OVERVIEW_PROMPT = (
 )
 
 
-def _overview(src: str, conf: dict, r: dict, utts: list, script: str | None) -> dict:
-    plan = vision.plan_media(src, "video", conf["api_style"])
-    if plan["action"] == "segments":
-        r["warnings"].append(f"clip longer than {vision.format_duration(vision.MAX_SINGLE_SEC)}: whole-clip overview skipped")
+def _overview(src: str, c: dict, r: dict, utts: list, script: str | None) -> dict:
+    if r["duration"] > client.MAX_VIDEO_SEC:
+        r["warnings"].append(f"clip longer than {client.MAX_VIDEO_SEC // 60} min: whole-clip overview skipped")
         return {}
     shot_lines = "\n".join(
         f"{s['id']} {s['tc_in']} {s['end'] - s['start']:.1f}s | "
@@ -365,27 +470,23 @@ def _overview(src: str, conf: dict, r: dict, utts: list, script: str | None) -> 
     utt_lines = "\n".join(f"{u['id']} [{u.get('speaker') or '?'}] {u['shots'][0] if u['shots'] else ''} | {u['text']}"
                           for u in utts) or "(no transcript)"
     prompt = (OVERVIEW_PROMPT.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
-              .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + vision.LANGUAGE_RULE
-    upload = src if plan["action"] == "passthrough" else vision.build_proxy(src, "video", plan, conf["api_style"] == "gemini")
+              .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + LANGUAGE_RULE
+    upload = client.video_proxy(src, r["duration"])
     print("[genius-footage] whole-clip overview…", file=sys.stderr)
-    text = vision.call_model(conf, [(upload, "video")], prompt, max(300, min(900, plan["duration"] * 0.6)))
-    a, b = text.find("{"), text.rfind("}")
-    try:
-        ov = json.loads(text[a:b + 1]) if a != -1 and b > a else {}
-    except ValueError:
-        ov = {}
-    if not ov:
+    ov = _json(client.call(c, [upload], prompt, max(300, min(900, r["duration"] * 0.6))), "{", "}")
+    if not isinstance(ov, dict) or not ov:
         r["warnings"].append("whole-clip overview returned no JSON")
+        return {}
     return ov
 
 
-def run(src: str, conf: dict, script: str | None = None) -> dict:
+def run(src: str, c: dict, script: str | None = None) -> dict:
     """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip."""
     clip = Path(src)
     base = clip.with_suffix("")
     if not os.access(clip.parent, os.W_OK):
-        raise vision.OmniError("UNSUPPORTED_FORMAT", f"cannot write the footage brief next to the clip: {clip.parent}")
-    r = vision._analyze_shots(src, conf, Path(f"{base}.footage"))
+        raise FootageError("UNSUPPORTED_FORMAT", f"cannot write the footage brief next to the clip: {clip.parent}")
+    r = shots(src, c, Path(f"{base}.footage"))
     seek = measure.frame_times(src, for_seek=True)
 
     asr_note, utts, asr_model = None, [], None
@@ -395,15 +496,15 @@ def run(src: str, conf: dict, script: str | None = None) -> dict:
         asr_model = asr.get("model")
         utts = utterances(asr, seek, r["shots"], r["frames"])
         cut_points(utts, r["frames"])
-    except (FootageError, ValueError) as e:
+    except (SpeechError, ValueError) as e:
         asr_note = str(e)
         print(f"[genius-footage] {asr_note}", file=sys.stderr)
 
-    ov = _overview(src, conf, r, utts, script)
+    ov = _overview(src, c, r, utts, script)
     doc = build(r, utts, ov, asr_note,
-                {"measure": "genius-omni measure.py", "asr": asr_model, "storyboard": conf["model"],
-                 "overview": conf["model"] if ov else None},
-                vision._file_fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
+                {"measure": "genius-footage measure.py", "asr": asr_model, "storyboard": c["model"],
+                 "overview": c["model"] if ov else None},
+                client.fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
                 audio_info(src))
     md_path, json_path = Path(f"{base}.footage.md"), Path(f"{base}.footage.json")
     md_path.write_text(render_md(doc, md_path.parent), encoding="utf-8")
@@ -426,42 +527,44 @@ def render_result(res: dict) -> str:
 
 # ── CLI ───────────────────────────────────────────────────────────────────
 
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mxf"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.0 footage brief for one clip")
     parser.add_argument("file", nargs="?", help="Local video file")
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
-    parser.add_argument("--provider", "-p", default=None, help="genius-omni provider id (default: its active one)")
-    parser.add_argument("--model", "-m", default=None, help="Model override")
+    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
-    parser.add_argument("--check", action="store_true", help="Check ffmpeg, genius-omni, genius-voice and the provider")
+    parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and genius-voice")
     args = parser.parse_args()
+    c = client.conf(args.model)
     try:
         if args.check:
-            info, conf = vision.check_system(), vision.provider_conf(args.provider, model=args.model, kind="video")
-            voice = voice_script()
-            print(f"genius-omni:  {OMNI_DIR}\ngenius-voice: {voice or 'not found (no transcript)'}\n"
-                  f"ffmpeg:       {info['ffmpeg']}\nprovider:     {conf['id']} model={conf['model']} "
-                  f"key={'yes' if conf['api_key'] else 'no'}")
-            ok = info["ok"] and bool(conf["api_key"]) and bool(voice)
+            ff, voice = shutil.which("ffmpeg") and shutil.which("ffprobe"), voice_script()
+            print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
+                  f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
+                  f"genius-voice: {voice or 'not found (no transcript)'}")
+            ok = bool(ff and c["api_key"] and voice)
             print("ok" if ok else "NOT READY")
             sys.exit(0 if ok else 2)
         if not args.file:
             parser.error("file is required (unless --check)")
         if not Path(args.file).is_file():
-            raise vision.OmniError("INPUT_NOT_FOUND", f"File not found: {args.file}")
-        if vision.media_kind(args.file) != "video":
-            raise vision.OmniError("UNSUPPORTED_FORMAT", "footage needs a local video file")
-        conf = vision.provider_conf(args.provider, model=args.model, kind="video")
-        if not conf["api_key"]:
-            raise vision.OmniError("PROVIDER_ERROR", f"API key not found for provider '{conf['id']}' "
-                                   f"(set {' / '.join(conf['key_envs'])} in genius-omni scripts/.env)")
-        res = run(args.file, conf, Path(args.script).read_text(encoding="utf-8") if args.script else None)
+            raise FootageError("INPUT_NOT_FOUND", f"File not found: {args.file}")
+        if Path(args.file).suffix.lower() not in VIDEO_EXTENSIONS:
+            raise FootageError("UNSUPPORTED_FORMAT", "footage needs a local video file")
+        if not c["api_key"]:
+            raise FootageError("PROVIDER_ERROR", "API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env")
+        res = run(args.file, c, Path(args.script).read_text(encoding="utf-8") if args.script else None)
         print(json.dumps(res, ensure_ascii=False, indent=2) if args.output == "json"
               else f"## Footage\n\n{render_result(res)}")
+    except FootageError as e:
+        print(f"Error [{e.code}]: {e}", file=sys.stderr)
+        sys.exit(client.EXIT_CODES.get(e.code, 1))
     except Exception as e:
-        code = vision._error_code(e)
-        print(f"Error [{code}]: {e}" if code else f"Error: {e}", file=sys.stderr)
-        sys.exit(vision.EXIT_CODES.get(code, 1))
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

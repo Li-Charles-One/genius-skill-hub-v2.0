@@ -23,6 +23,16 @@
       ]
     },
     {
+      "id": "shot-list",
+      "prompt": "这条素材一共几个镜头？每个镜头从第几帧到第几帧 footage.mov",
+      "trigger_expected": true,
+      "expected_output": "Runs measure.py for the frame-accurate shot list (or footage.py when descriptions are wanted) and reports measured counts and frame ranges.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "measure.py"}
+      ]
+    },
+    {
       "id": "missing-file",
       "prompt": "给 /tmp/does-not-exist.mov 做素材说明书",
       "trigger_expected": true,

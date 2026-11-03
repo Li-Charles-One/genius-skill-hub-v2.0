@@ -17,7 +17,7 @@ Usage:
     python3 vision.py long.mp4 video-summary   # auto segment when long
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
-Video modes (5):  video-summary, video-ocr, video-review, video-frame-analysis, video-shots
+Video modes (3):  video-summary, video-ocr, video-review
 Audio modes (3):  audio-summary, audio-review, audio-scene
 PDF:              ocr / describe / chart-data / ui-review
 
@@ -43,9 +43,6 @@ import urllib.error
 import urllib.request
 from functools import lru_cache
 from pathlib import Path
-
-import measure
-import storyboard
 
 # Local base64: hard cap on raw bytes (×1.33 once encoded).
 MAX_RAW_BYTES = int(os.environ.get("VISION_MAX_RAW_MB", "35")) * 1024 * 1024
@@ -184,51 +181,6 @@ PROMPTS = {
         "(5) Specific actionable suggestions for improvement\n"
         "Be constructive and detailed."
     ),
-    "video-frame-analysis": (
-        "You are a professional storyboard analyst. Analyze this video shot-by-shot "
-        "and output a structured storyboard in the EXACT format below.\n\n"
-        f"{TIMESTAMP_RULES}"
-        "CRITICAL RULES:\n"
-        "- Output EVERY shot. Do NOT skip or merge shots. Each camera cut = a new shot.\n"
-        "- Number shots sequentially starting from 1.\n"
-        "- Duration must be in seconds (e.g. 3.5s). Sum of all shot durations must "
-        "approximately equal the total video duration given above.\n"
-        "- Prefer absolute start–end times when known (mm:ss–mm:ss).\n\n"
-        "FOR EACH SHOT, output exactly these fields:\n\n"
-        "---\n"
-        "## Shot N\n"
-        "- **镜号**: N\n"
-        "- **时间**: mm:ss–mm:ss\n"
-        "- **时长**: X.Xs\n"
-        "- **景别**: 远景/全景/中景/近景/特写/大特写 (pick one)\n"
-        "- **画面内容**: Describe exactly what is visible — subject, "
-        "action, composition, lighting, color palette. Be specific and visual.\n"
-        "- **摄影机运动**: Static / Pan left-right / Tilt up-down / Zoom in-out / "
-        "Dolly / Handheld / Crane / Drone / etc. Describe direction and speed.\n"
-        "- **场景**: Where does this shot take place?\n"
-        "- **对白/旁白**: Gist of what is said, with speaker labels (not verbatim). If none, '无'.\n"
-        "- **屏显文字**: Any text/graphics/subtitles. If none, '无'.\n\n"
-        "After all shots, append:\n"
-        "- **总镜数**: N\n"
-        "- **总时长**: X.Xs\n"
-        "- **整体风格**: 1-2 sentence style description"
-    ),
-    # Storyboard sheets, not the video: shots and timing were measured locally (measure.py).
-    "video-shots": (
-        "These images are storyboard sheets of one video. Every cell is one exact frame, labelled at its "
-        "top-left: S###a = first frame of shot S###, S###m = a middle frame (long shots only), "
-        "S###b = last frame. Shot boundaries and timing were measured frame by frame and are correct: "
-        "do not add, merge, renumber or re-time shots.\n"
-        "Describe every shot listed below from its own frames. Infer camera movement by comparing a → m → b.\n"
-        "Return ONLY a JSON array, one object per shot in the given order, keys exactly as written:\n"
-        '{"id": "S001", "shot_size": "大远景/远景/全景/中景/近景/特写/大特写", '
-        '"angle": "平视/俯拍/仰拍/顶拍/斜角…", '
-        '"movement": "固定/推/拉/摇/移/跟/升降/变焦/手持晃动…，看不出写 无法判断", '
-        '"people": "人数与外观特征，没有人写 无", "scene": "场景", '
-        '"action": "画面：谁在哪里做什么", "performance": "情绪、动作、因果，没有人写 无", '
-        '"flags": "废片/跑焦/打板/说错重来/最佳 中适用的，用顿号分隔，没有写空字符串"}\n'
-        "Keep each value under 40 characters. Shots on these sheets: {ids}"
-    ),
     # ── Audio prompts ──────────────────────────────────────────────
     "audio-summary": (
         "Provide a comprehensive understanding of this audio.\n"
@@ -277,19 +229,6 @@ for _mode in PROMPTS:
     if _mode not in VERBATIM_MODES:
         PROMPTS[_mode] += LANGUAGE_RULE
 
-# video-shots, step 1: the storyboard decides boundaries the local measurement could not.
-SHOT_CHECK_PROMPT = (
-    "These images are storyboard cells around possible shot changes in one video. Each group X## has "
-    "three exact frames: X##a just before, X##m in the middle, X##b just after. The time between a and b "
-    "is given per group: a large change in very little time (a person in a new place 0.1s later) is a cut.\n"
-    "For each group decide whether X##a and X##b belong to the same continuous take. Same take: camera "
-    "or subject movement, a hand or object crossing, a lighting or focus change, a zoom within the take. "
-    "Different shots: a cut, jump cut, dissolve or wipe, or a change of angle or framing that is not "
-    "continuous camera movement.\n"
-    'Return ONLY a JSON array: [{"id": "X01", "new_shot": true, "reason": "under 20 characters"}]. '
-    "Groups: {ids}" + LANGUAGE_RULE
-)
-
 # ── File type detection ───────────────────────────────────────────────
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}
@@ -300,7 +239,7 @@ IMAGE_MODES = {
     "describe", "ocr", "ui-review", "chart-data", "object-detect", "compare",
 }
 VIDEO_MODES = {
-    "video-summary", "video-ocr", "video-review", "video-frame-analysis", "video-shots",
+    "video-summary", "video-ocr", "video-review",
 }
 AUDIO_MODES = {
     "audio-summary", "audio-review", "audio-scene",
@@ -1195,10 +1134,6 @@ def _analyze_pdf(pdf_path: str, mode: str, conf: dict, force_proxy: bool = False
     return header + "\n\n---\n\n".join(chunks)
 
 
-# Modes whose per-segment output is the deliverable: join instead of re-summarizing.
-CONCAT_MODES = {"video-frame-analysis"}
-
-
 def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h264_only: bool) -> str:
     """Planned long media: encode each segment once → analyze → index → join/synthesize.
 
@@ -1272,135 +1207,24 @@ def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h2
         f"### Segment {s['index']}: {s['start_label']} – {s['end_label']}\n{s['note']}"
         for s in segments
     )
-    if mode in CONCAT_MODES:
-        result = index_blob
-    else:
-        # Synthesize from segment notes (text-only, no media re-upload)
-        synth_prompt = (
-            f"[{label} GROUND TRUTH — total duration {format_duration(duration)} "
-            f"({duration:.1f}s). Segment notes below cover the full timeline.]\n\n"
-            f"{PROMPTS.get(mode, PROMPTS['video-summary'])}\n\n"
-            f"You are given chronological segment notes already extracted from the {kind}. "
-            f"Synthesize ONE coherent answer for the whole {kind}. "
-            "Merge duplicates, keep absolute timestamps, do not invent content "
-            "not supported by the notes.\n\n"
-            f"--- SEGMENT NOTES ---\n{index_blob}"
-        )
-        result = call_model(conf, [], synth_prompt, timeout=300)
+    # Synthesize from segment notes (text-only, no media re-upload)
+    synth_prompt = (
+        f"[{label} GROUND TRUTH — total duration {format_duration(duration)} "
+        f"({duration:.1f}s). Segment notes below cover the full timeline.]\n\n"
+        f"{PROMPTS.get(mode, PROMPTS['video-summary'])}\n\n"
+        f"You are given chronological segment notes already extracted from the {kind}. "
+        f"Synthesize ONE coherent answer for the whole {kind}. "
+        "Merge duplicates, keep absolute timestamps, do not invent content "
+        "not supported by the notes.\n\n"
+        f"--- SEGMENT NOTES ---\n{index_blob}"
+    )
+    result = call_model(conf, [], synth_prompt, timeout=300)
     result += (
         f"\n\n---\n⏱ **时长校验** — ffprobe 实测: **{format_duration(duration)}** "
         f"| segments: {n} × ~{format_duration(seg_len)} "
         f"| index: `{idx_file}`"
     )
     return result
-
-
-SHOT_FIELDS = [("shot_size", "景别"), ("angle", "角度"), ("movement", "运镜"), ("people", "人物"),
-               ("scene", "场景"), ("action", "画面"), ("performance", "表演"), ("flags", "标记")]
-SHOT_MIDDLE_SEC = 4.0  # shots at least this long get a middle frame on the storyboard
-
-
-def _json_array(text: str) -> list | None:
-    a, b = text.find("["), text.rfind("]")
-    try:
-        data = json.loads(text[a:b + 1]) if a != -1 and b > a else None
-    except ValueError:
-        return None
-    return data if isinstance(data, list) else None
-
-
-def _analyze_shots(src: str, conf: dict, out_dir: Path | None = None) -> dict:
-    """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
-    from labelled storyboard sheets, never times or counts them."""
-    try:
-        r = measure.measure(src)
-    except measure.MeasureError as e:
-        raise OmniError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
-    seek = measure.frame_times(src, for_seek=True)
-    out_dir = out_dir or _proxy_dir() / "storyboards" / _file_fingerprint(src)
-    last = r["frames"] - 1
-    print(f"[genius-omni] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
-          f"{len(r['suspects'])} suspects", file=sys.stderr)
-    r["model"], r["storyboards"] = conf["model"], []
-
-    # 1. Suspects: before / middle / after frames decide whether a new shot starts.
-    if r["suspects"]:
-        ids = {f"X{i:02d}": s for i, s in enumerate(r["suspects"], 1)}
-        groups = [(x, [(x + "a", max(0, s["first"] - 1)), (x + "m", (s["first"] + s["last"]) // 2),
-                       (x + "b", min(last, s["last"] + 1))]) for x, s in ids.items()]
-        extra, spans = {}, {}
-        for sheet, gids in storyboard.sheets(src, seek, r["fps"], groups, out_dir, "suspects"):
-            r["storyboards"].append(str(sheet))
-            print(f"[genius-omni] checking {len(gids)} suspects on {sheet.name}…", file=sys.stderr)
-            listing = ", ".join(f"{x} (a→b {g} frames, {g / r['fps']:.2f}s)" for x in gids
-                                for g in [min(last, ids[x]["last"] + 1) - max(0, ids[x]["first"] - 1)])
-            answer = _json_array(call_model(conf, [(str(sheet), "image")],
-                                            SHOT_CHECK_PROMPT.replace("{ids}", listing), 300))
-            for item in answer or []:
-                s = ids.get(str(item.get("id")))
-                if not s:
-                    continue
-                s["check"] = "new shot" if item.get("new_shot") else "same shot"
-                s["reason"] = item.get("reason", "")
-                if item.get("new_shot"):
-                    at = s["first"] if s["kind"] == "weak-cut" else (s["first"] + s["last"]) // 2
-                    extra[at] = "storyboard"
-                    if s["last"] > s["first"]:
-                        spans[at] = (s["first"], s["last"])
-        if extra:
-            measure.add_boundaries(r, extra, spans)
-
-    # 2. Describe every shot from its first / (middle) / last frames.
-    groups = []
-    for s in r["shots"]:
-        cells = [(s["id"] + "a", s["first"])]
-        if s["frames"] >= SHOT_MIDDLE_SEC * r["fps"]:
-            cells.append((s["id"] + "m", (s["first"] + s["last"]) // 2))
-        if s["last"] != s["first"]:
-            cells.append((s["id"] + "b", s["last"]))
-        groups.append((s["id"], cells))
-    by_id = {s["id"]: s for s in r["shots"]}
-    for sheet, gids in storyboard.sheets(src, seek, r["fps"], groups, out_dir, "shots"):
-        r["storyboards"].append(str(sheet))
-        print(f"[genius-omni] describing {gids[0]}–{gids[-1]} on {sheet.name}…", file=sys.stderr)
-        answer = _json_array(call_model(conf, [(str(sheet), "image")],
-                                        PROMPTS["video-shots"].replace("{ids}", ", ".join(gids)), 300))
-        for item in answer or []:
-            s = by_id.get(str(item.get("id")))
-            if s:
-                s["desc"] = {k: str(item.get(k, "")) for k, _ in SHOT_FIELDS}
-    missing = [s["id"] for s in r["shots"] if "desc" not in s]
-    if missing:
-        r["warnings"].append(f"no description returned for {', '.join(missing)}")
-    return r
-
-
-def render_shots(r: dict) -> str:
-    unresolved = [s for s in r["suspects"] if "check" not in s]
-    lines = [f"**{r['shot_count']} 个镜头** · {r['frames']} 帧 @ {r['fps']} fps（{r['fps_rational']}） · "
-             f"{r['duration']}s · {r['width']}x{r['height']} · 起始时间码 {r['timecode_start'] or '无（从 00:00:00:00 计）'}",
-             "",
-             "帧号、时间码与镜头数来自本地逐帧测量；描述来自故事板（模型 " + r["model"] + "）。",
-             "",
-             "| 镜头 | 帧 | 时间码 入–出 | 时长 | 切入 | " + " | ".join(h for _, h in SHOT_FIELDS) + " |",
-             "|" + "---|" * (5 + len(SHOT_FIELDS))]
-    for s in r["shots"]:
-        d = s.get("desc", {})
-        via = s["via"] + (f" {s['transition'][0]}–{s['transition'][1]}" if "transition" in s else "")
-        cells = [s["id"], f"{s['first']}–{s['last']}", f"{s['tc_in']}–{s['tc_out']}",
-                 f"{s['end'] - s['start']:.2f}s", via] + [d.get(k, "").replace("|", "/") for k, _ in SHOT_FIELDS]
-        lines.append("| " + " | ".join(cells) + " |")
-    checked = [s for s in r["suspects"] if "check" in s]
-    if checked:
-        lines += ["", "**故事板复核的疑似切点**"]
-        lines += [f"- 帧 {s['first']}–{s['last']}（{s['kind']}）→ {'新镜头' if s['check'] == 'new shot' else '同一镜头'}："
-                  f"{s.get('reason', '')}" for s in checked]
-    if unresolved:
-        lines += ["", f"**未能复核的疑似切点 {len(unresolved)} 处**（模型未返回判断，镜头数可能偏少）："]
-        lines += [f"- 帧 {s['first']}–{s['last']}（{s['kind']}，{s['tc']}）" for s in unresolved]
-    lines += ["", "故事板：" + "、".join(f"`{p}`" for p in r["storyboards"])]
-    lines += [f"⚠️ {w}" for w in r["warnings"]]
-    return "\n".join(lines)
 
 
 def analyze_media(
@@ -1442,11 +1266,6 @@ def analyze_media(
             f"API key not found for provider '{conf['id']}'. "
             f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
         )
-
-    if mode == "video-shots":
-        if kind != "video" or not is_local:
-            raise OmniError("UNSUPPORTED_FORMAT", f"{mode} needs a local video file")
-        return _analyze_shots(media_input, conf)
 
     # PDF: whole-document or page-by-page path (before generic image pipeline)
     if kind == "pdf" and is_local:
@@ -1727,8 +1546,7 @@ def main():
                 "result": result,
             }, ensure_ascii=False, indent=2)
         else:
-            body = render_shots(result) if isinstance(result, dict) else result
-            output = f"## {args.mode.replace('-', ' ').title()} Analysis\n\n{body}"
+            output = f"## {args.mode.replace('-', ' ').title()} Analysis\n\n{result}"
 
         print(output)
 
