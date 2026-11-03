@@ -6,9 +6,9 @@ Genius Footage — AG_FOOTAGE/1.1 brief for one clip (`<clip>.footage.md` + `.fo
     python3 footage.py --check
 
 Steps: measure.py (cuts frame by frame) → storyboard check of doubtful cuts → per-shot description from
-storyboards → genius-voice asr --speakers (words → frames, cut points) → one whole-clip request where
+storyboards → asr.py, Doubao ASR with speakers (words → frames, cut points) → one whole-clip request where
 the model answers with IDs only (S001, U001, P1, G01) → IDs converted to frames and timecode → validate.
-Speech comes from genius-voice in a sibling folder (FOOTAGE_VOICE_SCRIPT overrides); models via client.py.
+Speech via asr.py (DOUBAO_API_KEY); models via client.py.
 Protocol: ArtisticCut/AG_FOOTAGE.md.
 """
 
@@ -19,45 +19,22 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 from bisect import bisect_left, bisect_right
 from datetime import datetime
 from pathlib import Path
 
+import asr
 import client
 import measure
 import storyboard
+from asr import SpeechError
 from client import FootageError
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_VOICE = HERE.parent.parent / "genius-voice" / "scripts" / "voice.py"
 PROTOCOL = "AG_FOOTAGE/1.1"
 CUT_GAP, JOINED_GAP = 4, 2     # frames: a pause ≥4 is a clean cut; <2 at punctuation is run-together
 PUNCT = set("，。！？；：、,.!?;:…—")
-
-
-class SpeechError(RuntimeError):
-    pass
-
-
-# ── Speech (genius-voice) ────────────────────────────────────────────────
-
-def voice_script() -> Path | None:
-    p = Path(os.environ.get("FOOTAGE_VOICE_SCRIPT", str(DEFAULT_VOICE)))
-    return p if p.is_file() else None
-
-
-def transcribe(src: str) -> dict:
-    """genius-voice ASR with speaker labels; raises SpeechError with its message on failure."""
-    script = voice_script()
-    if not script:
-        raise SpeechError(f"genius-voice not found at {DEFAULT_VOICE} (set FOOTAGE_VOICE_SCRIPT)")
-    p = subprocess.run([sys.executable, str(script), "asr", src, "--speakers", "--output", "json"],
-                       capture_output=True, text=True)
-    if p.returncode != 0:
-        raise SpeechError(f"genius-voice asr failed: {(p.stderr or p.stdout).strip()[-300:]}")
-    return json.loads(p.stdout)
 
 
 def audio_info(src: str) -> dict:
@@ -533,10 +510,10 @@ def run(src: str, c: dict, script: str | None = None) -> dict:
 
     asr_note, utts, asr_model = None, [], None
     try:
-        print("[genius-footage] transcribing with genius-voice…", file=sys.stderr)
-        asr = transcribe(src)
-        asr_model = asr.get("model")
-        utts = utterances(asr, seek, r["shots"], r["frames"])
+        print("[genius-footage] transcribing (Doubao ASR)…", file=sys.stderr)
+        speech = asr.transcribe(src)
+        asr_model = speech.get("model")
+        utts = utterances(speech, seek, r["shots"], r["frames"])
         cut_points(utts, r["frames"])
     except (SpeechError, ValueError) as e:
         asr_note = str(e)
@@ -578,16 +555,16 @@ def main() -> None:
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
-    parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and genius-voice")
+    parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and the ASR key")
     args = parser.parse_args()
     c = client.conf(args.model)
     try:
         if args.check:
-            ff, voice = shutil.which("ffmpeg") and shutil.which("ffprobe"), voice_script()
+            ff, asr_key = shutil.which("ffmpeg") and shutil.which("ffprobe"), client._env("DOUBAO_API_KEY")
             print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
                   f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
-                  f"genius-voice: {voice or 'not found (no transcript)'}")
-            ok = bool(ff and c["api_key"] and voice)
+                  f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}")
+            ok = bool(ff and c["api_key"] and asr_key)
             print("ok" if ok else "NOT READY")
             sys.exit(0 if ok else 2)
         if not args.file:
