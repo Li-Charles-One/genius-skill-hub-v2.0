@@ -55,10 +55,20 @@
       ]
     },
     {
-      "id": "timeline-speakers-near-miss",
-      "prompt": "这段会议录音帮我总结一下，按时间轴标出每个人说了什么 meeting.mp3",
+      "id": "timeline-speakers",
+      "prompt": "把这段采访录音逐字转写，标上时间和说话人 interview.wav",
+      "trigger_expected": true,
+      "expected_output": "Runs asr with --speakers and --output json; reports the [S1]/[S2] transcript with segment times.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "--speakers"}
+      ]
+    },
+    {
+      "id": "summary-near-miss",
+      "prompt": "这段会议录音帮我总结一下要点 meeting.mp3",
       "trigger_expected": false,
-      "expected_output": "Routes to genius-omni (timeline, speaker labels, summary), not genius-voice.",
+      "expected_output": "Routes to genius-omni audio-summary, not genius-voice.",
       "files": ["SKILL.md"],
       "assertions": [
         {"type": "not_contains", "value": "voice.py"}

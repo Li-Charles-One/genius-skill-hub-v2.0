@@ -18,7 +18,7 @@ Usage:
 
 Image modes (6):  describe, ocr, ui-review, chart-data, object-detect, compare
 Video modes (4):  video-summary, video-ocr, video-review, video-frame-analysis
-Audio modes (4):  audio-summary, audio-transcribe, audio-review, audio-scene
+Audio modes (3):  audio-summary, audio-review, audio-scene
 PDF:              ocr / describe / chart-data / ui-review
 
 Failures print `Error [CODE]: ...` to stderr and exit with EXIT_CODES[CODE].
@@ -223,26 +223,6 @@ PROMPTS = {
         "(6) Tone, emotion, and production quality\n"
         "Be detailed and chronological."
     ),
-    "audio-transcribe": (
-        "You are a strict speech-to-text transcriber: a missing transcript is acceptable, "
-        "an invented one is not.\n"
-        "STEP 1 — Voice check. Listen to the whole audio and decide whether an actual "
-        "human voice (spoken words or sung lyrics) is audible. Pure tones, beeps, dial/ring "
-        "tones, instrumental music, noise, and silence are NOT speech.\n"
-        "If no human voice is audible, your ENTIRE answer must be two lines:\n"
-        "`NO_SPEECH_DETECTED`\n"
-        "<one line describing the sounds>\n"
-        "Do not add Speaker lines, guessed words, or example sentences.\n"
-        "STEP 2 — Only if a voice is audible: transcribe ALL speech VERBATIM.\n"
-        f"{TIMESTAMP_RULES}{SPEAKER_RULES}"
-        "Output format preference:\n"
-        "`[mm:ss] Speaker A: ...`\n"
-        "Rules:\n"
-        "- Keep original language; do not translate unless asked\n"
-        "- Note [music], [noise], [inaudible], [silence] where relevant\n"
-        "- Do not invent words; use [inaudible] when unclear\n"
-        "If no speech is present, say so and briefly describe non-speech audio."
-    ),
     "audio-review": (
         "You are a senior audio production reviewer. Analyze this recording.\n"
         f"{TIMESTAMP_RULES}"
@@ -268,7 +248,7 @@ PROMPTS = {
 }
 
 # Verbatim modes keep the source language; every analysis mode answers in Chinese.
-VERBATIM_MODES = {"ocr", "video-ocr", "audio-transcribe"}
+VERBATIM_MODES = {"ocr", "video-ocr"}
 LANGUAGE_RULE = (
     "\n\nOUTPUT LANGUAGE (mandatory): write the whole answer, headings included, in "
     "Simplified Chinese (简体中文). Quote on-screen text, spoken lines, names and brand "
@@ -291,7 +271,7 @@ VIDEO_MODES = {
     "video-summary", "video-ocr", "video-review", "video-frame-analysis",
 }
 AUDIO_MODES = {
-    "audio-summary", "audio-transcribe", "audio-review", "audio-scene",
+    "audio-summary", "audio-review", "audio-scene",
 }
 
 
@@ -332,7 +312,10 @@ def resolve_mode(mode: str, kind: str) -> str:
         if mode in ("describe", "video-summary"):
             return "audio-summary"
         if mode in ("ocr", "video-ocr"):
-            return "audio-transcribe"
+            raise OmniError(
+                "UNSUPPORTED_FORMAT",
+                "Speech-to-text (timestamps, speaker labels) moved to genius-voice: voice.py asr <file> [--speakers]",
+            )
         if mode in ("ui-review", "video-review"):
             return "audio-review"
         if mode == "object-detect":
@@ -1175,7 +1158,7 @@ def _analyze_pdf(pdf_path: str, mode: str, conf: dict, force_proxy: bool = False
 
 
 # Modes whose per-segment output is the deliverable: join instead of re-summarizing.
-CONCAT_MODES = {"audio-transcribe", "video-frame-analysis"}
+CONCAT_MODES = {"video-frame-analysis"}
 
 
 def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h264_only: bool) -> str:
@@ -1274,19 +1257,6 @@ def _analyze_segments(src: str, kind: str, mode: str, plan: dict, conf: dict, h2
     return result
 
 
-# audio-transcribe asks this first: a dedicated yes/no request stops the model from
-# inventing speech for tones, music or noise, which a strict transcribe prompt alone did not.
-VOICE_CHECK_PROMPT = (
-    "Is an actual human voice (spoken words or sung lyrics) audible anywhere in this audio? "
-    "Pure tones, beeps, dial/ring tones, instrumental music, noise and silence are not a voice. "
-    "Answer with exactly one word: YES or NO."
-)
-NO_SPEECH_RESULT = (
-    "NO_SPEECH_DETECTED\n"
-    "Voice check found no audible human voice. Use audio-summary or audio-scene to describe the sounds."
-)
-
-
 def analyze_media(
     media_input: str,
     mode: str = "describe",
@@ -1376,39 +1346,30 @@ def analyze_media(
     media = [(upload_path, kind)]
     if mode == "compare" and compare_with:
         media.append((compare_with, "image"))
-    no_voice = (
-        mode == "audio-transcribe"
-        and os.environ.get("VISION_VOICE_CHECK", "1").strip().lower() not in ("0", "false", "no", "off")
-        and call_model(conf, media, VOICE_CHECK_PROMPT, timeout).strip().upper().startswith("NO")
-    )
-    if no_voice:
-        print("[genius-omni] voice check: no human voice, skipping transcription", file=sys.stderr)
-        result_text = NO_SPEECH_RESULT
-    else:
-        try:
-            result_text = call_model(conf, media, prompt, timeout, show_think)
-        except OmniError as e:
-            err = str(e)
-            retryable = (
-                e.code == "PROVIDER_ERROR"
-                and is_local
-                and is_video_input
-                and upload_path == media_input
-                and (any(s in err for s in ("400", "Param", "Invalid"))
-                     or "corrupted" in err.lower() or "decode" in err.lower())
-            )
-            if not retryable:
-                raise
-            print(
-                f"[genius-omni] API failed ({err[:120]}); retrying with H.264 video proxy…",
-                file=sys.stderr,
-            )
-            proxy_path, enc = make_video_proxy(
-                media_input, video_kbps=plan["video_kbps"], audio_kbps=plan["audio_kbps"], h264_only=True,
-            )
-            print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
-            media[0] = (proxy_path, kind)
-            result_text = call_model(conf, media, prompt, timeout, show_think)
+    try:
+        result_text = call_model(conf, media, prompt, timeout, show_think)
+    except OmniError as e:
+        err = str(e)
+        retryable = (
+            e.code == "PROVIDER_ERROR"
+            and is_local
+            and is_video_input
+            and upload_path == media_input
+            and (any(s in err for s in ("400", "Param", "Invalid"))
+                 or "corrupted" in err.lower() or "decode" in err.lower())
+        )
+        if not retryable:
+            raise
+        print(
+            f"[genius-omni] API failed ({err[:120]}); retrying with H.264 video proxy…",
+            file=sys.stderr,
+        )
+        proxy_path, enc = make_video_proxy(
+            media_input, video_kbps=plan["video_kbps"], audio_kbps=plan["audio_kbps"], h264_only=True,
+        )
+        print(f"[genius-omni] fallback encoder={enc}", file=sys.stderr)
+        media[0] = (proxy_path, kind)
+        result_text = call_model(conf, media, prompt, timeout, show_think)
 
 
     # Segments get one footer on the joined result, not one each.

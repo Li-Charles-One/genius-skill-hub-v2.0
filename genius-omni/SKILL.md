@@ -1,8 +1,8 @@
 ---
 name: genius-omni
-description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结与带时间轴/说话人的转写。不要用于纯语音转文字、朗读配音或声音克隆（用 genius-voice）。"
+description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结、制作点评与声景分析。不要用于语音转文字（含带时间轴/说话人的逐字转写）、朗读配音或声音克隆（用 genius-voice）。"
 metadata:
-  version: "2.9.2"
+  version: "3.0.0"
 ---
 
 # Genius Omni（视听）
@@ -28,11 +28,10 @@ Config, providers, proxy and verification: `references/usage.md`. Trigger checks
 | Critique a recording | `video-review` |
 | Shot-by-shot video | `video-frame-analysis` |
 | What is in this audio | `audio-summary` |
-| Transcript with timestamps / speaker labels | `audio-transcribe` |
 | Critique audio production | `audio-review` |
 | Soundscape / events | `audio-scene` |
 
-PDF accepts `ocr` (default), `describe`, `chart-data`, `ui-review`. Generic modes remap automatically: audio `describe`→`audio-summary`, `ocr`→`audio-transcribe`; video `describe`→`video-summary`, `ocr`→`video-ocr`.
+PDF accepts `ocr` (default), `describe`, `chart-data`, `ui-review`. Generic modes remap automatically: audio `describe`→`audio-summary`; video `describe`→`video-summary`, `ocr`→`video-ocr`.
 
 ## Run
 
@@ -47,7 +46,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Local audio/video of any size or codec needs no preparation: the script probes it, prints `plan: …` (as-is, one proxy, or N segments), encodes once and caches the proxy. Do not transcode or split it yourself.
 - PDF: CPA reads the whole document in one request; OpenAI-style providers (or `VISION_PDF_PAGES=1`) render pages and analyze them one by one.
 - Run one media analysis at a time; parallel runs make the CPA gateway return 502 (retried automatically, but slower).
-- `audio-transcribe` first asks the model whether a human voice is audible (one short extra request; `VISION_VOICE_CHECK=0` disables) and answers `NO_SPEECH_DETECTED` without transcribing when there is none.
+- Speech-to-text, with or without timestamps and speaker labels, is genius-voice (`voice.py asr <file> [--speakers]`). Audio `ocr` fails with `UNSUPPORTED_FORMAT` pointing there.
 
 ## Report
 
@@ -56,7 +55,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Audio: `Summary`, `Transcript or Key Segments`, `Speakers or Sound Events`, `Uncertainty`.
 - Compare: `Unchanged`, `Added`, `Removed`, `Uncertain`.
 
-Analysis modes answer in Simplified Chinese; quoted text, speech, names and brands stay verbatim. `ocr`, `video-ocr` and `audio-transcribe` keep the source language. Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]` (speech: `[inaudible]`); never guess. Report `NO_TEXT_FOUND` when the result says no text was found; pass `NO_SPEECH_DETECTED` through unchanged. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
+Analysis modes answer in Simplified Chinese; quoted text, speech, names and brands stay verbatim. `ocr` and `video-ocr` keep the source language. Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]`; never guess. Report `NO_TEXT_FOUND` when the result says no text was found. If long-media segmentation fails, report the failed segment and do not fabricate a summary.
 
 Failures print `Error [CODE]: …` with a non-zero exit. Report the code and message as-is; the code table is in `references/usage.md`.
 

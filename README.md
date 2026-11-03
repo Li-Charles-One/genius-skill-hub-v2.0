@@ -31,7 +31,7 @@
 |:--|:--|
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
-| [genius-voice](./genius-voice/) | Speech-to-text and text-to-speech via Xiaomi MiMo（语音） |
+| [genius-voice](./genius-voice/) | Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo（语音） |
 | [genius-video-qc](./genius-video-qc/) | Pre-delivery QC of finished videos: subtitles vs speech, watermarks, flash frames, loudness（成片质检） |
 
 ### Tools

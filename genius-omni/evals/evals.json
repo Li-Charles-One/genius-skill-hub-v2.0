@@ -44,20 +44,20 @@
       ]
     },
     {
-      "id": "interview-transcribe-timeline",
+      "id": "interview-transcribe-timeline-near-miss",
       "prompt": "把这段采访录音逐字转写，标上时间和说话人 interview.wav",
-      "trigger_expected": true,
-      "expected_output": "Runs audio-transcribe; inaudible spans stay [inaudible] and NO_SPEECH_DETECTED is passed through if there is no voice.",
-      "files": ["SKILL.md"],
+      "trigger_expected": false,
+      "expected_output": "Timestamped, speaker-labelled transcription routes to genius-voice (asr --speakers).",
+      "files": [],
       "assertions": [
-        {"type": "contains", "value": "audio-transcribe"}
+        {"type": "not_contains", "value": "vision.py"}
       ]
     },
     {
       "id": "plain-transcript-near-miss",
       "prompt": "把这段采访录音转成文字 interview.wav",
       "trigger_expected": false,
-      "expected_output": "A plain transcript with no timeline or speakers routes to genius-voice.",
+      "expected_output": "A plain transcript routes to genius-voice.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "vision.py"}

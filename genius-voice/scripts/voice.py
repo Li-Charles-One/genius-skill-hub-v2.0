@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Genius Voice — speech-to-text and text-to-speech via Xiaomi MiMo v2.5.
+Genius Voice — speech-to-text via Doubao file ASR 2.0, text-to-speech via Xiaomi MiMo v2.5.
 
     python3 voice.py --check
-    python3 voice.py asr <audio_or_video> [--language auto|zh|en] [--output text|json] [--out FILE]
+    python3 voice.py asr <audio_or_video> [--language auto|zh|en] [--speakers] [--output text|json] [--out FILE]
     python3 voice.py tts "<text>" | --text-file F | -   [--voice ID | --clone REF | --design PROMPT]
                      [--style "<direction>"] [--out FILE.wav|.mp3]
 
-Models: mimo-v2.5-asr, mimo-v2.5-tts, mimo-v2.5-tts-voiceclone, mimo-v2.5-tts-voicedesign.
+ASR: volc.seedasr.auc (utterance + word timestamps, optional speaker labels).
+TTS: mimo-v2.5-tts, mimo-v2.5-tts-voiceclone, mimo-v2.5-tts-voicedesign.
 Failures print `Error [CODE]: ...` to stderr and exit with EXIT_CODES[CODE].
 """
 
@@ -26,20 +27,28 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 import wave
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
 DEFAULT_BASE_URL = "https://api.xiaomimimo.com/v1"
-ASR_MODEL = "mimo-v2.5-asr"
 TTS_MODEL = "mimo-v2.5-tts"
 CLONE_MODEL = "mimo-v2.5-tts-voiceclone"
 DESIGN_MODEL = "mimo-v2.5-tts-voicedesign"
 PRESET_VOICES = ["mimo_default", "冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"]
 
-# Measured: 180–300s segments silently drop whole passages with finish=stop; 120s kept everything.
-ASR_SEGMENT_SEC = float(os.environ.get("VOICE_ASR_SEGMENT_SEC", "120"))
+ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/"
+ASR_MODEL = "volc.seedasr.auc"
+ASR_LANGUAGES = {"zh": "zh-CN", "en": "en-US"}  # auto: omit the field
+# Speaker diarization changes the text (fewer, merged utterances; 100 → 一百), so it runs as a second pass.
+ASR_PASS_TEXT = {"enable_itn": True, "enable_punc": True, "show_speech_rate": True,
+                 "enable_emotion_detection": True, "enable_gender_detection": True}
+ASR_PASS_SPEAKER = {"enable_itn": True, "enable_punc": True, "enable_speaker_info": True,
+                    "ssd_version": "200"}  # 200 separated 5 speakers where 300 merged them into 3
+ASR_MAX_B64_BYTES = 100 * 1000 * 1000  # above this the provider wants audio.url instead of inline data
+ASR_POLL_SEC = 2
 # TTS starts skipping or looping past ~250 chars per request; keep chunks well below.
 TTS_CHUNK_CHARS = int(os.environ.get("VOICE_TTS_CHUNK_CHARS", "150"))
 MAX_B64_BYTES = 10 * 1000 * 1000  # documented limit for input audio and clone reference
@@ -94,25 +103,34 @@ def api_key() -> str:
     return key
 
 
+def doubao_key() -> str:
+    key = _env("DOUBAO_API_KEY")
+    if not key:
+        raise VoiceError("PROVIDER_ERROR", "DOUBAO_API_KEY is not set (scripts/.env or environment)")
+    return key
+
+
 # ── HTTP ─────────────────────────────────────────────────────────────────
 
 RETRY_HTTP = {429, 500, 502, 503, 504}
 RETRY_DELAYS = (5, 15, 30)
 
 
-def _request(method: str, path: str, body: dict | None = None) -> dict:
-    key = api_key()
+def _http(method: str, url: str, headers: dict, body: dict | None = None):
+    """JSON request with retries on 429/5xx/network errors. Returns (response headers, parsed body)."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
-    headers = {"Content-Type": "application/json", "api-key": key, "Authorization": f"Bearer {key}"}
+    headers = {"Content-Type": "application/json", **headers}
     for attempt, delay in enumerate((*RETRY_DELAYS, None), 1):
-        req = urllib.request.Request(base_url() + path, data=data, headers=headers, method=method)
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                raw = resp.read().decode("utf-8")
+                return resp.headers, json.loads(raw) if raw.strip() else {}
         except urllib.error.HTTPError as e:
             text = e.read().decode("utf-8", errors="replace")
             try:
-                err = json.loads(text).get("error")
+                parsed = json.loads(text)
+                err = parsed.get("error") or (parsed.get("header") or {}).get("message")
                 text = (err.get("message") if isinstance(err, dict) else err) or text
             except Exception:
                 pass
@@ -130,6 +148,20 @@ def _request(method: str, path: str, body: dict | None = None) -> dict:
         log(f"{error} — retry {attempt}/{len(RETRY_DELAYS)} in {delay}s…")
         time.sleep(delay)
     raise AssertionError("unreachable")
+
+
+def _request(method: str, path: str, body: dict | None = None) -> dict:
+    """MiMo (TTS) call."""
+    key = api_key()
+    return _http(method, base_url() + path, {"api-key": key, "Authorization": f"Bearer {key}"}, body)[1]
+
+
+def _doubao(path: str, body: dict, request_id: str) -> tuple[str, str, dict]:
+    """Doubao ASR call. Returns (X-Api-Status-Code, X-Api-Message, body)."""
+    headers, data = _http("POST", ASR_URL + path, {
+        "X-Api-Key": doubao_key(), "X-Api-Resource-Id": ASR_MODEL,
+        "X-Api-Request-Id": request_id, "X-Api-Sequence": "-1"}, body)
+    return headers.get("X-Api-Status-Code", ""), headers.get("X-Api-Message", ""), data
 
 
 def _choice(data: dict) -> dict:
@@ -161,26 +193,6 @@ def probe_duration(path: str) -> float:
         raise VoiceError("UNSUPPORTED_FORMAT", f"ffprobe cannot read an audio duration from {path}")
 
 
-def silence_midpoints(path: str) -> list[float]:
-    proc = _run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn",
-                 "-af", "silencedetect=noise=-35dB:d=0.25", "-f", "null", "-"], 1800)
-    text = proc.stderr.decode("utf-8", errors="replace")
-    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", text)]
-    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", text)]
-    return [(s + e) / 2 for s, e in zip(starts, ends)]
-
-
-def plan_cuts(duration: float, seg: float, silences: list[float]) -> list[tuple[float, float]]:
-    """Cut at the latest silence in the back half of each window, else at the window end."""
-    cuts = [0.0]
-    while duration - cuts[-1] > seg:
-        lo, hi = cuts[-1] + seg / 2, cuts[-1] + seg
-        cands = [m for m in silences if lo < m <= hi]
-        cuts.append(max(cands) if cands else hi)
-    cuts.append(duration)
-    return list(zip(cuts, cuts[1:]))
-
-
 def encode_mp3(path: str, start: float, length: float) -> bytes:
     proc = _run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-t", f"{length:.3f}",
                  "-i", path, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "64k",
@@ -192,45 +204,71 @@ def encode_mp3(path: str, start: float, length: float) -> bytes:
 
 # ── ASR ──────────────────────────────────────────────────────────────────
 
-def _asr_once(mp3: bytes, language: str) -> tuple[str, str]:
-    b64 = base64.b64encode(mp3).decode("ascii")
-    if len(b64) > MAX_B64_BYTES:
-        raise VoiceError("UNSUPPORTED_FORMAT", "Segment exceeds 10MB base64; lower VOICE_ASR_SEGMENT_SEC")
-    data = _request("POST", "/chat/completions", {
-        "model": ASR_MODEL,
-        "messages": [{"role": "user", "content": [
-            {"type": "input_audio", "input_audio": {"data": f"data:audio/mpeg;base64,{b64}"}}]}],
-        "asr_options": {"language": language},
-    })
-    choice = _choice(data)
-    return (choice.get("message") or {}).get("content") or "", choice.get("finish_reason") or ""
+def _asr_pass(b64: str, options: dict, language: str) -> list[dict]:
+    """Submit one recognition job and poll until done. Returns raw utterances ([] for silence)."""
+    request_id = str(uuid.uuid4())  # doubles as the task id for polling
+    audio = {"data": b64, "format": "mp3"}
+    if language in ASR_LANGUAGES:
+        audio["language"] = ASR_LANGUAGES[language]
+    code, msg, _ = _doubao("submit", {"audio": audio, "request": {
+        "model_name": "bigmodel", "show_utterances": True, **options}}, request_id)
+    if code != "20000000":
+        raise VoiceError("PROVIDER_ERROR", f"ASR submit failed [{code}]: {msg}")
+    deadline = time.monotonic() + REQUEST_TIMEOUT
+    while True:
+        time.sleep(ASR_POLL_SEC)
+        code, msg, data = _doubao("query", {}, request_id)
+        if code == "20000000":
+            return (data.get("result") or {}).get("utterances") or []
+        if code == "20000003":  # no valid speech in audio
+            return []
+        if code not in ("20000001", "20000002"):  # queued / processing
+            raise VoiceError("PROVIDER_ERROR", f"ASR failed [{code}]: {msg}")
+        if time.monotonic() > deadline:
+            raise VoiceError("TIMEOUT", f"ASR job not finished within {REQUEST_TIMEOUT:g}s")
 
 
-def _asr_piece(path: str, start: float, end: float, language: str, silences: list[float]) -> list[dict]:
-    text, finish = _asr_once(encode_mp3(path, start, end - start), language)
-    if finish != "length":
-        return [{"start": round(start, 2), "end": round(end, 2), "text": text.strip()}]
-    if end - start < 30:
-        raise VoiceError("PROVIDER_ERROR", f"Transcript truncated even for {end - start:.0f}s at {start:.0f}s")
-    span = end - start
-    cands = [m for m in silences if start + span / 4 < m < end - span / 4]
-    mid = min(cands, key=lambda m: abs(m - (start + end) / 2)) if cands else (start + end) / 2
-    log(f"output limit hit at {start:.0f}–{end:.0f}s, re-splitting at {mid:.0f}s")
-    return _asr_piece(path, start, mid, language, silences) + _asr_piece(path, mid, end, language, silences)
+def _utterance(u: dict) -> dict:
+    extra = u.get("additions") or {}
+    out = {"start": u["start_time"] / 1000, "end": u["end_time"] / 1000, "text": u.get("text", "").strip()}
+    if extra.get("speaker"):
+        out["speaker"] = extra["speaker"]
+    for k in ("emotion", "gender"):
+        if extra.get(k):
+            out[k] = extra[k]
+    if extra.get("speech_rate"):
+        out["speech_rate"] = round(float(extra["speech_rate"]), 2)
+    # start_time -1 marks placeholder spaces between Chinese and Latin words.
+    out["words"] = [{"start": w["start_time"] / 1000, "end": w["end_time"] / 1000, "text": w["text"]}
+                    for w in u.get("words") or [] if w.get("start_time", -1) >= 0]
+    return out
 
 
-def transcribe(path: str, language: str) -> dict:
+def _overlap(a: dict, b: dict) -> float:
+    return max(0.0, min(a["end"], b["end"]) - max(a["start"], b["start"]))
+
+
+def transcribe(path: str, language: str, speakers: bool) -> dict:
     duration = probe_duration(path)
-    silences = silence_midpoints(path) if duration > ASR_SEGMENT_SEC else []
-    pieces = plan_cuts(duration, ASR_SEGMENT_SEC, silences)
-    log(f"plan: {duration:.0f}s → {len(pieces)} segment(s)")
-    segments = []
-    for i, (start, end) in enumerate(pieces, 1):
-        log(f"segment {i}/{len(pieces)} {start:.0f}–{end:.0f}s…")
-        segments += _asr_piece(path, start, end, language, silences)
-    text = "\n".join(s["text"] for s in segments if s["text"])
+    b64 = base64.b64encode(encode_mp3(path, 0, duration)).decode("ascii")
+    if len(b64) > ASR_MAX_B64_BYTES:
+        raise VoiceError("UNSUPPORTED_FORMAT", "Audio exceeds 100MB base64 (~3.5h at 64 kbps); split the file")
+    passes = 2 if speakers else 1
+    log(f"pass 1/{passes}: text + word timestamps ({duration:.0f}s)…")
+    utts = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_TEXT, language)]
+    if speakers:
+        log(f"pass 2/{passes}: speaker labels…")
+        labelled = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_SPEAKER, language)]
+        for u in utts:
+            best = max(labelled, key=lambda s: _overlap(u, s), default=None)
+            if best and _overlap(u, best) > 0:
+                u["speaker"] = best["speaker"]
+        # Pass 1 can drop a speaker who cuts in without a pause; pass 2 keeps them, so fill the gaps from it.
+        utts += [s for s in labelled if not any(_overlap(s, u) > 0 for u in utts)]
+        utts.sort(key=lambda u: u["start"])
+    lines = [(f"[S{u['speaker']}] " if "speaker" in u else "") + u["text"] for u in utts if u["text"]]
     return {"file": path, "model": ASR_MODEL, "language": language, "duration": round(duration, 2),
-            "segments": segments, "text": text or "NO_SPEECH_DETECTED"}
+            "segments": utts, "text": "\n".join(lines) or "NO_SPEECH_DETECTED"}
 
 
 # ── TTS ──────────────────────────────────────────────────────────────────
@@ -351,15 +389,22 @@ def check() -> dict:
         "ffmpeg": shutil.which("ffmpeg") or "MISSING",
         "ffprobe": shutil.which("ffprobe") or "MISSING",
         "base_url": base_url(),
-        "has_key": bool(_env("MIMO_API_KEY")),
+        "has_mimo_key": bool(_env("MIMO_API_KEY")),
+        "has_doubao_key": bool(_env("DOUBAO_API_KEY")),
     }
     try:
         ids = [m.get("id") for m in _request("GET", "/models").get("data", [])]
-        result["audio_models"] = [m for m in (ASR_MODEL, TTS_MODEL, CLONE_MODEL, DESIGN_MODEL) if m in ids]
+        result["tts_models"] = [m for m in (TTS_MODEL, CLONE_MODEL, DESIGN_MODEL) if m in ids]
     except VoiceError as e:
-        result["audio_models"] = f"ERROR: {e}"
-    result["ok"] = (result["ffmpeg"] != "MISSING" and result["ffprobe"] != "MISSING"
-                    and isinstance(result["audio_models"], list) and len(result["audio_models"]) == 4)
+        result["tts_models"] = f"ERROR: {e}"
+    try:
+        # A random task id answers 45000092 (task not found) once the key and resource are accepted.
+        code, msg, _ = _doubao("query", {}, str(uuid.uuid4()))
+        result["asr"] = "ok" if code == "45000092" else f"ERROR [{code}]: {msg}"
+    except VoiceError as e:
+        result["asr"] = f"ERROR: {e}"
+    result["ok"] = (result["ffmpeg"] != "MISSING" and result["ffprobe"] != "MISSING" and result["asr"] == "ok"
+                    and isinstance(result["tts_models"], list) and len(result["tts_models"]) == 3)
     return result
 
 
@@ -380,13 +425,14 @@ def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="Speech-to-text and text-to-speech via Xiaomi MiMo v2.5")
+    parser = argparse.ArgumentParser(description="Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo v2.5")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg, key, and model access")
     sub = parser.add_subparsers(dest="cmd")
 
     asr = sub.add_parser("asr", help="Transcribe speech from an audio or video file")
     asr.add_argument("file")
     asr.add_argument("--language", "-l", default="auto", choices=["auto", "zh", "en"])
+    asr.add_argument("--speakers", action="store_true", help="Second pass for speaker labels (multi-person audio)")
     asr.add_argument("--output", choices=["text", "json"], default="text")
     asr.add_argument("--out", help="Also write the result to this file")
 
@@ -409,7 +455,7 @@ def main() -> int:
         if args.cmd == "asr":
             if not Path(args.file).is_file():
                 raise VoiceError("INPUT_NOT_FOUND", f"File not found: {args.file}")
-            result = transcribe(args.file, args.language)
+            result = transcribe(args.file, args.language, args.speakers)
             rendered = json.dumps(result, ensure_ascii=False, indent=2) if args.output == "json" else result["text"]
             if args.out:
                 Path(args.out).write_text(rendered + "\n", encoding="utf-8")

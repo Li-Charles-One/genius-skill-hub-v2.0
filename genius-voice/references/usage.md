@@ -14,24 +14,27 @@ sudo apt install ffmpeg
 winget install Gyan.FFmpeg
 ```
 
-The script uses only the Python standard library (3.9+). Verify with `python3 scripts/voice.py --check` (Windows: `python scripts\voice.py --check`): `ok: true` means ffmpeg, ffprobe, the key and all four audio models are reachable.
+The script uses only the Python standard library (3.9+). Verify with `python3 scripts/voice.py --check` (Windows: `python scripts\voice.py --check`): `ok: true` means ffmpeg, ffprobe, the Doubao ASR key and all three MiMo TTS models are reachable.
 
 ## Setup (`scripts/.env`)
 
 ```bash
+# ASR: Doubao speech key with resource volc.seedasr.auc enabled
+DOUBAO_API_KEY=your-doubao-key
+# TTS
 MIMO_API_KEY=your-mimo-key
 # Pay-as-you-go keys use the default; Token Plan keys need their regional URL, e.g.
 # MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 ```
 
-Process environment variables override `scripts/.env`. Default base URL: `https://api.xiaomimimo.com/v1`. Both `api-key` and `Authorization: Bearer` headers are sent.
+Process environment variables override `scripts/.env`. ASR calls `https://openspeech.bytedance.com/api/v3/auc/bigmodel/{submit,query}` with `X-Api-Key`. MiMo default base URL: `https://api.xiaomimimo.com/v1`; both `api-key` and `Authorization: Bearer` headers are sent.
 
 ## Examples
 
 ```bash
 # ASR
 python3 scripts/voice.py asr meeting.m4a --language zh
-python3 scripts/voice.py asr interview.mp4 --output json --out interview.json
+python3 scripts/voice.py asr interview.mp4 --speakers --output json --out interview.json
 
 # TTS, preset voice + style
 python3 scripts/voice.py tts "（温柔）晚安，今天辛苦了。" --voice 冰糖 --out goodnight.mp3
@@ -46,7 +49,7 @@ On Windows, write `python scripts\voice.py …`; pass long text with `--text-fil
 
 ## Output
 
-- ASR text mode prints the transcript only (segments joined by newlines). `--output json` prints `{file, model, language, duration, segments: [{start, end, text}], text}`; `start`/`end` are segment boundaries in seconds, not word timestamps.
+- ASR text mode prints one utterance per line, prefixed `[S1]`, `[S2]`… with `--speakers`. `--output json` prints `{file, model, language, duration, segments, text}`; each segment is one utterance: `{start, end, text, speaker?, emotion?, gender?, speech_rate?, words: [{start, end, text}]}`, times in seconds. `speech_rate` is characters per second; emotion and gender are unreliable where voices overlap.
 - TTS writes 24 kHz mono 16-bit audio and prints `{"out": <absolute path>, "seconds": <duration>}`.
 - Progress goes to stderr as `[genius-voice] …`.
 
@@ -55,8 +58,8 @@ On Windows, write `python scripts\voice.py …`; pass long text with `--text-fil
 | `INPUT_NOT_FOUND` | 3 | audio, reference or text file does not exist |
 | `UNSUPPORTED_FORMAT` | 4 | ffmpeg cannot decode the input; empty text; clone reference under 1s or over 10MB |
 | `DEPENDENCY_MISSING` | 5 | `ffmpeg` / `ffprobe` not on PATH |
-| `PROVIDER_ERROR` | 6 | missing key, HTTP error, content filter, empty audio |
-| `TIMEOUT` | 7 | no API response within `VOICE_TIMEOUT`, or ffmpeg timed out |
+| `PROVIDER_ERROR` | 6 | missing key, HTTP error, ASR status code other than success/processing/silence, content filter, empty audio |
+| `TIMEOUT` | 7 | no API response or unfinished ASR job within `VOICE_TIMEOUT`, or ffmpeg timed out |
 
 Other errors exit 1; `--check` failing exits 2. HTTP 429/5xx and network errors retry after 5s / 15s / 30s.
 
@@ -91,16 +94,18 @@ Design (`--design`): 1–4 sentences covering gender/age, timbre, emotion and pa
 
 | Env | Default | Why |
 |---|---|---|
-| `VOICE_ASR_SEGMENT_SEC` | `120` | ASR output caps at 2048 tokens; segments of 180–300s silently dropped passages, 120s kept all 40/40 test paragraphs |
 | `VOICE_TTS_CHUNK_CHARS` | `150` | one 503-char request garbled a sentence mid-way (round-trip similarity 0.93); ~100–140-char chunks scored 0.996+ |
-| `VOICE_TIMEOUT` | `600` | seconds per API request |
+| `VOICE_TIMEOUT` | `600` | seconds per API request, and the longest wait for one ASR job |
 
-Documented by MiMo: ASR input wav/mp3 ≤10MB base64, languages `auto`/`zh`/`en` (dialects such as Cantonese and Sichuanese are recognized), no timestamps or speaker labels. TTS returns wav by default.
+ASR (measured): 5 min of speech ≈ 28s, 8 min ≈ 43s per pass; a 216s multi-speaker video took 36s for both passes. Audio is sent inline as 16 kHz mono 64 kbps mp3; above 100MB base64 (~3.5h) the provider wants `audio.url`, which the script does not use. Status `20000003` (no valid speech) maps to `NO_SPEECH_DETECTED`. The speaker pass uses `ssd_version: "200"` (it separated 5 speakers where 300 merged them into 3) and changes wording (100 → 一百), so only its labels are kept, plus utterances that pass 1 missed.
+
+TTS: MiMo returns wav by default.
 
 ## Verification
 
-- [ ] `python3 scripts/voice.py --check` → `ok: true`, four audio models listed
+- [ ] `python3 scripts/voice.py --check` → `ok: true`, `asr: ok`, three TTS models listed
 - [ ] `python3 scripts/voice.py tts "你好，这是一段测试。" --out t.wav` then `python3 scripts/voice.py asr t.wav -l zh` returns the same sentence
-- [ ] A recording longer than 2 minutes prints `plan: … → N segment(s)` and the transcript covers the whole file
+- [ ] A multi-person recording with `--speakers` shows `[S1]`/`[S2]` lines and the last utterance ends near the file duration
+- [ ] Silent audio prints `NO_SPEECH_DETECTED`
 - [ ] `--clone` and `--design` each produce a playable file; listen to confirm the timbre
 - [ ] A missing file exits 3 with `INPUT_NOT_FOUND`

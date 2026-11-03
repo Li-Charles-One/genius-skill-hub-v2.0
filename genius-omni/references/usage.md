@@ -31,7 +31,6 @@ python3 "<skill_dir>/scripts/vision.py" lecture-2h.mp4 video-summary --no-long-v
 python3 "<skill_dir>/scripts/vision.py" "https://www.youtube.com/watch?v=..." video-summary
 
 # Audio
-python3 "<skill_dir>/scripts/vision.py" interview.wav audio-transcribe
 python3 "<skill_dir>/scripts/vision.py" clip.mp3 describe          # → audio-summary
 
 # PDF
@@ -62,14 +61,14 @@ The first existing file wins: `scripts/.env`, then `~/.hermes/.env`. Process env
 
 ## Output
 
-Text mode (default) prints `## <Mode> Analysis` followed by the model's markdown. Analysis modes answer in Simplified Chinese (quotes, names and brands stay in the original language, also in long-media synthesis); `ocr`, `video-ocr` and `audio-transcribe` keep the source language. `--output json` prints `{"mode": ..., "file": ..., "result": ...}`. Local audio/video results end with a `⏱ 时长校验` footer comparing the ffprobe duration with the duration the model claims.
+Text mode (default) prints `## <Mode> Analysis` followed by the model's markdown. Analysis modes answer in Simplified Chinese (quotes, names and brands stay in the original language, also in long-media synthesis); `ocr` and `video-ocr` keep the source language. `--output json` prints `{"mode": ..., "file": ..., "result": ...}`. Local audio/video results end with a `⏱ 时长校验` footer comparing the ffprobe duration with the duration the model claims.
 
 Failures go to stderr as `Error [CODE]: message`:
 
 | Code | Exit | Typical cause |
 |---|---|---|
 | `INPUT_NOT_FOUND` | 3 | local file does not exist |
-| `UNSUPPORTED_FORMAT` | 4 | mode does not fit the media (e.g. `audio-transcribe` on an image) |
+| `UNSUPPORTED_FORMAT` | 4 | mode does not fit the media (e.g. `audio-summary` on an image, `ocr` on audio) |
 | `DEPENDENCY_MISSING` | 5 | `ffmpeg` / `ffprobe` / `pdftoppm` not on PATH |
 | `PROVIDER_ERROR` | 6 | unknown provider, missing key, HTTP error, network failure |
 | `TIMEOUT` | 7 | no API response in time, or an ffmpeg step timed out |
@@ -115,7 +114,6 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 | `VISION_MODEL` / `VISION_BASE_URL` / `VISION_API_STYLE` | — | override the **active** provider only |
 | `VISION_MAX_TOKENS` | `32768` | output limit |
 | `VISION_SHOW_THINKING` | off | `1` prints thinking before the answer |
-| `VISION_VOICE_CHECK` | `1` | `audio-transcribe` runs a yes/no voice check first; `0` skips it |
 | `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` | — | HTTP proxy for API calls (first one set wins) |
 
 ## Media, proxies, PDF, long video
@@ -141,7 +139,7 @@ Local media is sent as base64. A public URL is passed through and skips base64 a
 - Audio proxy: mono AAC `m4a` at `VISION_PROXY_AUDIO_KBPS`; 64k fits 30 min (`VISION_MAX_SINGLE_SEC`) in ~15MB.
 - Image: over `VISION_PROXY_TRIGGER_MB` → JPEG, long edge ≤2048; still too large → 1280.
 - Proxies are cached per source file + spec, so a rerun does not re-encode.
-- Segments: one API call each, then one synthesis call; `audio-transcribe` and `video-frame-analysis` join segment outputs instead. The index is saved after every segment, so a failed run resumes from the next segment.
+- Segments: one API call each, then one synthesis call; `video-frame-analysis` joins segment outputs instead. The index is saved after every segment, so a failed run resumes from the next segment.
 - Gateway errors (HTTP 429/5xx, network) retry after 5s / 15s / 30s. A canned refusal (e.g. "content policy") is `PROVIDER_ERROR`, not a result.
 
 PDF: Gemini style sends the whole file in one request when it is ≤ `VISION_PROXY_TRIGGER_MB`. Otherwise (OpenAI-style providers, larger files, or `VISION_PDF_PAGES=1`) `pdftoppm` renders up to `VISION_PDF_MAX_PAGES` pages and each page is analyzed separately. Rendered pages are cached per file.
@@ -171,7 +169,7 @@ Cache files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`).
 - [ ] `python3 scripts/vision.py --check` → `ok`, active provider and model as expected
 - [ ] Image: `python3 scripts/vision.py test.png describe`
 - [ ] Video: `python3 scripts/vision.py test.mp4 video-summary`
-- [ ] Audio: `python3 scripts/vision.py test.wav audio-transcribe`
+- [ ] Audio: `python3 scripts/vision.py test.wav audio-summary`
 - [ ] PDF: `python3 scripts/vision.py test.pdf ocr` (whole document) and `VISION_PDF_PAGES=1 …` (pages)
 - [ ] Proxies: `--proxy-only` on a large video / long audio / png (expect a `plan=` line, `h264_videotoolbox` on macOS, `.m4a` segments, `.jpg`)
 - [ ] Errors: a missing file exits 3 with `INPUT_NOT_FOUND`

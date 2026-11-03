@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius Omni"
   short_description: "Analyze images, video/audio, and OCR"
-  default_prompt: "Use $genius-omni to analyze this image, video, or audio, or to OCR text from a screenshot or PDF."
+  default_prompt: "Use $genius-omni to analyze this image, video, or audio (not speech-to-text), or to OCR text from a screenshot or PDF."
