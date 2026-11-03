@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Footage"
+  short_description: "Footage brief for editors: shots, lines, cut points"
+  default_prompt: "Use $genius-footage to write a .footage.md brief for this clip: frame-accurate shots, lines with cut points, people, segments and highlights."

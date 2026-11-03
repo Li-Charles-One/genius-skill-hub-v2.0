@@ -1,0 +1,66 @@
+{
+  "skill_name": "genius-footage",
+  "evals": [
+    {
+      "id": "brief-with-script",
+      "prompt": "给这条原始素材做一份素材说明书，方便剪辑 A001_C003.mov，脚本在 script.txt",
+      "trigger_expected": true,
+      "expected_output": "Runs footage.py on the clip with --script script.txt; reports the status, counts, the .footage.md path and any review items without pasting the brief.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "footage.py"},
+        {"type": "contains", "value": "--script"}
+      ]
+    },
+    {
+      "id": "screen-footage",
+      "prompt": "帮我筛一下这条采访素材 interview_01.mp4，哪些镜头能用，哪句话可以下刀",
+      "trigger_expected": true,
+      "expected_output": "Runs footage.py on the clip and points to the shot table flags, unusable shots, retakes and the cut points in the .footage.md.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "footage.py"}
+      ]
+    },
+    {
+      "id": "missing-file",
+      "prompt": "给 /tmp/does-not-exist.mov 做素材说明书",
+      "trigger_expected": true,
+      "expected_output": "Reports INPUT_NOT_FOUND instead of inventing a brief.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "INPUT_NOT_FOUND"}
+      ]
+    },
+    {
+      "id": "summary-near-miss",
+      "prompt": "这个视频讲了什么，帮我总结一下 talk.mp4",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-omni video-summary, not a footage brief.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "footage.py"}
+      ]
+    },
+    {
+      "id": "transcribe-near-miss",
+      "prompt": "把这段采访的语音转成文字，带说话人 interview.wav",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-voice asr --speakers.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "footage.py"}
+      ]
+    },
+    {
+      "id": "qc-near-miss",
+      "prompt": "这条成片交付前检查一下字幕和声音 final.mp4",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-video-qc.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "footage.py"}
+      ]
+    }
+  ]
+}

@@ -32,9 +32,7 @@ python3 "<skill_dir>/scripts/vision.py" "https://www.youtube.com/watch?v=..." vi
 
 # Exact shot list (frames, timecode, count) + per-shot description from storyboards
 python3 "<skill_dir>/scripts/vision.py" footage.mov video-shots --output json
-# Footage brief next to the clip (AG_FOOTAGE/1.0): A001_C003.footage.md / .footage.json / .footage/
-python3 "<skill_dir>/scripts/vision.py" A001_C003.mov footage --script script.txt
-# Measurement only, no model (also what ArtisticCut calls)
+# Measurement only, no model (also what genius-footage builds on)
 python3 "<skill_dir>/scripts/measure.py" footage.mov [--output json]
 
 # Audio
@@ -186,16 +184,11 @@ Every frame is decoded at 32×18 and compared with the previous frame and with t
 
 Measured: on a built test clip (hard cut, punch-in, 2-frame flash, dissolve, fade through black, jump cut, a hand crossing) all boundaries landed on the exact frame after the storyboard check. On real edits, 19/19, 40/40 sampled and 72/73 confirmed cuts were real (the miss: 7.5 fps webcam footage upconverted to 30 fps). Storyboard frames are grabbed by pts relative to the container start and matched decode order pixel for pixel on five clips, including B-frame and non-zero start files. Labels are drawn with a built-in 5×7 font, so no ffmpeg `drawtext` or fonts are needed. Sheets are cached under `genius-omni-proxy/storyboards/`.
 
-## Footage brief (`footage`)
-
-Protocol: `ArtisticCut/AG_FOOTAGE.md` (v1.0). Steps: `video-shots` (measure, storyboard check of suspects, per-shot description with flags) → genius-voice `voice.py asr --speakers --output json` (`OMNI_VOICE_SCRIPT` overrides the sibling path) → words mapped to frames by pts relative to the container start (start rounds down, end rounds up) → cut points (pause ≥4 frames: clean cut; <2 frames at punctuation: run-together) → one request with the compressed clip, shot list, transcript and optional `--script` text; the model returns JSON with IDs only, and `footage.py` converts them to frames and timecode → `validate` (shots tile the clip, timecode matches frames, lines sit on the shots they claim, segments are contiguous, every referenced ID exists, every shot described) → `status: ok | needs_review`. Clips longer than `VISION_MAX_SINGLE_SEC` skip the whole-clip step (warned).
-
 ## Verification
 
 - [ ] `python3 scripts/vision.py --check` → `ok`, active provider and model as expected
 - [ ] Image: `python3 scripts/vision.py test.png describe`
 - [ ] Video: `python3 scripts/vision.py test.mp4 video-summary`
-- [ ] Footage: `python3 scripts/vision.py test.mp4 footage` writes `test.footage.md` with `status: ok` and no validation items
 - [ ] Shots: `python3 scripts/measure.py test.mp4` lists shots; `python3 scripts/vision.py test.mp4 video-shots` fills every shot's description and resolves every suspect
 - [ ] Audio: `python3 scripts/vision.py test.wav audio-summary`
 - [ ] PDF: `python3 scripts/vision.py test.pdf ocr` (whole document) and `VISION_PDF_PAGES=1 …` (pages)

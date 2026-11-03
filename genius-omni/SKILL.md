@@ -1,8 +1,8 @@
 ---
 name: genius-omni
-description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结、制作点评与声景分析。不要用于语音转文字（含带时间轴/说话人的逐字转写）、朗读配音或声音克隆（用 genius-voice）。"
+description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结、制作点评与声景分析。不要用于语音转文字（含带时间轴/说话人的逐字转写）、朗读配音或声音克隆（用 genius-voice）；不要用于给剪辑做素材说明书 .footage.md（用 genius-footage）。"
 metadata:
-  version: "3.4.0"
+  version: "3.5.0"
 ---
 
 # Genius Omni（视听）
@@ -28,7 +28,6 @@ Config, providers, proxy and verification: `references/usage.md`. Trigger checks
 | Critique a recording | `video-review` |
 | Shot-by-shot video, model's own reading | `video-frame-analysis` |
 | Exact shot count, frame ranges, timecode + per-shot description | `video-shots` |
-| Footage brief for editing (`.footage.md`: shots, transcript with cut points, people, segments, highlights) | `footage` (`--script <file>` optional) |
 | What is in this audio | `audio-summary` |
 | Critique audio production | `audio-review` |
 | Soundscape / events | `audio-scene` |
@@ -49,7 +48,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - PDF: CPA reads the whole document in one request; OpenAI-style providers (or `VISION_PDF_PAGES=1`) render pages and analyze them one by one.
 - Run one media analysis at a time; parallel runs make the CPA gateway return 502 (retried automatically, but slower).
 - `video-shots` (local video only) never lets the model time or count: `measure.py` decodes every frame and finds cuts and fades through black; doubtful spots go to a labelled storyboard for the model to judge; then each shot's first / last (and middle, if ≥4s) frames go on storyboard sheets for description. Frame numbers, timecode and the shot count come from the measurement. `video-frame-analysis` instead lets the model segment a 2 fps proxy, so its counts and times are estimates.
-- `footage` (local video only) writes `<clip>.footage.md`, `<clip>.footage.json` and `<clip>.footage/` (storyboards) next to the clip, per AG_FOOTAGE/1.0: `video-shots`, then genius-voice `asr --speakers` (its words become frame ranges and cut points), then one whole-clip request where the model answers with IDs only (S/U/P/G). It prints the status and paths; the brief itself is the deliverable. Needs genius-voice next to this skill (or `OMNI_VOICE_SCRIPT`); without it the transcript is skipped and the status is `needs_review`.
+- A footage brief for editing (`.footage.md`: shots, transcript with cut points, people, segments) is genius-footage, which builds on `video-shots`.
 - Speech-to-text, with or without timestamps and speaker labels, is genius-voice (`voice.py asr <file> [--speakers]`). Audio `ocr` fails with `UNSUPPORTED_FORMAT` pointing there.
 
 ## Report
@@ -58,7 +57,6 @@ python3 "<skill_dir>/scripts/vision.py" --check
 - Video: `Summary`, `Timeline`, `Key Moments`, `Uncertainty`.
 - Audio: `Summary`, `Transcript or Key Segments`, `Speakers or Sound Events`, `Uncertainty`.
 - Compare: `Unchanged`, `Added`, `Removed`, `Uncertain`.
-- Footage: the status, counts, the `.footage.md` path, and every review / validation item printed. Do not paste the whole brief unless asked.
 - Shots: the shot count and frame / timecode columns as printed, the storyboard verdicts, any unresolved suspects (the count may then be low), and the storyboard paths.
 
 Analysis modes answer in Simplified Chinese; quoted text, speech, names and brands stay verbatim. `ocr` and `video-ocr` keep the source language. Keep OCR as observed text and mark inferred repairs separately. Unreadable spans stay `[illegible]`; never guess. Report `NO_TEXT_FOUND` when the result says no text was found. If long-media segmentation fails, report the failed segment and do not fabricate a summary.

@@ -54,14 +54,13 @@
       ]
     },
     {
-      "id": "footage-brief",
+      "id": "footage-brief-near-miss",
       "prompt": "给这条原始素材做一份素材说明书，方便剪辑 A001_C003.mov，脚本在 script.txt",
-      "trigger_expected": true,
-      "expected_output": "Runs footage with --script script.txt; reports the status, counts, the .footage.md path and any review items.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "trigger_expected": false,
+      "expected_output": "Routes to genius-footage, not a genius-omni mode.",
+      "files": [],
       "assertions": [
-        {"type": "contains", "value": "footage"},
-        {"type": "contains", "value": "--script"}
+        {"type": "contains", "value": "genius-footage"}
       ]
     },
     {
