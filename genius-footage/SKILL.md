@@ -2,7 +2,7 @@
 name: genius-footage
 description: "Genius 素材说明书：给一条视频素材生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于成片交付前质检（用 genius-video-qc），不要用于剪辑或生成视频。"
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
 ---
 
 # Genius Footage（素材说明书）
@@ -21,7 +21,7 @@ Format: AG_FOOTAGE/1.1 (`ArtisticCut/AG_FOOTAGE.md`). Cut detection rules: `refe
 
 ```bash
 python3 "<skill_dir>/scripts/footage.py" --check
-python3 "<skill_dir>/scripts/footage.py" <clip> [--script script.txt] [--model M] [--output text|json]
+python3 "<skill_dir>/scripts/footage.py" <clip> [--script script.txt] [--model M] [--workers 3] [--output text|json]
 python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list only: no model, no brief
 ```
 
@@ -31,7 +31,7 @@ python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list 
 - `--script`: a script or keyword file (names, brands, models). The model uses it to flag likely mishearings.
 - Steps: `measure.py` (cuts frame by frame) → doubtful cuts judged by the model on a storyboard (six frames each side of a jump, nine per second across a sustained change) → every shot described from its first / middle / last frames → `asr.py` with speaker labels (words → frame ranges and cut points: pause ≥4 frames is a clean cut, <2 frames at punctuation is run-together) → one whole-clip request (summary, people, segments, highlights, retakes, unusable shots, suspect words) → validate.
 - Clips longer than 30 minutes skip the whole-clip step (warned).
-- Run one clip at a time; parallel runs make the CPA gateway return 502 (retried after 5 / 15 / 30 s). A 3-minute clip with ~120 shots took about 15 minutes.
+- Speech and the whole-clip proxy start at once and run beside the storyboard steps; storyboard sheets go `--workers` (default 3) at a time. Run one clip at a time; more requests in flight make the CPA gateway return 502 (retried after 5 / 15 / 30 s). 2.3.0 on 京东.mp4 (8 min, 217 shots, 3 workers, no 502): 7.2 min, was 17 min one sheet at a time.
 
 ## Report
 

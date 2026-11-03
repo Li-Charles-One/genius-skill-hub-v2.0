@@ -21,6 +21,7 @@ import re
 import shutil
 import sys
 from bisect import bisect_left, bisect_right
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -340,6 +341,7 @@ SHOT_CHECK_PROMPT = (
 )
 CHECK_PER_SEC = 9  # frames per second for a sustained-change suspect
 CHECK_SIDE = 6     # frames each side of a one-frame jump
+WORKERS = 3        # storyboard requests in flight at once (more makes the CPA gateway return 502)
 # Storyboard sheets, not the video: shots and timing were measured locally (measure.py).
 SHOT_PROMPT = (
     "These images are storyboard sheets of one video. Every cell is one exact frame, labelled at its "
@@ -371,7 +373,13 @@ def _json(text: str, open_ch: str, close_ch: str):
         return None
 
 
-def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path) -> None:
+def _ask(c: dict, jobs: list[tuple[Path, str]], workers: int) -> list:
+    """One storyboard request per (sheet, prompt), up to `workers` at once; answers in input order."""
+    with ThreadPoolExecutor(max(1, workers)) as ex:
+        return list(ex.map(lambda j: _json(client.call(c, [str(j[0])], j[1], 300), "[", "]"), jobs))
+
+
+def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path, workers: int) -> None:
     """1. Suspects: a one-frame jump gets six frames each side, a sustained change nine frames per second
     across it. The model judges: what changes, on which cell, and whether a new shot starts there. A new shot
     starts on the cell it points to; unsure ones stay unresolved for review."""
@@ -391,11 +399,13 @@ def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path) -> Non
         cells.update(groups[-1][1])
         span_of[x] = frames[-1] - frames[0]
     extra, spans = {}, {}
-    for sheet, gids in storyboard.sheets(src, seek, r["fps"], groups, out_dir, "suspects"):
+    pages, jobs = storyboard.sheets(src, seek, r["fps"], groups, out_dir, "suspects"), []
+    for sheet, gids in pages:
         r["storyboards"].append(str(sheet))
         print(f"[genius-footage] checking {len(gids)} suspects on {sheet.name}…", file=sys.stderr)
         listing = ", ".join(f"{x} ({span_of[x]} frames, {span_of[x] / r['fps']:.2f}s)" for x in gids)
-        answer = _json(client.call(c, [str(sheet)], SHOT_CHECK_PROMPT.replace("{ids}", listing), 300), "[", "]")
+        jobs.append((sheet, SHOT_CHECK_PROMPT.replace("{ids}", listing)))
+    for answer in _ask(c, jobs, workers):
         for item in answer if isinstance(answer, list) else []:
             s = ids.get(str(item.get("id")))
             verdict = str(item.get("verdict", "")).strip().lower()
@@ -416,18 +426,17 @@ def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path) -> Non
         measure.add_boundaries(r, extra, spans)
 
 
-def shots(src: str, c: dict, out_dir: Path) -> dict:
+def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int) -> dict:
     """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
     from labelled storyboard sheets, never times or counts them."""
     try:
         r = measure.measure(src)
     except measure.MeasureError as e:
         raise FootageError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
-    seek = measure.frame_times(src, for_seek=True)
     print(f"[genius-footage] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
           f"{len(r['suspects'])} suspects", file=sys.stderr)
     r["storyboards"] = []
-    check_suspects(src, c, r, seek, out_dir)
+    check_suspects(src, c, r, seek, out_dir, workers)
 
     # 2. Describe every shot from its first / (middle) / last frames.
     groups = []
@@ -439,10 +448,12 @@ def shots(src: str, c: dict, out_dir: Path) -> dict:
             cells.append((s["id"] + "b", s["last"]))
         groups.append((s["id"], cells))
     by_id = {s["id"]: s for s in r["shots"]}
-    for sheet, gids in storyboard.sheets(src, seek, r["fps"], groups, out_dir, "shots"):
+    pages, jobs = storyboard.sheets(src, seek, r["fps"], groups, out_dir, "shots"), []
+    for sheet, gids in pages:
         r["storyboards"].append(str(sheet))
         print(f"[genius-footage] describing {gids[0]}–{gids[-1]} on {sheet.name}…", file=sys.stderr)
-        answer = _json(client.call(c, [str(sheet)], SHOT_PROMPT.replace("{ids}", ", ".join(gids)).replace("{fps}", f"{r['fps']:g}"), 300), "[", "]")
+        jobs.append((sheet, SHOT_PROMPT.replace("{ids}", ", ".join(gids)).replace("{fps}", f"{r['fps']:g}")))
+    for answer in _ask(c, jobs, workers):
         for item in answer if isinstance(answer, list) else []:
             s = by_id.get(str(item.get("id")))
             if s:
@@ -479,8 +490,8 @@ OVERVIEW_PROMPT = (
 )
 
 
-def _overview(src: str, c: dict, r: dict, utts: list, script: str | None) -> dict:
-    if r["duration"] > client.MAX_VIDEO_SEC:
+def _overview(c: dict, r: dict, utts: list, script: str | None, proxy) -> dict:
+    if proxy is None:
         r["warnings"].append(f"clip longer than {client.MAX_VIDEO_SEC // 60} min: whole-clip overview skipped")
         return {}
     shot_lines = "\n".join(
@@ -490,7 +501,7 @@ def _overview(src: str, c: dict, r: dict, utts: list, script: str | None) -> dic
                           for u in utts) or "(no transcript)"
     prompt = (OVERVIEW_PROMPT.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
               .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + LANGUAGE_RULE
-    upload = client.video_proxy(src, r["duration"])
+    upload = proxy.result()
     print("[genius-footage] whole-clip overview…", file=sys.stderr)
     ov = _json(client.call(c, [upload], prompt, max(300, min(900, r["duration"] * 0.6))), "{", "}")
     if not isinstance(ov, dict) or not ov:
@@ -499,19 +510,24 @@ def _overview(src: str, c: dict, r: dict, utts: list, script: str | None) -> dic
     return ov
 
 
-def run(src: str, c: dict, script: str | None = None) -> dict:
-    """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip."""
+def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS) -> dict:
+    """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip.
+    Speech and the whole-clip proxy need no shot list, so they run alongside the storyboard steps."""
     clip = Path(src)
     base = clip.with_suffix("")
     if not os.access(clip.parent, os.W_OK):
         raise FootageError("UNSUPPORTED_FORMAT", f"cannot write the footage brief next to the clip: {clip.parent}")
-    r = shots(src, c, Path(f"{base}.footage"))
     seek = measure.frame_times(src, for_seek=True)
+    bg = ThreadPoolExecutor(2)
+    print("[genius-footage] transcribing (Doubao ASR) in the background…", file=sys.stderr)
+    speech_job = bg.submit(asr.transcribe, src)
+    duration = asr.probe_duration(src)
+    proxy = bg.submit(client.video_proxy, src, duration) if duration <= client.MAX_VIDEO_SEC else None
+    r = shots(src, c, Path(f"{base}.footage"), seek, workers)
 
     asr_note, utts, asr_model = None, [], None
     try:
-        print("[genius-footage] transcribing (Doubao ASR)…", file=sys.stderr)
-        speech = asr.transcribe(src)
+        speech = speech_job.result()
         asr_model = speech.get("model")
         utts = utterances(speech, seek, r["shots"], r["frames"])
         cut_points(utts, r["frames"])
@@ -519,7 +535,8 @@ def run(src: str, c: dict, script: str | None = None) -> dict:
         asr_note = str(e)
         print(f"[genius-footage] {asr_note}", file=sys.stderr)
 
-    ov = _overview(src, c, r, utts, script)
+    ov = _overview(c, r, utts, script, proxy)
+    bg.shutdown()
     doc = build(r, utts, ov, asr_note,
                 {"measure": "genius-footage measure.py", "asr": asr_model, "storyboard": c["model"],
                  "overview": c["model"] if ov else None},
@@ -555,6 +572,7 @@ def main() -> None:
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
+    parser.add_argument("--workers", type=int, default=WORKERS, help=f"Storyboard requests at once (default {WORKERS})")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and the ASR key")
     args = parser.parse_args()
     c = client.conf(args.model)
@@ -575,7 +593,7 @@ def main() -> None:
             raise FootageError("UNSUPPORTED_FORMAT", "footage needs a local video file")
         if not c["api_key"]:
             raise FootageError("PROVIDER_ERROR", "API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env")
-        res = run(args.file, c, Path(args.script).read_text(encoding="utf-8") if args.script else None)
+        res = run(args.file, c, Path(args.script).read_text(encoding="utf-8") if args.script else None, args.workers)
         print(json.dumps(res, ensure_ascii=False, indent=2) if args.output == "json"
               else f"## Footage\n\n{render_result(res)}")
     except FootageError as e:
