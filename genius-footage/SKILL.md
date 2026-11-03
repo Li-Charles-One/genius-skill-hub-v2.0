@@ -2,7 +2,7 @@
 name: genius-footage
 description: "Genius 素材说明书：给一条视频素材生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于成片交付前质检（用 genius-video-qc），不要用于剪辑或生成视频。"
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
 ---
 
 # Genius Footage（素材说明书）
@@ -41,7 +41,8 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 
 ## Gotchas
 
-- The model has the final say on doubtful cuts; the timeline stays measured. A one-frame jump starts on the frame the model points to; a sustained change starts on its measured first frame. On emsmart (35 suspects, CG + live) three runs agreed on all of them; on baiting 1 of 28 differed. CG content swaps and picture-in-picture go to review as unsure.
+- The model has the final say on doubtful cuts; the timeline stays measured. A one-frame jump starts on the frame the model points to; a sustained change starts on its measured first frame. 2.1.0 re-run (2026-11-03): on emsmart (35 suspects, CG + live) one suspected cut differed between three runs (X35 f4335 flips new shot ↔ unsure); on baiting 0 of 28 differed. No temperature is pinned, so an unsure-versus-cut boundary can flip between runs; a flipped unsure goes to review, never into the timeline silently. CG content swaps and picture-in-picture go to review as unsure.
+- One model answer can omit the first groups of a sheet: a baiting run lost X01–X03, and the same page returned all three on three re-calls. Those suspects stay unchecked and land in review, so re-call a page whose answer came back short.
 - Do not feed the lexicon to the cut check: its near-pairs (遮挡转场 / 遮挡穿过, 黑场 / 闪白, 叠化 / CG 内容替换) made verdicts flip (5–8 of 35 between runs).
 - Two suspects close together on one transition (f4056 / f4062) can place the same cut a few frames apart between runs.
 - On a finished edit with music, sung lyrics and speech can land in one line, and cut points then fall inside the lyrics.
