@@ -366,7 +366,8 @@ def check_system() -> dict:
     ff = shutil.which(_ffmpeg_bin()) or shutil.which("ffmpeg")
     fp = shutil.which("ffprobe")
     providers = [
-        {"id": r["id"], "has_key": r["has_key"], "model": r["model"], "style": r["api_style"]}
+        {"id": r["id"], "has_key": r["has_key"], "model": r["model"], "media_model": r["media_model"],
+         "style": r["api_style"]}
         for r in list_providers()
     ]
     return {
@@ -774,7 +775,8 @@ def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
 BUILTIN_PROVIDERS = {
     "cpa": {
         "base_url": "https://cpa-jp.charles-ai.space/v1",
-        "model": "gemini-4-argon-high",
+        "model": "gemini-3.8-flash-high",  # images / PDF
+        "media_model": "gemini-4-argon-high",  # video / audio: fewer timeline gaps and invented sounds
         "api_style": "gemini",
         "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
         "note": "CPA Gemini relay (native generateContent)",
@@ -824,10 +826,12 @@ def provider_conf(
     model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
+    kind: str = "image",
 ) -> dict:
     """Resolve the config that requests will actually use.
 
     Precedence: CLI → {PROVIDER}_* → VISION_* (active provider only) → pack defaults.
+    Pack default model depends on `kind`: video/audio use `media_model` when the pack has one.
     """
     active = _active_provider()
     pid = (pid or active).strip().lower()
@@ -839,6 +843,7 @@ def provider_conf(
             cli_val
             or _env(f"{p}_{suffix}")
             or (_env(f"VISION_{suffix}") if pid == active else "")
+            or (kind in ("video", "audio") and builtin.get(f"media_{suffix.lower()}"))
             or builtin.get(suffix.lower(), "")
         )
 
@@ -891,6 +896,7 @@ def list_providers() -> list[dict]:
             "id": pid,
             "builtin": conf["builtin"],
             "model": conf["model"],
+            "media_model": provider_conf(pid, kind="video")["model"],
             "base_url": conf["base_url"],
             "api_style": conf["api_style"],
             "note": conf["note"],
@@ -1277,13 +1283,6 @@ def analyze_media(
       - local → inline_data base64; YouTube / URL → file_data.file_uri
     OpenAI style (custom providers): /chat/completions
     """
-    conf = _conf or provider_conf(provider, model=model, base_url=base_url, api_key=api_key)
-    if not conf["api_key"]:
-        raise OmniError(
-            "PROVIDER_ERROR",
-            f"API key not found for provider '{conf['id']}'. "
-            f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
-        )
     for path in (media_input, compare_with):
         if path and not path.startswith(("http://", "https://")) and not Path(path).is_file():
             raise OmniError("INPUT_NOT_FOUND", f"File not found: {path}")
@@ -1296,6 +1295,13 @@ def analyze_media(
             kind = "audio"
         elif mode in VIDEO_MODES or mode.startswith("video-"):
             kind = "video"
+    conf = _conf or provider_conf(provider, model=model, base_url=base_url, api_key=api_key, kind=kind)
+    if not conf["api_key"]:
+        raise OmniError(
+            "PROVIDER_ERROR",
+            f"API key not found for provider '{conf['id']}'. "
+            f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
+        )
 
     # PDF: whole-document or page-by-page path (before generic image pipeline)
     if kind == "pdf" and is_local:
@@ -1483,7 +1489,7 @@ def main():
                     key = "key=yes" if r["has_key"] else "key=no"
                     print(
                         f"{mark} {r['id']:10} style={r['api_style']:7} "
-                        f"model={r['model']}\n"
+                        f"model={r['model']} video/audio={r['media_model']}\n"
                         f"    base={r['base_url']}\n"
                         f"    {key}  {r['note']}"
                     )
@@ -1506,7 +1512,7 @@ def main():
                 for p in info["providers"]:
                     print(
                         f"  - {p['id']}: key={'yes' if p['has_key'] else 'no'} "
-                        f"model={p['model']} style={p['style']}"
+                        f"model={p['model']} video/audio={p['media_model']} style={p['style']}"
                     )
                 print("ok" if info["ok"] else "MISSING system tools")
             if not info["ok"]:

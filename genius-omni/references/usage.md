@@ -51,7 +51,7 @@ python3 "<skill_dir>/scripts/vision.py" --list-providers
 ```bash
 VISION_PROVIDER=cpa
 CPA_API_KEY=sk-your-cpa-key
-# optional overrides:
+# optional overrides (CPA_MODEL replaces both defaults, for every media kind):
 # CPA_MODEL=gemini-4-argon-high
 # CPA_BASE_URL=https://cpa-jp.charles-ai.space/v1
 
@@ -79,8 +79,9 @@ Other errors exit 1; `--check` with missing tools exits 2.
 
 | Provider | API style | Default model | Base URL | Key env |
 |---|---|---|---|---|
-| **`cpa`（默认）** | `gemini` native | `gemini-4-argon-high` | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
+| **`cpa`（默认）** | `gemini` native | images / PDF `gemini-3.8-flash-high`; video / audio `gemini-4-argon-high` | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
 
+- CPA picks the model by media kind: `gemini-4-argon-high` filled every timeline gap and did not invent a soundtrack where 3.8 did, at 40–60% more time per request; for images and PDF 3.8 is as good and faster. `--model`, `CPA_MODEL` or `VISION_MODEL` override both.
 - `gemini` → `POST {root}/v1beta/models/{model}:generateContent`; local media `inline_data`, YouTube / URLs `file_data.file_uri`, PDF `application/pdf`.
 - `openai` → `POST {base}/chat/completions`; `image_url` / `video_url` / `input_audio`.
 

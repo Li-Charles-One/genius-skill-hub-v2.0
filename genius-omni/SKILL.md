@@ -2,14 +2,14 @@
 name: genius-omni
 description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结、制作点评与声景分析。不要用于语音转文字（含带时间轴/说话人的逐字转写）、朗读配音或声音克隆（用 genius-voice）。"
 metadata:
-  version: "3.1.0"
+  version: "3.2.0"
 ---
 
 # Genius Omni（视听）
 
 This skill exists to **analyze images**, **analyze video/audio**, and **OCR**. Nothing else.
 
-Default: CPA via native Gemini `generateContent`. Alternative: any multimodal endpoint configured as a custom provider. `--check` shows the model each provider will actually use.
+Default: CPA via native Gemini `generateContent`. Alternative: any multimodal endpoint configured as a custom provider. CPA uses a fast model for images / PDF and a stronger one for video / audio; `--check` shows both.
 
 Config, providers, proxy and verification: `references/usage.md`. Trigger checks: `evals/evals.json`.
 
