@@ -2,7 +2,7 @@
 name: genius-footage
 description: "Genius 素材说明书：给一条视频素材生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于成片交付前质检（用 genius-video-qc），不要用于剪辑或生成视频。"
 metadata:
-  version: "2.3.1"
+  version: "2.3.2"
 ---
 
 # Genius Footage（素材说明书）
@@ -47,3 +47,12 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 - Two suspects close together on one transition (f4056 / f4062) can place the same cut a few frames apart between runs.
 - On a finished edit with music, sung lyrics and speech can land in one line, and cut points then fall inside the lyrics.
 - Homophones survive ASR (采销 → 彩销); they appear as suspect words when the script or on-screen text shows the right spelling.
+
+## Resource Map
+
+- `scripts/footage.py`: the brief, end to end; `--check`.
+- `scripts/measure.py`: frame-by-frame cut measurement; the shot list on its own.
+- `scripts/asr.py`: Doubao file ASR with word times and speaker labels.
+- `scripts/client.py`: model requests (CPA relay by default) and the compressed whole-clip proxy.
+- `scripts/storyboard.py`: exact-frame storyboard sheets with drawn-in labels.
+- `references/measurement.md`, `references/lexicon.md`, `evals/evals.json`, `agents/openai.yaml`.
