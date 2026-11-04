@@ -71,6 +71,16 @@
       "assertions": [
         {"type": "not_contains", "value": "footage.py"}
       ]
+    },
+    {
+      "id": "sound-near-miss",
+      "prompt": "给这段走路的视频 walk.mp4 配上脚步声和环境音",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-sound (foley and ambience); genius-footage only runs inside its spotting step, not as the deliverable.",
+      "files": [],
+      "assertions": [
+        {"type": "contains", "value": "sound.py"}
+      ]
     }
   ]
 }

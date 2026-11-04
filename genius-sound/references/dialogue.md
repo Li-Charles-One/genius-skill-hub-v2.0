@@ -76,6 +76,6 @@ A raw ffmpeg filter chain also works; `pitch` (semitones) overrides the preset.
 
 | Symptom | Do |
 |---|---|
-| `check takes` CHECK | Listen if possible; whispers and pitched voices are often only misheard. Regenerate under a new `take` name with a clearer direction or longer `gen_len`; the old file lands in `未采用`. |
+| `check takes` CHECK | Listen if possible; whispers and pitched voices are often only misheard (Grip the wool → Rip the wall, Out cold → Alcohol). Regenerate under a new `take` name with a clearer direction or longer `gen_len`; the old file lands in `未采用`. |
 | `check stem` CHECK on an on-screen line | Nudge `at` by −Δ; if the take is too long for the window, cut it into two cues (`in`/`out`) on a word gap, set `tempo` ≤ 1.15, or regenerate shorter. |
 | PROVIDER_ERROR from genius-voice | Report the message. `gen` keeps going and lists failures at the end; rerun with `--only`. |

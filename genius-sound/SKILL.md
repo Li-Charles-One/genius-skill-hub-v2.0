@@ -1,8 +1,8 @@
 ---
 name: genius-sound
-description: "Genius 声音后期：给一段视频做电影级声音后期，七个模块可单独调用也可整片串联：定点（看片读剧情、口型与动作帧网格、cue 表）、对白&旁白（按口型写台词、角色配音逐句对口型、MiMo 旁白）、拟音（脚步、衣物、道具、动物声逐帧对动作）、音效&环境（硬音效、设计音效、环境底床）、配乐（按剧情段落生成、对白避让）、混录&母带（D/M/E 预混，按交付规格出母带：网络 -16、平台 -14、EBU -23、电视 -24、Netflix -27 对白门限，导出 DME 分轨与 M&E 国际声轨）、交付（工程源文件打包与文件说明）。用户说「给这段无声片配台词、配音、音效和配乐」「把这段片子重新配成英文」「只给这段视频配个 BGM」「给这段加环境声和脚步声」「这几轨按广电标准出母带」「导出 DME 分轨和国际声轨」「把声音工程打包」时使用。不要用于字幕的制作、翻译或烧录（用 genius-subtitle），不要用于单句朗读、纯文本旁白音频，或单独生成一个音效、一首歌（用 genius-voice），不要用于语音转文字（用 genius-voice），不要用于视频内容总结（用 genius-omni），不要用于素材说明书或镜头表（用 genius-footage），不要用于成片交付前质检（用 genius-video-qc），不要用于产品宣传片（用 video-shotcraft），不要用于剪辑画面。"
+description: "Genius 声音后期：给一段视频做电影级声音后期，七个模块可单独调用也可整片串联：定点、对白&旁白（对口型配音）、拟音、音效&环境、配乐、混录&母带（按网络、平台、广电、Netflix 规格出母带，导出 DME 分轨与 M&E 国际声轨）、交付打包。用户说「给这段无声片配台词、配音、音效和配乐」「把这段片子重新配成英文」「只给这段视频配个 BGM」「给这段加环境声和脚步声」「这几轨按广电标准出母带」「导出 DME 分轨和国际声轨」「把声音工程打包」时使用。不要用于：字幕制作、翻译或烧录（用 genius-subtitle）；单句朗读、纯文本旁白、单独生成一个音效或一首歌、语音转文字（用 genius-voice）；视频内容总结（用 genius-omni）；素材说明书或镜头表（用 genius-footage）；成片质检（用 genius-video-qc）；产品宣传片（用 video-shotcraft）；剪辑画面。"
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
 ---
 
 # Genius Sound（声音后期）
@@ -47,7 +47,7 @@ python3 "<skill_dir>/scripts/sound.py" deliver pack <project> [--dest DIR]
 python3 "<skill_dir>/scripts/sound.py" env <audio> [--window 0.5]
 ```
 
-`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe` and the genius-voice skill (keys in its `scripts/.env`); genius-footage for the brief. Stdlib only.
+`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe` and the genius-voice skill (keys in its `scripts/.env`); genius-footage for the brief. Both are found next to this skill or in the usual skill folders; `GENIUS_VOICE_DIR` / `GENIUS_FOOTAGE_DIR` point elsewhere. Stdlib only.
 
 ## Full pipeline
 
@@ -75,13 +75,8 @@ The mixed video path, the spec with measured loudness and true peak and PASS / F
 - The Odyssey clip's picture starts at 0.066 s. Muxing the master from zero with `-shortest` put the sound 46 ms ahead of the picture and cut the last 3 frames (genius-dub did this too); `mix master` now starts the sound at the picture's start time and keeps every frame.
 - A silent clip's audio track can be longer than the picture (43.467s vs 43.4s), and its video stream can start late (start_time 0.066s): frame numbers from pts came out one frame late. The timeline comes from frames ÷ fps; `spot grid` counts frames from the selection.
 - The AI clip repeated every 5th frame (24→30 fps pulldown); motion reads 0 there. `spot grid --motion` prints them as `=`.
-- One-take timeline generation drifted 0.2–0.4s per line and added words; per-line takes placed locally landed every lip-synced line within 0.1s.
-- Whispers dropped words until the prompt said "clear, audible stage whisper" and the window was ~1.5× the spoken length. ASR mishears whispers and pitched voices (Grip the wool → Rip the wall, Out cold → Alcohol): compare `mix check` with `dialogue check stem` and listen.
-- `mix check` on the whole file dropped "I will eat you last" while that window cut alone read identically in the old and new masters. ASR the window alone before raising a MISHEARD line.
-- Beds at −27/−26 LUFS buried the dialogue (ASR found 2 of 10 lines); at −32/−30/−39 with dialogue compressed and +5 dB, all 10. A giant's sniff SFX hid "Who is there?" until muted under the line.
-- An SFX segment returned a loud sound that was not in its prompt (37.4–40s); `env` shows it; trim or mute.
 - The static-gain master keeps dynamics: a whisper sat 5.7 dB lower than in genius-dub's dynamic loudnorm mix at the same integrated loudness, with the same line-to-bed ratio. ffmpeg's `alimiter` auto-levels and delays by its lookahead unless `level=false:latency=true`; the master sets both, and D + M + E then match the master to a −70 dB mean residual.
-- First story reading was a comedy with talking animals; the user meant the Odyssey played straight. Checkpoint ① exists for this.
+- The craft lessons from the same runs live in the module that applies them: story reading in `references/spot.md`; one take per line, stage whispers and misheard whispers in `references/dialogue.md`; bed levels and stray SFX in `references/sfx-ambience.md`; whole-file `mix check` misses in `references/mix-master.md`.
 
 ## Resource Map
 

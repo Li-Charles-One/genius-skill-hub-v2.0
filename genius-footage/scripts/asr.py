@@ -2,7 +2,7 @@
 Speech for genius-footage: Doubao file ASR 2.0 (volc.seedasr.auc) with word timestamps and speaker labels.
 Copied from genius-voice 2.1.0 voice.py so footage runs on its own. Config from the environment or scripts/.env:
 
-    DOUBAO_API_KEY   required (without it the transcript is skipped)
+    DOUBAO_API_KEY   required (without it the transcript is skipped); falls back to genius-voice's scripts/.env
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -17,8 +18,9 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
-from client import RETRY_DELAYS, RETRY_HTTP, _env
+from client import RETRY_DELAYS, RETRY_HTTP, _dotenv, _env
 
 ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/"
 ASR_MODEL = "volc.seedasr.auc"
@@ -41,10 +43,24 @@ def log(msg: str) -> None:
     print(f"[genius-footage] {msg}", file=sys.stderr, flush=True)
 
 
-def doubao_key() -> str:
+def find_key() -> str:
+    """The environment or this skill's scripts/.env, else the genius-voice skill's scripts/.env
+    (next to this skill, or GENIUS_VOICE_DIR), so one Doubao key serves both skills."""
     key = _env("DOUBAO_API_KEY")
+    for d in (os.environ.get("GENIUS_VOICE_DIR"), Path(__file__).parents[2] / "genius-voice",
+              Path(__file__).resolve().parents[2] / "genius-voice"):
+        if key:
+            break
+        if d:
+            key = _dotenv(Path(d) / "scripts" / ".env").get("DOUBAO_API_KEY", "").strip()
+    return key
+
+
+def doubao_key() -> str:
+    key = find_key()
     if not key:
-        raise SpeechError("DOUBAO_API_KEY is not set (scripts/.env or environment); transcript skipped")
+        raise SpeechError("DOUBAO_API_KEY is not set (environment, scripts/.env or genius-voice's scripts/.env); "
+                          "transcript skipped")
     return key
 
 

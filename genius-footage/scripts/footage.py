@@ -578,7 +578,7 @@ def main() -> None:
     c = client.conf(args.model)
     try:
         if args.check:
-            ff, asr_key = shutil.which("ffmpeg") and shutil.which("ffprobe"), client._env("DOUBAO_API_KEY")
+            ff, asr_key = shutil.which("ffmpeg") and shutil.which("ffprobe"), asr.find_key()
             print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
                   f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
                   f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}")

@@ -24,6 +24,17 @@
       ]
     },
     {
+      "id": "redub-english",
+      "prompt": "这段片子 clip.mp4 原来是中文对白，帮我重新配成英文，口型要对上，音乐音效也一起做",
+      "trigger_expected": true,
+      "expected_output": "Runs spot init with --language en; original_sound is present, so it leaves the production bed out to replace the Chinese voices; asks checkpoint ① (story and tone, departments, spec), reads mouth windows with spot grid, writes English lines that fit them and waits for checkpoint ② before dialogue gen; checks sync with dialogue check stem before mix master.",
+      "files": ["SKILL.md", "references/spot.md", "references/dialogue.md"],
+      "assertions": [
+        {"type": "contains", "value": "sound.py"},
+        {"type": "contains", "value": "dialogue check stem"}
+      ]
+    },
+    {
       "id": "foley-footsteps",
       "prompt": "给这段人物走路的镜头加脚步声和衣服摩擦声，要踩在画面上",
       "trigger_expected": true,

@@ -50,8 +50,8 @@ class FootageError(RuntimeError):
 # ── Config ───────────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=None)
-def _dotenv() -> dict:
-    path, out = Path(__file__).parent / ".env", {}
+def _dotenv(path: Path = Path(__file__).parent / ".env") -> dict:
+    out = {}
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
