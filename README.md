@@ -33,6 +33,7 @@
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
 | [genius-footage](./genius-footage/) | Footage brief for editors (`.footage.md`): frame-accurate shots, lines with cut points（素材说明书） |
 | [genius-voice](./genius-voice/) | Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo, audio generation via Doubao Seed Audio（语音） |
+| [genius-dub](./genius-dub/) | Dub a clip: lines fitted to the lips, voices, SFX, ambience, BGM, mix, bilingual subtitles, packaged project（配音） |
 | [genius-video-qc](./genius-video-qc/) | Pre-delivery QC of finished videos: subtitles vs speech, watermarks, flash frames, loudness（成片质检） |
 
 ### Tools
@@ -49,6 +50,7 @@
 ```
 genius-skill-hub-v2.0/
 ├── genius-design/
+├── genius-dub/
 ├── genius-footage/
 ├── genius-omni/
 ├── genius-skill-creator/

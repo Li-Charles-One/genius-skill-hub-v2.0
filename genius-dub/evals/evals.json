@@ -1,0 +1,108 @@
+{
+  "skill_name": "genius-dub",
+  "evals": [
+    {
+      "id": "silent-film-full-dub",
+      "prompt": "我的下载文件夹有一段无声的电影片段，帮我判断剧情、设计台词、背景音乐和音效，先给我确认台词，再对时间码配音",
+      "trigger_expected": true,
+      "expected_output": "Runs dub.py init and genius-footage on the clip, presents a story reading and asks checkpoint ① (tone, dialogue language, subtitles) before writing lines; after the script is confirmed, uses lipgrid windows, gen, place and check stem; generates nothing before both checkpoints.",
+      "files": ["SKILL.md", "references/workflow.md"],
+      "assertions": [
+        {"type": "contains", "value": "dub.py"},
+        {"type": "contains", "value": "lipgrid"}
+      ]
+    },
+    {
+      "id": "redub-english-bilingual-subs",
+      "prompt": "把这段片子 clip.mp4 重新配成英文，再加中英字幕，中文在上英文在下，像好莱坞电影那样",
+      "trigger_expected": true,
+      "expected_output": "Sets language en and subtitles.layout [zh, en]; after mix runs dub.py subs, applies the Chinese subtitle rules (no full stop, commas to spaces) and places subtitles in the letterbox bar when there is one.",
+      "files": ["SKILL.md", "references/subtitles.md"],
+      "assertions": [
+        {"type": "contains", "value": "subs"},
+        {"type": "contains", "value": "layout"}
+      ]
+    },
+    {
+      "id": "pack-project",
+      "prompt": "把刚才配音工程的源文件都打包放到桌面，并且给个文件说明",
+      "trigger_expected": true,
+      "expected_output": "Adds deviations to dub.json notes and runs dub.py pack <project> --dest ~/Desktop; reports the folder, zip and file count.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "pack"},
+        {"type": "contains", "value": "--dest"}
+      ]
+    },
+    {
+      "id": "dialogue-buried",
+      "prompt": "配好的片子里对白被音乐盖住了，听不清，帮我重新混一下",
+      "trigger_expected": true,
+      "expected_output": "Runs dub.py check final, raises MASKED cues or mutes the bed under them, lowers bed lufs if needed, mixes again and re-checks.",
+      "files": ["SKILL.md", "references/sound-and-mix.md"],
+      "assertions": [
+        {"type": "contains", "value": "check final"}
+      ]
+    },
+    {
+      "id": "missing-clip",
+      "prompt": "给 /tmp/does-not-exist.mp4 配音配乐",
+      "trigger_expected": true,
+      "expected_output": "Reports INPUT_NOT_FOUND from dub.py init instead of inventing a project.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "INPUT_NOT_FOUND"}
+      ]
+    },
+    {
+      "id": "narration-near-miss",
+      "prompt": "把这段文案读出来，做成旁白音频，男声沉稳一点",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-voice tts, not a dub project.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "dub.py"}
+      ]
+    },
+    {
+      "id": "single-sfx-near-miss",
+      "prompt": "生成一段 10 秒的雨夜老街环境声",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-voice gen.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "dub.py"}
+      ]
+    },
+    {
+      "id": "shot-list-near-miss",
+      "prompt": "这条素材一共几个镜头？每个镜头第几帧到第几帧",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-footage measure.py.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "dub.py"}
+      ]
+    },
+    {
+      "id": "qc-near-miss",
+      "prompt": "这条成片交付前帮我检查一下字幕有没有错字、声音会不会爆",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-video-qc.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "dub.py"}
+      ]
+    },
+    {
+      "id": "summary-near-miss",
+      "prompt": "这个视频讲了什么，总结一下 talk.mp4",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-omni.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "dub.py"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Dub"
+  short_description: "Dub a clip: lip-fitted lines, SFX, BGM, mix, bilingual subs"
+  default_prompt: "Use $genius-dub to give this silent clip lines fitted to the lips, character voices, sound effects, ambience and BGM, a mix, Chinese-English subtitles and a packaged project."
