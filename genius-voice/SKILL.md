@@ -1,8 +1,8 @@
 ---
 name: genius-voice
-description: "Genius 语音：用豆包录音文件识别 2.0 做语音转文字（ASR），用小米 MiMo v2.5 做文字转语音（TTS），用豆包音频生成 Seed Audio 1.0 按描述生成音频。录音、播客、会议、采访、音视频素材转成文字，带分句与字级时间戳，多人时可标注说话人；文本朗读、配音、旁白；预设音色加情绪/方言/语气控制；用一段参考录音克隆声音；用文字描述设计新音色；生成音效、环境声、配乐、歌曲与多角色有声剧，可参考音频或图片，可按时间轴卡点配音（单次 ≤120 秒）。不要用于内容总结、声景分析或“这段音视频讲了什么”的理解（用 genius-omni）；不要用于音频剪辑、混音或格式转换；给一段视频整体配台词、音效、BGM 并混音出片用 genius-dub。"
+description: "Genius 语音：用豆包录音文件识别 2.0 做语音转文字（ASR），用小米 MiMo v2.5 做文字转语音（TTS），用豆包音频生成 Seed Audio 1.0 按描述生成音频。录音、播客、会议、采访、音视频素材转成文字，带分句与字级时间戳，多人时可标注说话人；文本朗读、配音、旁白；预设音色加情绪/方言/语气控制；用一段参考录音克隆声音；用文字描述设计新音色；生成音效、环境声、配乐、歌曲与多角色有声剧，可参考音频或图片，可按时间轴卡点配音（单次 ≤120 秒）。不要用于内容总结、声景分析或“这段音视频讲了什么”的理解（用 genius-omni）；不要用于音频剪辑、混音或格式转换；给一段视频做台词、配音、拟音、音效、配乐与混录母带用 genius-sound。"
 metadata:
-  version: "2.1.1"
+  version: "2.1.2"
 ---
 
 # Genius Voice（语音）
@@ -66,7 +66,7 @@ Failures print `Error [CODE]: …` with a non-zero exit. Report the code and mes
 - Preset voices, cloning and design are separate models; they cannot be combined in one call. Singing `(唱歌)` works only with preset voices; for a song with accompaniment use `gen`.
 - In `gen`, a length written in plain words is only a hint (measured: "3秒钟" gave 0.54s). Use `[开始s:结束s]` tags when length or timing matters.
 - `gen` timing is close, not exact (measured: total length exact, line ends within 0.1s, line starts usually 0.2–0.4s late but once 1.7s late on a whispered opening line; shifting starts earlier did not reliably help). It can also add words that are not in the script (measured: an extra “嘘”). When the script or timing must be exact, check the result with `asr` or `--subtitle`.
-- Redubbing a video: one `gen` per line, placed locally, beat one timeline take (2026-11-04, 43s clip: per-line takes put every lip-synced line within 0.1s). Keep a character's voice across takes by passing the first take as `--ref` and starting the prompt `In the exact voice of @音频1, …`. genius-dub runs this loop.
+- Redubbing a video: one `gen` per line, placed locally, beat one timeline take (2026-11-04, 43s clip: per-line takes put every lip-synced line within 0.1s). Keep a character's voice across takes by passing the first take as `--ref` and starting the prompt `In the exact voice of @音频1, …`. genius-sound runs this loop.
 - Whispers dropped words ("Easy…", "Grip") until the prompt said "clear, audible stage whisper" and the `[开始s:结束s]` window was about 1.5× the spoken length.
 - `gen` output is quiet: speech peaked around −32 dBFS. Normalise before mixing.
 - A sound-effect timeline can return a loud sound the prompt never asked for (measured: 37.4–40s of a 16s segment). Check the level over time before using it as a bed.

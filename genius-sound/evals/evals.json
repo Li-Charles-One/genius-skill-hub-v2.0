@@ -1,0 +1,140 @@
+{
+  "skill_name": "genius-sound",
+  "evals": [
+    {
+      "id": "silent-film-full-sound",
+      "prompt": "我的下载文件夹有一段无声的电影片段，帮我判断剧情、设计台词、背景音乐和音效，先给我确认台词，再对时间码配音",
+      "trigger_expected": true,
+      "expected_output": "Runs sound.py spot init and genius-footage, presents a story reading and asks checkpoint ① (tone, dialogue language, departments, spec) before writing lines; after the script is confirmed, uses spot grid windows, dialogue gen, dialogue place and dialogue check stem, then sfx gen, music gen and mix master; generates nothing before both checkpoints.",
+      "files": ["SKILL.md", "references/spot.md", "references/dialogue.md"],
+      "assertions": [
+        {"type": "contains", "value": "sound.py"},
+        {"type": "contains", "value": "spot grid"}
+      ]
+    },
+    {
+      "id": "bgm-only",
+      "prompt": "这段 vlog 已经有人声了，只帮我配个背景音乐，别盖住说话",
+      "trigger_expected": true,
+      "expected_output": "Runs spot init, sees original_sound present and adds the production dialogue bed on src/clip.*, writes one music bed with duck true, asks one checkpoint question about mood, runs music gen and mix master; does not write dialogue cues.",
+      "files": ["SKILL.md", "references/music.md", "references/spot.md"],
+      "assertions": [
+        {"type": "contains", "value": "music gen"},
+        {"type": "contains", "value": "production"}
+      ]
+    },
+    {
+      "id": "foley-footsteps",
+      "prompt": "给这段人物走路的镜头加脚步声和衣服摩擦声，要踩在画面上",
+      "trigger_expected": true,
+      "expected_output": "Uses spot grid --motion with a crop on the feet, reads contact frames on the grid, writes foley cues with prompts, foley gen, slices with in/out, sets at per contact and runs mix master.",
+      "files": ["SKILL.md", "references/foley.md"],
+      "assertions": [
+        {"type": "contains", "value": "foley gen"},
+        {"type": "contains", "value": "--motion"}
+      ]
+    },
+    {
+      "id": "master-broadcast-stems",
+      "prompt": "把这几条分轨（对白、音乐、音效）按电视台标准出母带，再导出 DME 分轨和国际声轨",
+      "trigger_expected": true,
+      "expected_output": "Runs spot init on the picture, adds beds with file and kind dialogue / music / sfx, runs mix master --spec tv24 and reports loudness, true peak and PASS/FAIL plus the _D/_M/_E/_ME paths; says the GY/T 282 true-peak limit was not checked against the standard.",
+      "files": ["SKILL.md", "references/mix-master.md"],
+      "assertions": [
+        {"type": "contains", "value": "--spec tv24"},
+        {"type": "contains", "value": "_ME"}
+      ]
+    },
+    {
+      "id": "dialogue-buried",
+      "prompt": "配好的片子里对白被音乐盖住了，听不清，帮我重新混一下",
+      "trigger_expected": true,
+      "expected_output": "Runs sound.py mix check, compares MISHEARD lines with dialogue check stem, raises MASKED cues or mutes the bed under them, lowers bed lufs if needed, masters again and re-checks.",
+      "files": ["SKILL.md", "references/mix-master.md"],
+      "assertions": [
+        {"type": "contains", "value": "mix check"}
+      ]
+    },
+    {
+      "id": "pack-project",
+      "prompt": "把刚才配音工程的源文件都打包放到桌面，并且给个文件说明",
+      "trigger_expected": true,
+      "expected_output": "Adds deviations to notes and runs sound.py deliver pack <project> --dest ~/Desktop; reports the folder, zip and file count.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "deliver pack"},
+        {"type": "contains", "value": "--dest"}
+      ]
+    },
+    {
+      "id": "missing-clip",
+      "prompt": "给 /tmp/does-not-exist.mp4 配音配乐",
+      "trigger_expected": true,
+      "expected_output": "Reports INPUT_NOT_FOUND from sound.py spot init instead of inventing a project.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "INPUT_NOT_FOUND"}
+      ]
+    },
+    {
+      "id": "subtitles-near-miss",
+      "prompt": "给这条视频加中英双语字幕，中文在上，烧进画面里",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-subtitle; subtitles are outside sound post-production.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "sound.py"}
+      ]
+    },
+    {
+      "id": "narration-near-miss",
+      "prompt": "把这段文案读出来，做成旁白音频，男声沉稳一点",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-voice tts, not a sound project (no picture).",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "sound.py"}
+      ]
+    },
+    {
+      "id": "single-sfx-near-miss",
+      "prompt": "生成一段 10 秒的雨夜老街环境声",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-voice gen.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "sound.py"}
+      ]
+    },
+    {
+      "id": "shot-list-near-miss",
+      "prompt": "这条素材一共几个镜头？每个镜头第几帧到第几帧",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-footage measure.py.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "sound.py"}
+      ]
+    },
+    {
+      "id": "qc-near-miss",
+      "prompt": "这条成片交付前帮我检查一下字幕有没有错字、声音会不会爆",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-video-qc.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "sound.py"}
+      ]
+    },
+    {
+      "id": "summary-near-miss",
+      "prompt": "这个视频讲了什么，总结一下 talk.mp4",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-omni.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "sound.py"}
+      ]
+    }
+  ]
+}

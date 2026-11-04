@@ -140,7 +140,7 @@
       "id": "video-dub-near-miss",
       "prompt": "给这段无声视频 clip.mp4 设计台词、配音、配音效和 BGM，混好音再加中英字幕",
       "trigger_expected": false,
-      "expected_output": "Uses genius-dub for the whole clip; genius-voice is only its generation and ASR backend.",
+      "expected_output": "Uses genius-sound for the sound of the whole clip (subtitles are not part of it); genius-voice is only its generation and ASR backend.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "voice.py gen"}

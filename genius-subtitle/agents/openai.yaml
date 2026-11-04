@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Subtitle"
+  short_description: "Subtitles: import, translate, check, burn in"
+  default_prompt: "Use $genius-subtitle to put Chinese-English subtitles on this video: take the text from its genius-sound project, ASR or an SRT, translate, check line length and reading speed, then render SRT/ASS and burn them in."

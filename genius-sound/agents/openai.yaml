@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Sound"
+  short_description: "Film sound post: dialogue, foley, FX, music, mix, master"
+  default_prompt: "Use $genius-sound to give this clip a film-grade soundtrack: spot it, write and voice lines fitted to the lips, add foley, effects, ambience and music, then mix and master to a delivery spec with DME stems and an M&E."
