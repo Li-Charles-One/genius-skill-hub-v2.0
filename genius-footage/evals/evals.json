@@ -66,7 +66,7 @@
       "id": "qc-near-miss",
       "prompt": "这条成片交付前检查一下字幕和声音 final.mp4",
       "trigger_expected": false,
-      "expected_output": "Uses genius-video-qc.",
+      "expected_output": "Does not trigger genius-footage.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "footage.py"}

@@ -131,7 +131,7 @@
       "id": "qc-near-miss",
       "prompt": "这条成片交付前帮我检查一下字幕有没有错字、声音会不会爆",
       "trigger_expected": false,
-      "expected_output": "Uses genius-video-qc.",
+      "expected_output": "Does not trigger genius-sound.",
       "files": [],
       "assertions": [
         {"type": "not_contains", "value": "sound.py"}

@@ -35,7 +35,6 @@
 | [genius-voice](./genius-voice/) | Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo, audio generation via Doubao Seed Audio（语音） |
 | [genius-subtitle](./genius-subtitle/) | Subtitles for a finished video: from a genius-sound project, ASR or SRT; bilingual layout, Netflix line/speed checks, SRT/ASS, burn-in（字幕） |
 | [genius-sound](./genius-sound/) | Film sound post, module by module: spotting, dialogue & narration, foley, SFX & ambience, music, mix & master to delivery specs with DME stems and M&E（声音后期） |
-| [genius-video-qc](./genius-video-qc/) | Pre-delivery QC of finished videos: subtitles vs speech, watermarks, flash frames, loudness（成片质检） |
 
 ### Tools
 
@@ -57,7 +56,6 @@ genius-skill-hub-v2.0/
 ├── genius-sound/
 ├── genius-subtitle/
 ├── genius-voice/
-├── genius-video-qc/
 ├── genius-weplaning/
 ├── genius-github-usage/
 ├── genius-lark-use/
