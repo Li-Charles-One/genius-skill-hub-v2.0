@@ -65,6 +65,48 @@
       ]
     },
     {
+      "id": "sfx-ambience",
+      "prompt": "生成一段 15 秒的雨夜老街环境声，远处偶尔有闷雷",
+      "trigger_expected": true,
+      "expected_output": "Runs scripts/voice.py gen with a scene prompt describing the rain and thunder; reports path and duration.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "gen"}
+      ]
+    },
+    {
+      "id": "song-with-music",
+      "prompt": "做一首 30 秒的儿歌，木琴伴奏，童声唱，导出 mp3",
+      "trigger_expected": true,
+      "expected_output": "Runs gen (not tts with (唱歌)) with instruments, voice and lyrics in the prompt, and --out ending in .mp3.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "gen"},
+        {"type": "contains", "value": ".mp3"}
+      ]
+    },
+    {
+      "id": "timeline-redub",
+      "prompt": "按这个时间轴配一段双人对白：0-2.5 秒女声小声问“有人吗？”，4.2-6 秒男声低沉回答“别出声。”",
+      "trigger_expected": true,
+      "expected_output": "Runs gen with [开始s:结束s] line prefixes for each cue, ideally with --subtitle to check timing.",
+      "files": ["SKILL.md", "references/usage.md"],
+      "assertions": [
+        {"type": "contains", "value": "gen"},
+        {"type": "contains", "value": "s:"}
+      ]
+    },
+    {
+      "id": "over-cap-scene",
+      "prompt": "生成一段 3 分钟的广播剧，三个角色，带配乐",
+      "trigger_expected": true,
+      "expected_output": "Explains one gen call makes at most 120s and splits the drama into ≤120s scenes run as separate gen calls.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "120"}
+      ]
+    },
+    {
       "id": "summary-near-miss",
       "prompt": "这段会议录音帮我总结一下要点 meeting.mp3",
       "trigger_expected": false,

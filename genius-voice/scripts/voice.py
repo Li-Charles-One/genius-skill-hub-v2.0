@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Genius Voice — speech-to-text via Doubao file ASR 2.0, text-to-speech via Xiaomi MiMo v2.5.
+Genius Voice — speech-to-text via Doubao file ASR 2.0, text-to-speech via Xiaomi MiMo v2.5,
+audio generation via Doubao Seed Audio 1.0.
 
     python3 voice.py --check
     python3 voice.py asr <audio_or_video> [--language auto|zh|en] [--speakers] [--output text|json] [--out FILE]
     python3 voice.py tts "<text>" | --text-file F | -   [--voice ID | --clone REF | --design PROMPT]
                      [--style "<direction>"] [--out FILE.wav|.mp3]
+    python3 voice.py gen "<prompt>" | --text-file F | -  [--ref AUDIO ...] [--speaker ID] [--image IMG]
+                     [--subtitle] [--out FILE.wav|.mp3]
 
 ASR: volc.seedasr.auc (utterance + word timestamps, optional speaker labels).
 TTS: mimo-v2.5-tts, mimo-v2.5-tts-voiceclone, mimo-v2.5-tts-voicedesign.
+Gen: seed-audio-1.0 (sound effects, music, multi-role scenes, timeline control; ≤120s per call).
 Failures print `Error [CODE]: ...` to stderr and exit with EXIT_CODES[CODE].
 """
 
@@ -16,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import http.client
 import io
 import json
 import os
@@ -49,6 +54,15 @@ ASR_PASS_SPEAKER = {"enable_itn": True, "enable_punc": True, "enable_speaker_inf
                     "ssd_version": "200"}  # 200 separated 5 speakers where 300 merged them into 3
 ASR_MAX_B64_BYTES = 100 * 1000 * 1000  # above this the provider wants audio.url instead of inline data
 ASR_POLL_SEC = 2
+ASR_WAIT_PER_AUDIO_SEC = 0.3  # measured ≈0.09s per audio second; 3× margin for queueing
+GEN_URL = "https://openspeech.bytedance.com/api/v3/tts/create"
+GEN_MODEL = "seed-audio-1.0"  # override with DOUBAO_AUDIO_MODEL (some accounts are granted only a variant)
+GEN_MAX_SECONDS = 120
+GEN_MAX_PROMPT_CHARS = 3000
+GEN_MAX_REFS = 3
+GEN_REF_MAX_SECONDS = 30
+GEN_IMAGE_TYPES = {".jpg", ".jpeg", ".png", ".webp"}
+TIMELINE_TAG = re.compile(r"\[\s*\d+(?:\.\d+)?\s*s?\s*[:：]\s*(\d+(?:\.\d+)?)\s*s?\s*\]")
 # TTS starts skipping or looping past ~250 chars per request; keep chunks well below.
 TTS_CHUNK_CHARS = int(os.environ.get("VOICE_TTS_CHUNK_CHARS", "150"))
 MAX_B64_BYTES = 10 * 1000 * 1000  # documented limit for input audio and clone reference
@@ -143,6 +157,9 @@ def _http(method: str, url: str, headers: dict, body: dict | None = None):
                 raise VoiceError("TIMEOUT", f"No response within {REQUEST_TIMEOUT:g}s") from e
             error = VoiceError("PROVIDER_ERROR", f"Network error: {e.reason}")
             transient = True
+        except (ConnectionError, http.client.HTTPException) as e:  # e.g. server closed without a response
+            error = VoiceError("PROVIDER_ERROR", f"Network error: {e}")
+            transient = True
         if delay is None or not transient:
             raise error
         log(f"{error} — retry {attempt}/{len(RETRY_DELAYS)} in {delay}s…")
@@ -204,7 +221,7 @@ def encode_mp3(path: str, start: float, length: float) -> bytes:
 
 # ── ASR ──────────────────────────────────────────────────────────────────
 
-def _asr_pass(b64: str, options: dict, language: str) -> list[dict]:
+def _asr_pass(b64: str, options: dict, language: str, duration: float) -> list[dict]:
     """Submit one recognition job and poll until done. Returns raw utterances ([] for silence)."""
     request_id = str(uuid.uuid4())  # doubles as the task id for polling
     audio = {"data": b64, "format": "mp3"}
@@ -214,7 +231,8 @@ def _asr_pass(b64: str, options: dict, language: str) -> list[dict]:
         "model_name": "bigmodel", "show_utterances": True, **options}}, request_id)
     if code != "20000000":
         raise VoiceError("PROVIDER_ERROR", f"ASR submit failed [{code}]: {msg}")
-    deadline = time.monotonic() + REQUEST_TIMEOUT
+    wait = max(REQUEST_TIMEOUT, duration * ASR_WAIT_PER_AUDIO_SEC)
+    deadline = time.monotonic() + wait
     while True:
         time.sleep(ASR_POLL_SEC)
         code, msg, data = _doubao("query", {}, request_id)
@@ -225,7 +243,7 @@ def _asr_pass(b64: str, options: dict, language: str) -> list[dict]:
         if code not in ("20000001", "20000002"):  # queued / processing
             raise VoiceError("PROVIDER_ERROR", f"ASR failed [{code}]: {msg}")
         if time.monotonic() > deadline:
-            raise VoiceError("TIMEOUT", f"ASR job not finished within {REQUEST_TIMEOUT:g}s")
+            raise VoiceError("TIMEOUT", f"ASR job not finished within {wait:.0f}s")
 
 
 def _utterance(u: dict) -> dict:
@@ -255,10 +273,10 @@ def transcribe(path: str, language: str, speakers: bool) -> dict:
         raise VoiceError("UNSUPPORTED_FORMAT", "Audio exceeds 100MB base64 (~3.5h at 64 kbps); split the file")
     passes = 2 if speakers else 1
     log(f"pass 1/{passes}: text + word timestamps ({duration:.0f}s)…")
-    utts = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_TEXT, language)]
+    utts = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_TEXT, language, duration)]
     if speakers:
         log(f"pass 2/{passes}: speaker labels…")
-        labelled = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_SPEAKER, language)]
+        labelled = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_SPEAKER, language, duration)]
         for u in utts:
             best = max(labelled, key=lambda s: _overlap(u, s), default=None)
             if best and _overlap(u, best) > 0:
@@ -371,15 +389,89 @@ def synthesize(text: str, voice: str | None, clone: str | None, design: str | No
     return _concat_wav(parts)
 
 
-def write_audio(wav_bytes: bytes, out: Path) -> None:
+def write_audio(wav_bytes: bytes, out: Path, bitrate: str = "64k") -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.suffix.lower() == ".wav":
         out.write_bytes(wav_bytes)
         return
-    proc = _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0", "-b:a", "64k", str(out)],
+    proc = _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0", "-b:a", bitrate, str(out)],
                 600, stdin=wav_bytes)
     if proc.returncode != 0:
         raise VoiceError("UNSUPPORTED_FORMAT", f"ffmpeg could not write {out}: {proc.stderr.decode(errors='replace')[:300]}")
+
+
+# ── Audio generation (Seed Audio) ────────────────────────────────────────
+
+def gen_model() -> str:
+    return _env("DOUBAO_AUDIO_MODEL", GEN_MODEL)
+
+
+def _gen(body: dict) -> dict:
+    return _http("POST", GEN_URL, {"X-Api-Key": doubao_key(), "X-Api-Request-Id": str(uuid.uuid4())}, body)[1]
+
+
+def _gen_ref_audio(path: str) -> dict:
+    """One @音频N reference; non-mp3/wav or oversized input is re-encoded to mp3."""
+    seconds = probe_duration(path)
+    if seconds > GEN_REF_MAX_SECONDS:
+        raise VoiceError("UNSUPPORTED_FORMAT", f"Reference is {seconds:.1f}s, over the {GEN_REF_MAX_SECONDS}s limit: {path}")
+    raw = Path(path).read_bytes()
+    if Path(path).suffix.lower() not in (".mp3", ".wav") or len(raw) > MAX_B64_BYTES:
+        proc = _run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-vn",
+                     "-c:a", "libmp3lame", "-b:a", "192k", "-f", "mp3", "pipe:1"], 300)
+        if proc.returncode != 0 or not proc.stdout:
+            raise VoiceError("UNSUPPORTED_FORMAT", f"ffmpeg could not decode audio: {proc.stderr.decode(errors='replace')[:300]}")
+        raw = proc.stdout
+    return {"audio_data": base64.b64encode(raw).decode("ascii")}
+
+
+def _gen_image(path: str) -> dict:
+    p = Path(path)
+    if p.suffix.lower() not in GEN_IMAGE_TYPES or p.stat().st_size > MAX_B64_BYTES:
+        raise VoiceError("UNSUPPORTED_FORMAT", f"Reference image must be jpeg/png/webp and ≤10MB: {path}")
+    return {"image_data": base64.b64encode(p.read_bytes()).decode("ascii")}
+
+
+def _ms_segments(subtitle: dict) -> list[dict]:
+    """Seed Audio subtitle (ms offsets) → the same segment shape as asr --output json (seconds)."""
+    return [{"start": s["start_time"] / 1000, "end": s["end_time"] / 1000, "text": s.get("text", ""),
+             "words": [{"start": w["start_time"] / 1000, "end": w["end_time"] / 1000, "text": w["text"]}
+                       for w in s.get("words") or []]}
+            for s in (subtitle or {}).get("sentences") or []]
+
+
+def generate(prompt: str, refs: list[str], speaker: str | None, image: str | None, subtitle: bool) -> dict:
+    prompt = prompt.strip()
+    if not prompt:
+        raise VoiceError("UNSUPPORTED_FORMAT", "No prompt to generate from")
+    if len(prompt) > GEN_MAX_PROMPT_CHARS:
+        raise VoiceError("UNSUPPORTED_FORMAT", f"Prompt is {len(prompt)} chars, over {GEN_MAX_PROMPT_CHARS}; split the scene")
+    ends = [float(t) for t in TIMELINE_TAG.findall(prompt)]
+    if ends and max(ends) > GEN_MAX_SECONDS:
+        raise VoiceError("UNSUPPORTED_FORMAT", f"Timeline runs to {max(ends):g}s; one call makes at most "
+                                               f"{GEN_MAX_SECONDS}s. Split the scene into ≤{GEN_MAX_SECONDS}s parts")
+    if len(refs) > GEN_MAX_REFS:
+        raise VoiceError("UNSUPPORTED_FORMAT", f"At most {GEN_MAX_REFS} --ref clips (@音频1..{GEN_MAX_REFS})")
+    if image and (refs or speaker):
+        raise VoiceError("UNSUPPORTED_FORMAT", "--image cannot be combined with --ref or --speaker")
+    references = [_gen_ref_audio(r) for r in refs]
+    if speaker:
+        references.append({"speaker": speaker})
+    if image:
+        references.append(_gen_image(image))
+    body = {"model": gen_model(), "text_prompt": prompt,
+            "audio_config": {"format": "wav", "sample_rate": 48000, "enable_subtitle": subtitle}}
+    if references:
+        body["references"] = references
+    log(f"generating ({len(prompt)} chars, {len(references)} reference(s), {body['model']})…")
+    data = _gen(body)
+    if data.get("code") not in (None, 0):
+        raise VoiceError("PROVIDER_ERROR", f"Audio generation failed [{data.get('code')}]: {data.get('message')}")
+    if not data.get("audio"):
+        raise VoiceError("PROVIDER_ERROR", "Response contained no audio")
+    if data.get("original_duration", 0) >= GEN_MAX_SECONDS - 0.5:
+        log(f"warning: output reached the {GEN_MAX_SECONDS}s cap and may be cut off; split the scene")
+    return data
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────
@@ -403,7 +495,14 @@ def check() -> dict:
         result["asr"] = "ok" if code == "45000092" else f"ERROR [{code}]: {msg}"
     except VoiceError as e:
         result["asr"] = f"ERROR: {e}"
+    try:
+        # The model/resource is checked before the body, so an empty prompt answers 45001116 only when access is fine.
+        _gen({"model": gen_model(), "text_prompt": ""})
+        result["audio_gen"] = "ERROR: empty prompt was accepted"
+    except VoiceError as e:
+        result["audio_gen"] = "ok" if "45001116" in str(e) else f"ERROR: {e}"
     result["ok"] = (result["ffmpeg"] != "MISSING" and result["ffprobe"] != "MISSING" and result["asr"] == "ok"
+                    and result["audio_gen"] == "ok"
                     and isinstance(result["tts_models"], list) and len(result["tts_models"]) == 3)
     return result
 
@@ -425,7 +524,8 @@ def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo v2.5")
+    parser = argparse.ArgumentParser(description="Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo v2.5, "
+                                                 "audio generation via Doubao Seed Audio")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg, key, and model access")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -445,6 +545,16 @@ def main() -> int:
     voice.add_argument("--design", "-d", metavar="DESCRIPTION", help="Design a voice from a description")
     tts.add_argument("--style", "-s", default="", help="Natural-language delivery direction")
     tts.add_argument("--out", "-o", help="Output file (.wav default; other extensions via ffmpeg)")
+
+    gen = sub.add_parser("gen", help="Generate sound effects, music or a scene from a description (≤120s)")
+    gen.add_argument("text", nargs="?", metavar="PROMPT", help="Prompt, or - to read stdin")
+    gen.add_argument("--text-file", "-f")
+    gen.add_argument("--ref", "-r", action="append", default=[], metavar="AUDIO",
+                     help="Reference clip ≤30s, repeatable up to 3; the Nth is @音频N in the prompt")
+    gen.add_argument("--speaker", help="Doubao TTS 2.0 voice id or cloned-voice id")
+    gen.add_argument("--image", "-i", metavar="IMG", help="Reference image (jpeg/png/webp); not with --ref/--speaker")
+    gen.add_argument("--subtitle", action="store_true", help="Also return sentence and word timestamps")
+    gen.add_argument("--out", "-o", help="Output file (.wav default; other extensions via ffmpeg)")
 
     args = parser.parse_args()
     try:
@@ -471,6 +581,18 @@ def main() -> int:
             with wave.open(io.BytesIO(wav_bytes)) as r:
                 seconds = r.getnframes() / r.getframerate()
             print(json.dumps({"out": str(out.resolve()), "seconds": round(seconds, 2)}, ensure_ascii=False))
+            return 0
+        if args.cmd == "gen":
+            for f in args.ref + ([args.image] if args.image else []):
+                if not Path(f).is_file():
+                    raise VoiceError("INPUT_NOT_FOUND", f"Reference file not found: {f}")
+            data = generate(_read_text(args), args.ref, args.speaker, args.image, args.subtitle)
+            out = Path(args.out or f"genius-voice-{datetime.now():%Y%m%d-%H%M%S}.wav")
+            write_audio(base64.b64decode(data["audio"]), out, bitrate="192k")
+            result = {"out": str(out.resolve()), "seconds": round(float(data.get("duration") or 0), 2)}
+            if args.subtitle:
+                result["segments"] = _ms_segments(data.get("subtitle"))
+            print(json.dumps(result, ensure_ascii=False))
             return 0
         parser.print_help()
         return 1
