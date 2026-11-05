@@ -7,7 +7,7 @@ python3 "<skill_dir>/scripts/voice.py" gen "<prompt>" | --text-file F | -  [--re
 ```
 
 ```bash
-python3 scripts/voice.py gen "雨夜的老街，持续的中雨打在铁皮屋檐上，远处偶尔一声闷雷，约 15 秒。" --out rain.wav
+python3 scripts/voice.py gen "[0s:15s] 雨夜的老街，持续的中雨打在铁皮屋檐上，远处偶尔一声闷雷。" --out rain.wav
 python3 scripts/voice.py gen "一首 30 秒的中文儿歌，木琴和尤克里里伴奏，童声欢快地唱：“小星星，眨眼睛……”" --out song.mp3
 python3 scripts/voice.py gen --text-file timed-lines.txt --subtitle --out redub.wav
 python3 scripts/voice.py gen "用@音频1的声音，惊讶地说：“你怎么来了？”" --ref voice.wav --out line.wav

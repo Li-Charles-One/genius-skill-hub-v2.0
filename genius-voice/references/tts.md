@@ -69,5 +69,5 @@ The output path, duration, and voice used (preset id, clone reference, or design
 
 ## Verification
 
-- [ ] `python3 scripts/voice.py tts "你好，这是一段测试。" --out t.wav` then `python3 scripts/voice.py asr t.wav -l zh` returns the same sentence
+- [ ] `python3 scripts/voice.py tts "你好，这是一段测试。" --out t.wav` then `python3 scripts/voice.py asr t.wav --language zh` returns the same sentence
 - [ ] `--clone` and `--design` each produce a playable file; listen to confirm the timbre

@@ -42,7 +42,7 @@ On Windows, write `python scripts\voice.py …`; pass long text with `--text-fil
 | Code | Exit | Typical cause |
 |---|---|---|
 | `INPUT_NOT_FOUND` | 3 | audio, reference or text file does not exist |
-| `UNSUPPORTED_FORMAT` | 4 | ffmpeg cannot decode the input; empty text; clone reference under 1s or over 10MB; `gen` prompt over 3000 chars, timeline past 120s, more than 3 `--ref`, a `--ref` over 30s, `--image` not jpeg/png/webp ≤10MB or combined with `--ref`/`--speaker` |
+| `UNSUPPORTED_FORMAT` | 4 | ffmpeg cannot decode the input; empty text; clone reference under 1s, or still over 10MB base64 after re-encoding; `gen` prompt over 3000 chars, timeline past 120s, more than 3 `--ref`, a `--ref` over 30s, `--image` not jpeg/png/webp ≤10MB or combined with `--ref`/`--speaker` |
 | `DEPENDENCY_MISSING` | 5 | `ffmpeg` / `ffprobe` not on PATH |
 | `PROVIDER_ERROR` | 6 | missing key, HTTP error, ASR status code other than success/processing/silence, content filter, empty audio |
 | `TIMEOUT` | 7 | no API response within `VOICE_TIMEOUT`, ASR job unfinished within its wait (`references/asr.md`), or ffmpeg timed out |
