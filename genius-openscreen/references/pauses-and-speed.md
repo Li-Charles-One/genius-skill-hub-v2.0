@@ -35,7 +35,7 @@ On Windows, use `python` instead of `python3`.
 - Idle-cursor spans.
 - Pause candidates as trim ranges.
 
-`--track` adds the cursor position every 0.1 s, for placing keyframes. Needs ffmpeg and ffprobe. A 57 s 4K-class take scans in about 5 s.
+`--track` adds the cursor position every 0.1 s, for placing keyframes; with `--output json` it is the `track_0_1s` list of `[t, x, y]`. Needs ffmpeg and ffprobe. A 57 s 4K-class take scans in about 5 s.
 
 ## What counts as a pause
 
@@ -45,12 +45,13 @@ On Windows, use `python` instead of `python3`.
   - −80 dB is too strict: ticking UI counters split every freeze into pieces.
 - **The cursor is not in the raw video.** With `cursorCaptureMode: editable-overlay`, OpenScreen draws the pointer later, so a frozen picture can still contain an acting user. A pause is a frozen picture **and** an idle cursor, lasting 1.5 s or more.
 - **Cut the inside of a pause.** Keep 0.3 s at each end so the cut does not feel abrupt (`--pad`).
+- **Retyped prompts.** The scan does not see a false start: the user types, stops, clears the input and types again. At the end of each freeze inside a typing span, call `getFrames` to see whether the input was cleared. If so, cut from just after the first keystroke of the abandoned attempt to the point in the retype where the input shows the same text again (for example "n" to "na"), so the cut is invisible. In one 143 s take this single cut saved 11 s, more than any pause trim.
 
 **Leave these alone**
 
 - Frozen spans where the cursor moves or drags: the user is acting.
 - Hesitations of 1–1.5 s mid-typing: cutting them makes the rhythm choppy.
-- The tail, where the pointer goes off to stop the recording. Ask before trimming it.
+- The tail, where the pointer goes off to stop the recording. Ask before trimming it, and check its frames first: the last seconds may hold the payoff, such as an AI answer finishing.
 - Words, when the take does have speech (`getTranscriptWords`): never cut inside one.
 
 **Applying the trims**

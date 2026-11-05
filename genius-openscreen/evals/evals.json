@@ -17,7 +17,7 @@
       "id": "selection-tracking",
       "prompt": "缩放不够明显，我划词的时候也要放大跟着走，鼠标最好一直在画面中间",
       "trigger_expected": true,
-      "expected_output": "Replaces auto zooms with a chain of manual keyframes at the cursor telemetry positions, ends each hold when the drag starts and places the next keyframe at the drag end about 0.7 s later, uses 2.5x on selections, then verifies centering with getFrames.",
+      "expected_output": "Replaces auto zooms with manual keyframes at the cursor telemetry positions; gives each text-selection drag one steady zoom focused on the midpoint of the drag's cursor range at min(2.5, 1/(drag width + 0.1)) instead of a chain of keyframes along the drag; centers the cursor on clicks; then verifies with getFrames that a fixed landmark stays put during each drag.",
       "files": ["SKILL.md", "references/zoom-keyframes.md"],
       "assertions": [
         {"type": "contains", "value": "drag"},
@@ -32,6 +32,18 @@
       "files": ["SKILL.md", "references/pauses-and-speed.md"],
       "assertions": [
         {"type": "contains", "value": "addSpeed"}
+      ]
+    },
+    {
+      "id": "retype-and-ai-waits",
+      "prompt": "这条录屏我打错字删了重打，还有好几段在等 AI 回复，帮我整体剪紧凑、有动感",
+      "trigger_expected": true,
+      "expected_output": "Checks frames at freeze ends inside typing spans, cuts the abandoned attempt at a point where the input shows the same text before and after; starts each post-send trim late enough for the typing zoom's out-move; applies trims, then addSpeed on AI waits, then addZooms, re-reading getCurrentDocument before removing auto zooms; aims typing zooms at the click that focused the input when the mouse is parked.",
+      "files": ["SKILL.md", "references/zoom-keyframes.md", "references/pauses-and-speed.md"],
+      "assertions": [
+        {"type": "contains", "value": "addTrims"},
+        {"type": "contains", "value": "addSpeed"},
+        {"type": "contains", "value": "addZooms"}
       ]
     },
     {

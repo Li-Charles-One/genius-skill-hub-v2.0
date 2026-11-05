@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius OpenScreen"
   short_description: "Edit OpenScreen takes: cut pauses, centered zooms, speed-ups"
-  default_prompt: "Use $genius-openscreen to edit this OpenScreen take into a tight demo: cut frozen pauses, add cursor-centered tracking zooms on clicks, typing and text selections, and speed up AI waits."
+  default_prompt: "Use $genius-openscreen to edit this OpenScreen take into a tight demo: cut frozen pauses, add cursor-centered zooms on clicks and typing, one steady zoom per text selection, and speed up AI waits."
