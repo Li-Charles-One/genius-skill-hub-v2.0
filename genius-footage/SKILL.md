@@ -2,7 +2,7 @@
 name: genius-footage
 description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、约 0.1 秒精度的入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于剪辑或生成视频。"
 metadata:
-  version: "2.4.1"
+  version: "2.5.0"
 ---
 
 # Genius Footage（素材说明书）
@@ -14,7 +14,7 @@ Format: AG_FOOTAGE/1.1, produced by `scripts/footage.py`. Cut detection rules: `
 ## Non-Negotiables
 
 - Frame numbers, timecode, shot count and line start/end come only from local frame measurement (`measure.py`) and ASR word times (Doubao, `asr.py`). The model describes and judges, and refers to shots, lines, people and segments by ID only (S/U/P/G); the script converts IDs to frames.
-- In the overlay sheet the model names numbered storyboard cells only; every frame comes from the sampling grid. Never have the model watch the video and report overlay times.
+- In the overlay sheet the model names numbered storyboard cells only; every frame comes from the sampling grid, or from a frame-labelled strip the agent looked at when it corrects one. Never have the model watch the video and report overlay times.
 - Possible mishearings are proposed in `待确认`, never written into the transcript.
 - The brief (or overlay sheet) is the deliverable: report status and paths, do not paste it unless asked.
 
@@ -25,6 +25,8 @@ python3 "<skill_dir>/scripts/footage.py" --check
 python3 "<skill_dir>/scripts/footage.py" <clip> [--script script.txt] [--model M] [--workers 3] [--output text|json]
 python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list only: no model, no brief
 python3 "<skill_dir>/scripts/overlays.py" <clip> [--fps 1] [--model M] [--workers 3] [--output text|json]   # overlay sheet only
+python3 "<skill_dir>/scripts/overlays.py" <clip> --look ID FIRST-LAST[:STEP]     # agent check: labelled frames
+python3 "<skill_dir>/scripts/overlays.py" <clip> --fix ["ID in=N" "ID out=N" "ID text=…" "ID drop" …]   # agent check: apply
 ```
 
 `<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; no Python packages. The model key lives in `scripts/.env`, never in the package: `FOOTAGE_API_KEY` (or `CPA_API_KEY`); optional `FOOTAGE_BASE_URL` (default the CPA relay `https://cpa-jp.charles-ai.space/v1`) and `FOOTAGE_MODEL` (default `gemini-4-argon-high`). Speech needs `DOUBAO_API_KEY` (Doubao file ASR 2.0 at `https://openspeech.bytedance.com/api/v3/auc/bigmodel/`, `scripts/asr.py`, a copy of genius-voice's ASR code, so footage never calls genius-voice's script): the key belongs to genius-voice and is read from its `scripts/.env` (next to this skill, or `GENIUS_VOICE_DIR`); a `DOUBAO_API_KEY` in the environment or this `scripts/.env` overrides it; without it the transcript is skipped and the status is `needs_review`.
@@ -44,11 +46,20 @@ For a finished edit whose 花字 (designed captions) and 人名条 (name lower t
 - Listed with sampled times only (± one sample): 3D text signs (字牌), title cards, full-screen graphics, labels. Not listed: dialogue subtitles, watermarks, text filmed in the scene. Not provided: the frame each further line of a multi-line overlay appears.
 - `--fps 2` doubles the find sheets; use it when overlays may be shorter than about one second.
 
+### Agent check, before delivering
+
+The model's sheet is checked by the agent, roughly, and the agent corrects the final output. Every frame the agent writes comes from a labelled frame it looked at, never from playback or estimation.
+
+1. Open every `<clip>.overlays/check_*.jpg`: one row per overlay, cropped to its box. `ID-1` is one cell before 入点 and should not show it, `ID-2` 入点 and `ID-3` 出点 should, `ID-4` one cell after 出点 should not. Compare the table text with `read_NN.jpg` when in doubt.
+2. Roughly right passes: up to about 0.2 s off is fine, so a faint first frame of a fade showing in `ID-1` is not a fault, nor an empty `ID-2` on a cut frame or an empty `ID-3` at the tail of a fade-out (edges are snapped to cuts and the last faint frames count). Fix what is clearly wrong: the overlay plainly in `ID-1` or `ID-4`, missing from `ID-2` or `ID-3`, wrong text, not a 花字 / 人名条 at all, or a review line that does not hold (先在上一个镜头出现 is right only if it already shows before that cut).
+3. To find the right frame: `--look ID FIRST-LAST[:STEP]` writes a strip cropped to that overlay (`full` instead of an ID for the whole frame), each cell labelled with its frame number, at most 40 cells.
+4. Apply: `--fix "N1 in=1149" "H06 text=…" "H12 drop"`, or `--fix` alone when nothing needs changing. Timecode, duration and the enter / leave wording are recomputed; the sheet's status becomes ok and its last section lists what the check changed.
+
 ## Report
 
 The status (`ok` / `needs_review`), counts (shots, lines, people, segments), the `.footage.md` path, and every review, validation and warning line as printed. `needs_review` with only uncertain words is normal: list them for the user to confirm.
 
-Overlay sheet: the status, counts (花字, 人名条, other packaging), the `.overlays.md` path, and every review and warning line as printed.
+Overlay sheet, after the agent check: the counts (花字, 人名条, other packaging), the `.overlays.md` path, and what the check changed (or that nothing needed changing).
 
 Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `UNSUPPORTED_FORMAT` 4, `DEPENDENCY_MISSING` 5, `PROVIDER_ERROR` 6, `TIMEOUT` 7. Report the code and message as-is.
 
@@ -62,6 +73,7 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 - Homophones survive ASR (采销 → 彩销); they appear as suspect words when the script or on-screen text shows the right spelling.
 - Overlay text must be read on the full-resolution frame: on 384-px cells the model misread brand names differently every run and once invented text (「拿捏Midea！」 for 「京东JWELL」). The read pass got 20/20 on 京东.mp4 (7:10, 17 花字 + 3 人名条, hand-checked baseline, 2026-11-05).
 - Overlay edges on that clip (2.4.1: 0.1 s cells, edges snapped to a measured cut inside their cell): out-points 20/20 within 5 frames; in-points 17/20, late on faint fade-ins (H07 +10, H11 +6) because the model picks the first cell it can clearly see. Exit wording matched the hand check on 18/20; a cut `measure.py` misses (weak suspects stay unchecked here) turns 随镜头切走 into 在镜头内消失. 4 min, about 29 requests at 3 workers. 2.4.0's extra every-frame pass took 7 min and still left fade-ins 3–6 frames late.
+- Agent check on 京东.mp4 (2.5.0): 4 check sheets and 2 `--look` strips, one fix (人名条 text 「韩 耘」 → 「韩耘」, letter spacing read as a space); after it count and text 20/20, out-points 20/20 and in-points 18/20 within 5 frames, the other two faint fade-in starts within 0.2 s, passed as roughly right.
 - A run widened into the previous shot can take other text there for the overlay: N1 came out 14 and 24 frames early on two runs (a 3D sign in the crop). True early entries (H16, H17) look the same, so every 先在上一个镜头出现 goes to review.
 - 3D text signs get listed as 花字 on the find sheets; the read pass sees no overlay text on them and moves them to other packaging as 字牌或实拍文字, with a warning. A caption that grows out of a 3D sign can carry the sign's text in its read (H06 once read 爆款 / 的诞生 / …).
 - Boxes drawn on storyboard sheets are unreliable; on the full-resolution frame they were right on 22 of 23, the miss a half-drawn name bar.
