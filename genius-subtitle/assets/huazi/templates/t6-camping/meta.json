@@ -1,0 +1,31 @@
+{
+ "id": "t6-camping",
+ "name": "露营风",
+ "description": "综艺包装风，四种样式用 fields.variant 切换：box 立体绿盒标题（kicker 小标 + 大字 + {？} 黄框气泡 + sub 侧面竖排 + 倒影，en 作两侧竖排水印）；tag 黑底细白框标签条 + 左下品牌色错位厚边，{重点} 放大；pinyin 白字句子，{词|拼音} 变品牌浅色并加「」、下方小字注音；brush 白色粗斜体压在浅绿毛边笔刷块上；part 章节卡（kicker 如 PART01 放在画面左上，两行粗斜体各压一条斜切浅绿带、第二行右错）；quote 引文段落（左上右下大号引号，{…} 压斜切浅绿高亮）。fields.card=true 时 box 铺浅灰底，brush、part、quote 铺绿底（整屏卡）。",
+ "reference": "用户提供的 6 张参考图（SISTER 请坐下 先导片字幕包、PART 章节卡、引文卡）：只借风格语言，图形为重新绘制",
+ "default_brand": "6CBF4B",
+ "types": [
+  "title",
+  "stack",
+  "number",
+  "list",
+  "name"
+ ],
+ "aligns": [
+  "left",
+  "right",
+  "center"
+ ],
+ "variants": [
+  "box",
+  "tag",
+  "pinyin",
+  "brush",
+  "part",
+  "quote"
+ ],
+ "fonts": [
+  "Source Han Sans SC Heavy / Bold / Medium (SIL OFL 1.1, 系统安装)",
+  "Rajdhani (SIL OFL 1.1, assets/huazi/fonts)"
+ ]
+}

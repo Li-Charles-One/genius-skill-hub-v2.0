@@ -1,0 +1,144 @@
+/* 模板 7 · 拼贴纸张风（t7-collage-paper）：撕纸毛边 + 网点/方格纸 + 粗黑体 + 贴纸小件。
+   fields.variant 选样式：tape 黄胶带双行 · blob 蓝色撕纸圆块 · card 文字卡片 · badge 对话框角标 · strip 英文条 + 蓝色标题带 ·
+   board 三栏方格纸大卡 · note 皱纸说明条 · tile 蓝格瓷砖标题 · label 蓝网点补丁 + 立体白字。
+   --acc 是固定的荧光黄（纸张色），品牌色只管蓝色部分。 */
+.hz { --acc: 226,255,58; --ink: 17,17,20; --navy: 14,20,58; font-weight: 900; }
+.hz-t, .hz-sub, .hz-kicker, .hz-en, .hz-items li { white-space: nowrap; }
+.hz-line { position: relative; display: block; width: max-content; }
+.align-right { text-align: right; } .align-right .hz-line { margin-left: auto; }
+.align-center { text-align: center; } .align-center .hz-line { margin: 0 auto; }
+.hz-bar, .hz-ghost { display: none; }
+.hz-t { display: inline-block; position: relative; line-height: 1.15; letter-spacing: .04em; }
+.hz-t .hz-lat { font-family: "HZ Tech", "Source Han Sans SC", sans-serif; font-weight: 700; }
+.hz-items { list-style: none; margin: 0; padding: 0; }
+.hz-items .hz-bullet { display: none; }
+.hz-sub, .hz-kicker, .hz-en { position: relative; width: max-content; }
+.align-center .hz-sub, .align-center .hz-kicker, .align-center .hz-en { margin-left: auto; margin-right: auto; }
+
+/* 纸片层：decorate.js 生成的 .tp（clip-path 撕边），整层一个投影 */
+.hz-back { filter: drop-shadow(0 3px 0 rgba(0,0,0,.35)) drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+.hz-deco { animation: hz-out .35s ease-in var(--out) forwards; }
+.tp { position: absolute; transform-origin: 50% 50%; animation: tp-slap .42s cubic-bezier(.3,1.6,.5,1) var(--d, 0s) both; }
+@keyframes tp-slap { from { opacity: 0; transform: rotate(var(--r, 0deg)) scale(1.18); } to { opacity: 1; transform: rotate(var(--r, 0deg)) scale(1); } }
+.tp.white { background: #f4f3ee; }
+.tp.blue { background: radial-gradient(rgba(255,255,255,.10) 1.1px, transparent 1.5px) 0 0/6px 6px, rgb(var(--brand)); }
+.tp.blue-deep { background: rgb(var(--brand-deep)); }
+.tp.yellow { background: radial-gradient(rgba(0,0,0,.16) 1.2px, transparent 1.7px) 0 0/7px 7px, rgb(var(--acc)); }
+.tp.dots { background: radial-gradient(rgba(0,0,0,.13) 1.1px, transparent 1.6px) 0 0/7px 7px, #f6f6f2; }
+.tp.grid { background: linear-gradient(rgba(var(--brand),.10) 1px, transparent 1px) 0 0/16px 16px,
+                       linear-gradient(90deg, rgba(var(--brand),.10) 1px, transparent 1px) 0 0/16px 16px, #fbfbf8; }
+.tp.black { background: rgb(var(--ink)); }
+
+/* 贴纸：入场弹出；眼睛循环眨眼；手绘线条画出来 */
+.st { position: absolute; animation: st-pop .45s cubic-bezier(.3,1.8,.5,1) var(--d, .3s) both; }
+@keyframes st-pop { from { opacity: 0; transform: scale(.2) rotate(-20deg); } to { opacity: 1; transform: none; } }
+.blink { transform-box: fill-box; transform-origin: 50% 50%; animation: blink 3.2s ease-in-out 1s infinite; }
+@keyframes blink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
+.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .7s ease-out var(--d, .35s) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* 文字整体：弹入 */
+.hz-a { animation: tp-pop .45s cubic-bezier(.3,1.5,.5,1) calc(var(--d, 0s) + .12s) both, hz-out .35s ease-in var(--out) forwards !important; }
+@keyframes tp-pop { from { opacity: 0; transform: translateY(14px) scale(.9); } to { opacity: 1; transform: none; } }
+
+/* ---------- tape：荧光黄网点胶带，第一行蓝字白描边，第二行大黑字 ---------- */
+.v-tape { padding: 26px 46px 28px 40px; }
+.v-tape .hz-t { font-size: 48px; transform: rotate(-1.5deg); }
+.v-tape .hz-l1 .hz-t { color: rgb(var(--brand)); -webkit-text-stroke: 8px #fff; paint-order: stroke fill; }
+.v-tape .hz-l2 { margin-top: 10px; }
+.v-tape .hz-l2 .hz-t { font-size: 60px; color: rgb(var(--ink)); transform: rotate(.5deg); }
+.v-tape .hz-em { color: rgb(var(--brand)); }
+
+/* ---------- blob：蓝色撕纸圆块，荧光黄字，下方小字 ---------- */
+.v-blob { padding: 50px 74px 46px; }
+.v-blob .hz-t { font-size: 54px; color: rgb(var(--acc)); -webkit-text-stroke: 5px rgb(var(--brand-deep)); paint-order: stroke fill; transform: rotate(-3deg); }
+.v-blob .hz-sub { margin-top: 6px; font-size: 20px; font-weight: 800; letter-spacing: .12em; color: #fff; transform: rotate(-3deg); }
+.v-blob .hz-sub .hz-bullet { display: none; }
+
+/* ---------- card：方格纸卡片，黄色撕纸标题条，正文，蓝色按钮 ---------- */
+.v-card { padding: 20px 34px 0; text-align: left; }
+.v-card .hz-line { margin: 0 !important; }
+.v-card .hz-t { font-size: 30px; color: rgb(var(--ink)); letter-spacing: .02em; padding-left: 26px; }
+.v-card .hz-items { margin-top: 22px; }
+.v-card .hz-items li { font-size: 17px; font-weight: 500; line-height: 1.8; color: #1d1d22; letter-spacing: .02em; }
+.v-card .hz-items .hz-lat { font-family: "Source Han Sans SC", sans-serif; font-weight: 500; }
+.tp-btn { display: block; width: max-content; margin: 12px auto -16px; padding: 3px 18px 5px; font-size: 22px; font-weight: 900; letter-spacing: .1em;
+          color: #fff; background: rgb(var(--brand)); box-shadow: 4px 4px 0 rgb(var(--ink)); transform: rotate(-1.5deg); }
+
+/* ---------- badge：网点白纸 + 蓝色描边对话框；左「大黑字 + 英文」，右上黄标签，右下蓝字 ---------- */
+.v-badge { display: grid; grid-template-columns: auto auto; column-gap: 26px; align-items: end; padding: 30px 44px 34px 46px; }
+.v-badge .hz-l1 { grid-area: 1 / 1; } .v-badge .hz-en { grid-area: 2 / 1; }
+.v-badge .hz-kicker { grid-area: 1 / 2; justify-self: end; align-self: start; }
+.v-badge .hz-l2 { grid-area: 2 / 2; align-self: start; margin: 0 !important; }
+.v-badge .hz-l1 { margin: 0 !important; }
+.v-badge .hz-l1 .hz-t { font-size: 58px; color: rgb(var(--ink)); line-height: 1; }
+.v-badge .hz-en { margin: 4px 0 0; justify-self: center; font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 24px; letter-spacing: .14em;
+                  font-style: italic; color: rgb(var(--ink)); transform: skewX(-10deg); }
+.v-badge .hz-l2 .hz-t { font-size: 52px; color: rgb(var(--brand)); line-height: 1; letter-spacing: .1em; }
+.v-badge .hz-kicker { margin: -50px -64px 6px 0; padding: 4px 16px 6px; font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 24px;
+                      letter-spacing: .04em; color: rgb(var(--brand)); transform: skewX(-8deg); }
+
+/* ---------- strip：眼睛 + 英文黄条，蓝色标题带，小字蓝条 + 圆形箭头 ---------- */
+.v-strip { padding: 20px 30px 24px 28px; text-align: left; }
+.v-strip .hz-kicker { margin: 0 0 0 52px; padding: 6px 18px 8px; font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 30px;
+                      letter-spacing: .02em; color: rgb(var(--ink)); transform: skewX(-8deg); }
+.v-strip .hz-line { margin: 10px 0 0 140px !important; }
+.v-strip .hz-t { font-size: 46px; color: #fff; letter-spacing: .1em; padding: 6px 22px 8px; }
+.v-strip .hz-sub { display: flex; align-items: center; gap: 10px; margin: 12px 0 0 0; padding: 4px 16px 6px 8px; font-size: 19px; font-weight: 800;
+                   color: #fff; letter-spacing: .04em; }
+.v-strip .hz-sub .hz-lat { font-family: "Source Han Sans SC", sans-serif; font-weight: 800; }
+.v-strip .hz-sub .hz-bullet { width: 24px; height: 24px; border-radius: 50%; background: rgb(var(--acc)) center/14px no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2 2 L11 11 M11 4 V11 H4' stroke='%23111' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  box-shadow: 0 0 0 2px rgb(var(--ink)); }
+
+/* 新增纸张 */
+.tp.bluegrid { background: linear-gradient(rgba(255,255,255,.28) 1.5px, transparent 1.5px) 0 0/34px 34px,
+                           linear-gradient(90deg, rgba(255,255,255,.28) 1.5px, transparent 1.5px) 0 0/34px 34px, rgb(var(--brand)); }
+.tp.tiles { background: linear-gradient(rgba(var(--navy),.35) 2px, transparent 2px) 0 0/40px 40px,
+                        linear-gradient(90deg, rgba(var(--navy),.35) 2px, transparent 2px) 0 0/40px 40px,
+                        linear-gradient(rgba(255,255,255,.10), transparent), rgb(var(--brand)); }
+.tp.blue-dots { background: radial-gradient(rgba(255,255,255,.55) 1.6px, transparent 2.1px) 0 0/9px 9px, rgb(var(--brand)); }
+.tp.crumple { background:
+  linear-gradient(172deg, transparent 28%, rgba(0,0,0,.08) 30%, transparent 36%),
+  linear-gradient(6deg, transparent 52%, rgba(0,0,0,.07) 54%, transparent 62%),
+  linear-gradient(118deg, transparent 38%, rgba(255,255,255,.95) 41%, transparent 46%),
+  linear-gradient(64deg, transparent 60%, rgba(0,0,0,.07) 62%, transparent 70%),
+  linear-gradient(150deg, transparent 70%, rgba(0,0,0,.06) 72%, transparent 78%),
+  radial-gradient(ellipse at 30% 35%, #fff, #e2e2e0 85%); }
+.tp.tape { background: linear-gradient(90deg, rgba(225,225,230,.7), rgba(200,200,206,.78)); }
+.hz-front .tp { filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+.twinkle { transform-box: fill-box; transform-origin: 50% 50%; animation: twinkle 1.6s ease-in-out .8s infinite; }
+@keyframes twinkle { 0%, 100% { transform: scale(1); } 50% { transform: scale(.7); } }
+/* 立体白字：深蓝描边 + 右下实影 */
+.v-tile .hz-l1 .hz-t, .v-label .hz-t { color: #fff; -webkit-text-stroke: 7px rgb(var(--navy)); paint-order: stroke fill; text-shadow: 4px 5px 0 rgb(var(--navy)); }
+
+/* ---------- board：方格纸大卡（蓝色方格纸垫底、页角卷起），黄色标题块，三栏「黄标签 + 正文」 ---------- */
+.v-board { padding: 34px 56px 50px; }
+.v-board .hz-l1 .hz-t { font-size: 44px; color: rgb(var(--ink)); letter-spacing: .12em; }
+.tp-cols { display: flex; gap: 46px; margin-top: 40px; text-align: left; }
+.tp-col:nth-child(2) { margin-top: 84px; }
+.tp-h { display: inline-block; font-size: 30px; font-weight: 900; color: rgb(var(--ink)); letter-spacing: .06em; transform: skewX(-8deg); margin: 0 0 14px 10px; }
+.tp-p { font-size: 20px; font-weight: 700; line-height: 1.75; color: rgb(var(--ink)); white-space: nowrap; }
+
+/* ---------- note：皱纸说明条（左右露蓝边），黄色斜标签，逐行条目，胶带、条码、黄色划痕 ---------- */
+.v-note { padding: 0 64px 26px 22px; text-align: left; }
+.v-note .hz-line { margin: 0 0 6px -6px !important; } .v-note .hz-l1 .hz-t { padding: 2px 12px 4px; font-size: 30px; font-weight: 900; letter-spacing: .06em; color: rgb(var(--ink));
+                     -webkit-text-stroke: 5px #fff; paint-order: stroke fill; transform: rotate(-3deg); }
+.v-note .hz-items { padding-left: 14px; }
+.v-note .hz-items li { font-size: 21px; font-weight: 500; line-height: 1.7; color: #1d1d22; letter-spacing: .03em; }
+.v-note .hz-items .hz-lat { font-family: "Source Han Sans SC", sans-serif; font-weight: 500; }
+
+/* ---------- tile：蓝格撕纸条 + 立体白字，「NEW IPO」对话气泡，绿色长尾夹、交叉胶带、条码 ---------- */
+.v-tile { padding: 0 70px 30px 40px; text-align: left; }
+.v-tile .hz-kicker { margin: 0 0 12px 0; padding: 4px 18px 6px; border-radius: 22px; background: rgb(var(--brand)); box-shadow: 0 0 0 3px #fff;
+                     font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 30px; font-style: italic; color: rgb(var(--acc));
+                     -webkit-text-stroke: 4px rgb(var(--navy)); paint-order: stroke fill; transform: rotate(-4deg); }
+.v-tile .hz-kicker::after { content: ""; position: absolute; left: 26px; bottom: -14px; border-top: 16px solid #fff; border-right: 14px solid transparent; }
+.v-tile .hz-kicker::before { content: ""; position: absolute; left: 29px; bottom: -9px; border-top: 11px solid rgb(var(--brand)); border-right: 9px solid transparent; z-index: 1; }
+.v-tile .hz-l1 .hz-t { font-size: 66px; letter-spacing: .1em; margin-left: 16px; }
+
+/* ---------- label：{英文} 压在蓝色网点撕纸补丁上（黄字），其余立体白字，下方黄色手绘下划线 ---------- */
+.v-label { padding: 24px 60px 34px 30px; }
+.v-label .hz-t { font-size: 62px; letter-spacing: .08em; }
+.v-label .hz-em { display: inline-block; margin-right: 34px; padding: 0 10px; color: rgb(var(--acc)); }
+.v-label .hz-em .hz-lat { font-family: "HZ Num", sans-serif; font-weight: 600; font-size: 1.12em; letter-spacing: .02em; }

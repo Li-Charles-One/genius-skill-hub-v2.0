@@ -1,0 +1,104 @@
+/* 模板 6 · 露营风（t6-camping）：fields.variant = box | tag | pinyin | brush | part | quote，decorate.js 加 .v-<variant> */
+.hz { --g: var(--brand); }
+.hz-t, .hz-sub, .hz-kicker, .hz-en { white-space: nowrap; }
+.hz-bar, .hz-ghost, .hz-bullet { display: none; }
+.hz-line { position: relative; display: block; width: max-content; }
+.align-right .hz-line { margin-left: auto; } .align-center .hz-line { margin: 0 auto; }
+.hz-items { list-style: none; margin: 0; padding: 0; }
+
+/* 整屏卡底（挂在 #stage 上，不进倒影） */
+.sg-card { position: absolute; inset: 0; animation: hz-fade .3s ease-out both, hz-out .35s ease-in var(--out) forwards; }
+.sg-card.c-box { background: radial-gradient(ellipse at 50% 45%, #f4f4f4 0%, #e6e6e6 60%, #d9d9d9 100%); }
+.sg-card.c-green { background: color-mix(in srgb, rgb(var(--brand)) 62%, #8e9a70); }
+.sg-wm { position: absolute; top: 0; height: 720px; display: flex; align-items: center; justify-content: center;
+         font-family: "HZ Tech", sans-serif; font-weight: 600; font-size: 13px; letter-spacing: .9em; color: rgba(0,0,0,.16);
+         writing-mode: vertical-rl; white-space: nowrap; overflow: hidden; }
+.sg-wm.l { left: 6px; transform: rotate(180deg); } .sg-wm.r { right: 6px; }
+
+/* ---------- box：立体绿盒 ---------- */
+.v-box { padding: 22px 132px 26px 44px; background: linear-gradient(180deg, rgb(var(--g)) 0%, color-mix(in srgb, rgb(var(--g)) 88%, #000) 100%);
+         -webkit-box-reflect: below 2px linear-gradient(transparent 52%, rgba(0,0,0,.32)); }
+.v-box .hz-kicker { position: absolute; left: 92px; top: 10px; font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 46px; line-height: 1;
+                    letter-spacing: .02em; color: #fff; transform: skewX(-6deg); text-shadow: 3px 3px 0 rgba(0,40,0,.55); }
+.v-box .hz-l1 { margin-top: 44px; }
+.v-box .hz-t { font-weight: 900; font-size: 86px; line-height: 1; letter-spacing: .02em; color: #fff;
+               text-shadow: 4px 4px 0 rgba(0,40,0,.55), 0 0 1px rgba(0,0,0,.3); }
+/* {？} → 黄框气泡 */
+.v-box .hz-em { position: absolute; right: -112px; top: -64px; width: 96px; height: 116px; display: flex; align-items: center; justify-content: center;
+                background: color-mix(in srgb, rgb(var(--g)) 55%, #0c2a06); border: 4px solid #f2d24b; box-sizing: border-box;
+                color: #f2d24b; font-size: 84px; text-shadow: none; }
+.v-box .hz-em::after { content: ""; position: absolute; left: 10px; bottom: -22px; width: 18px; height: 18px; border-left: 4px solid #f2d24b; border-bottom: 4px solid #f2d24b;
+                       background: inherit; transform: skewY(-42deg); transform-origin: 0 0; }
+/* sub → 右侧面竖排 */
+.v-box .hz-sub { position: absolute; right: -58px; top: -18px; bottom: 0; width: 58px; margin: 0; display: flex; align-items: center; justify-content: center;
+                 background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--g)) 82%, #fff), rgb(var(--g)));
+                 transform: skewY(-17deg); transform-origin: 0 100%; }
+.v-box .hz-sub span { writing-mode: vertical-rl; font-weight: 900; font-size: 30px; letter-spacing: .12em; color: #fff; padding: 6px 2px;
+                      border-top: 2px solid #fff; border-bottom: 2px solid #fff; text-shadow: 2px 2px 0 rgba(0,40,0,.4); }
+.v-box .hz-en { display: none; }
+.v-box .sg-top { position: absolute; left: 0; top: 0; overflow: visible; }
+.v-box .hz-a { animation: sg-pop .55s cubic-bezier(.2,1.4,.4,1) var(--d, 0s) both, hz-out .35s ease-in var(--out) forwards; }
+.v-box.hz { animation: sg-rise .6s cubic-bezier(.2,.9,.3,1) both, hz-out .35s ease-in var(--out) forwards; }
+@keyframes sg-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes sg-rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+.v-box .hz-sub.hz-a { animation-name: sg-fade-side, hz-out; }
+@keyframes sg-fade-side { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- tag：黑底标签条 ---------- */
+.v-tag .hz-line + .hz-line { margin-top: 18px; }
+.v-tag.type-stack.align-left .hz-l2 { margin-left: 2.2em; }
+.v-tag .hz-t { display: inline-block; position: relative; padding: 8px 30px 10px 22px; background: #0b0b0b;
+               border: 1.5px solid rgba(255,255,255,.88); border-radius: 3px 10px 3px 3px;
+               box-shadow: -7px 7px 0 -1px rgba(var(--g), .9), -7px 7px 0 0 rgba(var(--g),.5);
+               font-weight: 900; font-size: 34px; line-height: 1.15; letter-spacing: .14em; color: #fff; }
+.v-tag .hz-t::after { content: ""; position: absolute; right: -1.5px; top: 26%; height: 10px; width: 3px; background: #0b0b0b; } /* 右沿断口 */
+.v-tag .hz-em { font-size: 1.55em; letter-spacing: .06em; line-height: .9; vertical-align: -.06em; margin-left: .15em; }
+.v-tag .hz-a { animation: sg-tag .45s cubic-bezier(.2,.8,.2,1) var(--d, 0s) both, hz-out .3s ease-in var(--out) forwards; }
+@keyframes sg-tag { from { opacity: 0; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(-20px -20px -20px -20px); } }
+
+/* ---------- pinyin：句子 + 关键词注音 ---------- */
+.v-pinyin { padding: 0 12px 22px; }
+.v-pinyin .hz-t { font-weight: 500; font-size: 40px; line-height: 1.2; letter-spacing: .04em; color: #fff; }
+.v-pinyin .hz-em { position: relative; display: inline-block; color: rgb(var(--brand-light)); font-weight: 400; font-size: 1.22em; margin: 0 .05em; }
+.v-pinyin .hz-em::before { content: "「"; color: #fff; font-weight: 300; font-size: .82em; vertical-align: .32em; margin-right: -.12em; }
+.v-pinyin .hz-em::after  { content: "」"; color: #fff; font-weight: 300; font-size: .82em; vertical-align: -.22em; margin-left: -.12em; }
+.v-pinyin .sg-py { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 2px;
+                   font-family: "HZ Tech", sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .06em; color: rgba(255,255,255,.6); white-space: nowrap; }
+.v-pinyin .sg-shaft { position: absolute; left: 6%; top: -40px; width: 12px; height: 220px;
+                      background: linear-gradient(180deg, transparent, rgba(255,255,255,.05) 30%, rgba(255,255,255,.05) 70%, transparent); }
+.v-pinyin .hz-a { animation: sg-blur .7s ease-out var(--d, 0s) both, hz-out .35s ease-in var(--out) forwards; }
+@keyframes sg-blur { from { opacity: 0; filter: blur(8px); letter-spacing: .2em; } to { opacity: 1; filter: none; } }
+
+/* ---------- brush：笔刷块 + 粗斜体 ---------- */
+.v-brush { padding: 10px 40px 30px; }
+.v-brush .hz-t { position: relative; z-index: 1; display: inline-block; transform: skewX(-8deg); font-weight: 900; font-size: 80px; line-height: 1.1;
+                 letter-spacing: .12em; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.v-brush .hz-back { animation: sg-wipe .6s cubic-bezier(.3,.8,.2,1) .1s both, hz-out .35s ease-in var(--out) forwards; }
+@keyframes sg-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(-40px -40px -40px -40px); } }
+.v-brush .hz-a { animation: sg-pop .5s cubic-bezier(.2,1.3,.4,1) calc(var(--d, 0s) + .3s) both, hz-out .35s ease-in var(--out) forwards; }
+
+/* ---------- part：章节卡，两行粗斜体各压一条斜切浅绿带，第二行右错 ---------- */
+.v-part { padding: 0 40px; }
+.v-part .hz-kicker { font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 50px; line-height: 1; letter-spacing: .06em; color: #fff;
+                     transform: skewX(-12deg); margin-bottom: 24px; }
+.v-part .hz-kicker.sg-k-abs { position: absolute; margin: 0; }
+.v-part .hz-t { position: relative; display: inline-block; isolation: isolate; transform: skewX(-8deg); padding: 0 .2em;
+                font-weight: 900; font-size: 84px; line-height: 1.12; letter-spacing: .02em; color: #fff; }
+.v-part .hz-t::before { content: ""; position: absolute; z-index: -1; left: -1.1em; right: -1em; top: 52%; bottom: -10%;
+                        background: color-mix(in srgb, rgb(var(--brand-light)) 70%, #e9f1a8); opacity: .85; transform: skewX(-22deg); }
+.v-part .hz-l2 { margin-top: 22px; margin-left: 340px !important; }
+.v-part .hz-a { animation: sg-tag .5s cubic-bezier(.2,.8,.2,1) calc(var(--d, 0s) + .25s) both, hz-out .35s ease-in var(--out) forwards; }
+
+/* ---------- quote：引文段落，{…} 压斜切浅绿高亮 ---------- */
+.v-quote .hz-line { margin: 0 !important; }
+.v-quote .hz-t { display: inline-block; transform: skewX(-8deg); isolation: isolate;
+                 font-weight: 400; font-size: 38px; line-height: 1.7; letter-spacing: .02em; color: #fff; }
+.v-quote .hz-em { position: relative; }
+.v-quote .hz-em::before { content: ""; position: absolute; z-index: -1; left: -.15em; right: -1.2em; top: 18%; bottom: 8%;
+                          background: color-mix(in srgb, rgb(var(--brand-light)) 70%, #e9f1a8); opacity: .9; transform: skewX(-14deg); }
+.v-quote .hz-l1 .hz-em::before, .v-quote .hz-t > .hz-em:first-child::before { left: -.4em; }
+.sg-q { position: absolute; font-family: "HZ Num", sans-serif; font-weight: 600; font-size: 380px; line-height: 1; height: 190px; overflow: visible; color: rgba(236,240,222,.72); }
+.sg-q.o { left: -30px; top: -200px; }
+.v-quote .hz-a { animation: sg-tag .5s cubic-bezier(.2,.8,.2,1) var(--d, 0s) both, hz-out .35s ease-in var(--out) forwards; }
+
+.hz-en { display: none; }

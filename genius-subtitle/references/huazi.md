@@ -5,7 +5,7 @@ Designed captions (花字), name bars (人名条) and data callouts laid over a 
 ## Workflow
 
 1. `huazi.py --check`: ffmpeg, a browser (Chrome / Edge / Chromium / Brave, or `HUAZI_BROWSER`), HEVC-alpha support, Source Han Sans SC.
-2. Pick a style: `huazi.py templates` lists the built-in ones (t1–t5) and custom ones. Ask the user for the brand colour (6 hex digits) unless given; a template's `default_brand` is its reference look (t5 is meant for gold).
+2. Pick a style: `huazi.py templates` lists the built-in ones (t1–t7) and custom ones. Ask the user for the brand colour (6 hex digits) unless given; a template's `default_brand` is its reference look (t5 is meant for gold).
 3. `huazi.py init <video> --template T --brand HEX`. With `<video>.overlays.json` next to the video (genius-footage overlay sheet) or `--overlays FILE`, every 花字 and 人名条 becomes an item with its frames, side and height; otherwise `items` is empty and you write them.
 4. Edit `huazi.json` items (schema below). `init` only guesses: set `type` from the content (a parameter → `number`, a heading with points → `list`, …), mark emphasis with `{…}`, move `y` off faces and busy areas, and keep the text the user's (see rules).
 5. `huazi.py preview <dir> --ids …` (3–6 items, one of each type and side) renders the items on real frames into `preview/preview_<template>.png`. Several templates at once: `--template t1-light-band,t3-bold-type`. Show the sheet; get the style confirmed before rendering everything.
@@ -63,6 +63,8 @@ Browser screenshots carry straight alpha. VideoToolbox tags HEVC alpha as premul
 | `t3-bold-type` | 粗字排版 | no backing; bold italic with big/small contrast via `{…}`; brand sheen sweeping the line end; ▶ subtitle |
 | `t4-glass-cube` | 玻璃方块 | light + heavy italic mix; slanted brand panels; rotating glass cubes, square particles, arc |
 | `t5-black-gold` | 黑金质感 | metallic white-to-brand (gold) bold italic; outlined ghost of the first line; ◀◀ lines; gold light line with flare; reveal by light sweep |
+| `t6-camping` | 露营风 | variety-show package in fresh green, four looks picked by `fields.variant`: `box` 3D green box title (`kicker` small Latin, `{？}` yellow speech bubble, `sub` vertical on the side face, reflection); `tag` black label bar with thin white frame and offset brand edge, `{…}` enlarged; `pinyin` white sentence, `{词\|拼音}` turns brand-light inside 「」 with a small pinyin line under it; `brush` white heavy italic on a rough light-green brush block; `part` chapter card (`kicker` such as PART01 in the top-left corner, two heavy italic lines each on a slanted light-green band, the second shifted right); `quote` quoted paragraph (big “ ” marks top-left and bottom-right, `{…}` on a slanted light-green highlight). `fields.card: true` fills the frame (light grey for `box`, with `en` as vertical watermarks on both edges; green for `brush`, `part`, `quote`) |
+| `t7-collage-paper` | 拼贴纸张风 | torn-paper collage, nine looks picked by `fields.variant`: `tape` fluorescent-yellow halftone tape behind two lines (first brand colour with white outline, second big black), paperclip, hand-drawn loop, barcode; `blob` torn brand-colour ellipse with white rim, fluorescent-yellow text, a hand-drawn loop ending in an arrow, cartoon eyes, `sub` small line; `card` grid-paper card on a brand sheet, yellow torn title strip, `items` as body lines (no bullets), `fields.button` brand button with a squiggle arrow; `badge` halftone white paper with a brand outline speech bubble (`lines[0]` big black, `en` under it, `kicker` yellow tag top-right, `lines[1]` brand colour); `strip` eyes + `kicker` English on a yellow strip, brand title band, `sub` small band with a round arrow icon; `board` big grid-paper card on a brand grid sheet with a curled corner, lime paperclip and sparkles, `lines[0]` on a yellow block, `fields.cols` = `[{"h": heading, "p": [lines]}]` as three columns (yellow heading tag + body, middle column lower) with a hand-drawn zigzag arrow; `note` crumpled paper strip edged in brand colour, `lines[0]` as a tilted yellow tag, `items` as plain lines, tape, vertical barcode, yellow scratch marks; `tile` brand tile-grid torn strip with 3D white text (navy outline + solid shadow), `kicker` as a speech-bubble pill, green binder clip, crossed tape, barcode; `label` the `{…}` part (e.g. Latin) in yellow condensed type on a brand halftone patch, the rest 3D white text, yellow hand-drawn underline. Torn edges are seeded by item id (different per item, fixed per render); the yellow is fixed, the brand colour drives the blue |
 
 Each is `assets/huazi/templates/<id>/`: `meta.json` (name, description, default brand, fonts, reference), `style.css`, optional `decorate.js`. Reference images the user gave were used for style only; shapes and layouts are original.
 
@@ -89,7 +91,7 @@ inline: .hz-lat (digits / Latin), .hz-em ({…})
 
 ## Custom mode
 
-When the user brings a reference image, a brand guide or asks for a look none of t1–t5 has:
+When the user brings a reference image, a brand guide or asks for a look none of t1–t7 has:
 
 1. Name what to take from the reference (type, backing, decorations, motion) and tell the user it is style only.
 2. `huazi.py new-template <id> --from <closest template> --name <中文名>`; edit `style.css`, `decorate.js` and `meta.json` (`description`, `reference`, `default_brand`, `fonts`) under the contract.

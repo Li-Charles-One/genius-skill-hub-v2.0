@@ -1,0 +1,32 @@
+{
+ "id": "t7-collage-paper",
+ "name": "拼贴纸张风",
+ "description": "撕纸拼贴风：撕纸毛边（每条花字形状不同）、荧光黄网点纸、方格纸、白纸衬边，思源黑体 Heavy，卡通眼睛、回形针、条形码、手绘圈与箭头等贴纸；纸片拍下、贴纸弹出、眼睛眨、手绘线画出。九种样式用 fields.variant 切换：tape 黄胶带双行（第一行品牌色白描边、第二行大黑字）；blob 品牌色撕纸椭圆 + 荧光黄字 + 绕圈箭头 + sub 小字；card 方格纸卡片（黄色标题条、items 逐行正文、fields.button 品牌色按钮）；badge 网点白纸 + 品牌色描边对话框（lines[0] 大黑字、en 英文、kicker 黄标签、lines[1] 品牌色字）；strip 眼睛 + kicker 英文黄条、品牌色标题带、sub 小字条带圆形箭头；board 方格纸大卡（品牌色方格纸垫底、页角卷起、荧光回形针、星星），lines[0] 压黄块，fields.cols=[{h, p:[行…]}] 三栏黄标签 + 正文、中栏下沉、手绘折线箭头；note 皱纸说明条（左右露品牌色边），lines[0] 黄色斜标签，items 逐行条目，胶带、竖条码、黄色划痕；tile 品牌色格子撕纸条 + 立体白字（深蓝描边 + 实影），kicker 作对话气泡，绿色长尾夹、交叉胶带、条码；label {英文} 压在品牌色网点撕纸补丁上（黄色窄体字），其余立体白字，黄色手绘下划线。荧光黄固定，品牌色管蓝色部分。",
+ "reference": "用户提供的 8 张参考图（金融类撕纸拼贴字幕包，两批）：只借风格语言，图形为重新绘制",
+ "default_brand": "2D46F0",
+ "types": [
+  "title",
+  "stack",
+  "list"
+ ],
+ "aligns": [
+  "left",
+  "right",
+  "center"
+ ],
+ "variants": [
+  "tape",
+  "blob",
+  "card",
+  "badge",
+  "strip",
+  "board",
+  "note",
+  "tile",
+  "label"
+ ],
+ "fonts": [
+  "Source Han Sans SC Heavy / Bold / Medium (SIL OFL 1.1, 系统安装)",
+  "Rajdhani (SIL OFL 1.1, assets/huazi/fonts)"
+ ]
+}
