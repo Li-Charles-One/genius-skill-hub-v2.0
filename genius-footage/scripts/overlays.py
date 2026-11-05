@@ -7,8 +7,8 @@ Genius Footage — overlay text sheet (花字表) for one edited video: `<clip>.
 
 Steps: find — frames sampled at --fps on numbered storyboard sheets, the model names the cells each overlay
 is on → read — one full-resolution frame per 花字 / 人名条, the model copies the text and boxes it → edges —
-cells cropped around that box, first every few frames across the gap between two samples, then every frame,
-the model picks the first / last cell where the overlay shows → measure.py cuts say how it enters and leaves.
+cells cropped around that box, every few frames (about 0.1 s) across the gap between two samples, the model
+picks the first / last cell where the overlay shows → measure.py cuts say how it enters and leaves.
 The model only names cells; every frame number comes from the sampling grid, timecode from measure.py.
 """
 
@@ -34,7 +34,7 @@ from footage import VIDEO_EXTENSIONS, WORKERS, _ask, _json
 
 FIND_FPS = 1             # 京东.mp4 2026-11-05: 1 fps and 2 fps both found 20/20 overlays (shortest 2.2 s)
 FIND_CELL, FIND_COLS, FIND_PER_SHEET = (384, 216), 5, 40
-EDGE_STEPS = 10          # the first edge pass splits the gap between two samples into this many steps
+EDGE_STEPS = 10          # the edge pass splits the gap between two samples into this many steps (0.1 s at 1 fps)
 EDGE_WIDEN = 2           # sample gaps searched further out when an overlay already shows at the run's outer end
 READ_PER_CALL = 20       # full-resolution frames per read request
 READ_MAX_W = 1920        # read frames wider than this are scaled down (one request stays small)
@@ -79,8 +79,8 @@ READ_PROMPT = (
 EDGE_PROMPT = (
     "These images are storyboard cells cropped around overlay text (花字 / 人名条) in one edited video. Every "
     "cell is one exact frame. Each group is a run of frames in time order, labelled at the top-left: "
-    "NNa-1 … NNa-K runs across where overlay NN appears, NNb-1 … NNb-K across where it disappears, "
-    "NNm-1 … NNm-K across where its text becomes readable. {spacing}\n"
+    "NNa-1 … NNa-K runs across where overlay NN appears, NNb-1 … NNb-K across where it disappears. "
+    "Cells in a run are {every} frames apart.\n"
     "Overlays: {texts}\n"
     "a group: first = the first cell where any part of that overlay is visible (text, line, bar, dot, sparkle "
     "or panel, even faint or partly drawn); readable = the first cell where its first line of text is complete "
@@ -88,11 +88,10 @@ EDGE_PROMPT = (
     "划入, 随镜头切入, 从字牌变形出字).\n"
     "b group: last = the last cell where any part of it is still visible; how = how it leaves, under 12 "
     "Chinese characters (e.g. 随镜头切走, 淡出, 划出, 直接消失).\n"
-    "m group: readable = the first cell where its first line of text is complete and legible.\n"
     "Dialogue subtitles, watermarks, text in the scene and other overlays do not count. Use null when the "
     "overlay shows in no cell of the run.\n"
     'Return ONLY a JSON array, one object per group: [{"id": "03a", "first": "03a-4", "readable": "03a-6", '
-    '"how": "淡入"}, {"id": "03b", "last": "03b-7", "how": "随镜头切走"}, {"id": "03m", "readable": "03m-2"}].'
+    '"how": "淡入"}, {"id": "03b", "last": "03b-7", "how": "随镜头切走"}].'
 )
 
 
@@ -245,7 +244,7 @@ def _strip(lo: int, hi: int, every: int) -> list[int]:
 
 
 def _edge_pass(src: str, c: dict, v: dict, seek: list, out_dir: Path, strips: dict, targets: list,
-               spacing: str, prefix: str, workers: int) -> dict:
+               every: int, prefix: str, workers: int) -> dict:
     """strips: {group id like '03a': [frames]} → {group id: answer}. A sheet that comes back short is asked again once."""
     if not strips:
         return {}
@@ -258,7 +257,7 @@ def _edge_pass(src: str, c: dict, v: dict, seek: list, out_dir: Path, strips: di
     for p, gids in pages:
         nums = dict.fromkeys(g[:-1] for g in gids)
         texts = "; ".join(f"{n} = 「{targets[int(n) - 1]['text']}」" for n in nums)
-        jobs.append((p, EDGE_PROMPT.replace("{spacing}", spacing).replace("{texts}", texts)))
+        jobs.append((p, EDGE_PROMPT.replace("{every}", str(every)).replace("{texts}", texts)))
     print(f"[genius-footage] edges ({prefix}): {len(strips)} runs on {len(pages)} sheets…", file=sys.stderr)
     got = {}
 
@@ -277,7 +276,7 @@ def _edge_pass(src: str, c: dict, v: dict, seek: list, out_dir: Path, strips: di
 
 def _index(label, gid: str, n: int) -> int | None:
     """'03a-4' → 4 when it names a cell of group gid."""
-    m = re.fullmatch(r"\s*(\d+[abm])-(\d+)\s*", str(label or ""))
+    m = re.fullmatch(r"\s*(\d+[ab])-(\d+)\s*", str(label or ""))
     return int(m[2]) if m and m[1].lstrip("0") == gid.lstrip("0") and 1 <= int(m[2]) <= n else None
 
 
@@ -293,10 +292,8 @@ def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, 
             pending[f"{n:02d}a"] = _strip(p0 - step, p0, every)
         if p1 < last:
             pending[f"{n:02d}b"] = _strip(p1, min(last, p1 + step), every)
-    fine = {}
     for rnd in range(1, EDGE_WIDEN + 2):
-        ans = _edge_pass(src, c, v, seek, out_dir, pending, targets,
-                         f"Cells in a run are {every} frames apart.", f"edges{rnd}", workers)
+        ans = _edge_pass(src, c, v, seek, out_dir, pending, targets, every, f"edges{rnd}", workers)
         wider = {}
         for g, fr in pending.items():
             t, kind, it = targets[int(g[:-1]) - 1], g[-1], ans.get(g, {})
@@ -309,9 +306,6 @@ def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, 
                 r = _index(it.get("readable"), g, len(fr))
                 if r is not None:  # a wider run is earlier in time, so a hit there wins
                     t["readable"] = fr[r - 1]
-                    fine.pop(g[:-1] + "m", None)
-                    if r > 1 and fr[r - 1] - fr[r - 2] > 1:
-                        fine[g[:-1] + "m"] = list(range(fr[r - 2], fr[r - 1] + 1))
             k = _index(it.get("first" if kind == "a" else "last"), g, len(fr))
             edge = "入点" if kind == "a" else "出点"
             if k is None:
@@ -328,27 +322,11 @@ def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, 
                     wider[g] = _strip(fr[-1], min(last, fr[-1] + step), every)
                 elif fr[-1] < last:
                     t["review"].append(f"出点可能晚于 f{fr[-1]}")
-            elif kind == "a":
-                t["in"] = fr[k - 1]
-                if fr[k - 1] - fr[k - 2] > 1:
-                    fine[g] = list(range(fr[k - 2], fr[k - 1] + 1))
             else:
-                t["out"] = fr[k - 1]
-                if fr[k] - fr[k - 1] > 1:
-                    fine[g] = list(range(fr[k - 1], fr[k] + 1))
+                t["in" if kind == "a" else "out"] = fr[k - 1]
         pending = wider
         if not pending:
             break
-    ans2 = _edge_pass(src, c, v, seek, out_dir, fine, targets, "Cells in a run are consecutive frames.",
-                      "frames", workers)
-    for g, fr in fine.items():
-        t, kind, it = targets[int(g[:-1]) - 1], g[-1], ans2.get(g, {})
-        k = _index(it.get({"a": "first", "b": "last", "m": "readable"}[kind]), g, len(fr))
-        if k is None:
-            what = {"a": "入点", "b": "出点", "m": "可读帧"}[kind]
-            t["review"].append(f"逐帧复核没有给出{what}，误差在 {every} 帧以内")
-            continue
-        t[{"a": "in", "b": "out", "m": "readable"}[kind]] = fr[k - 1]
     for t in targets:
         if t.get("readable") is not None and t["readable"] < t["in"]:
             t["readable"] = t["in"]
@@ -356,16 +334,25 @@ def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, 
 
 # ── 4. How it enters and leaves, from measured cuts ─────────────────────
 
-def relations(t: dict, shots: list, fps: float, last: int) -> None:
+def relations(t: dict, shots: list, fps: float, last: int, every: int) -> None:
     cuts, half = [s["first"] for s in shots[1:]], round(fps / 2)
+    # An edge is known to one cell (every frames); a measured cut inside that cell is where it enters / leaves.
+    snap = [x for x in cuts if t["in"] - every < x <= t["in"]]
+    if snap:
+        t["in"] = snap[-1]
+    snap = [x for x in cuts if t["out"] < x <= t["out"] + every]
+    if snap:
+        t["out"] = snap[0] - 1
     i, o = t["in"], t["out"]
     inside = [x for x in cuts if i < x <= o]
     head = inside[0] if inside and inside[0] - i <= half else None      # shows up just before a cut
     tail = inside[-1] if inside and o - inside[-1] < half and o + 1 not in cuts else None  # lingers past one
     if i in cuts:
-        enter = "跟切点同帧出现"
+        enter = "随切点出现"
     elif head is not None:
         enter = f"切点 f{head} 前 {head - i} 帧，先在上一个镜头出现"
+        # real early entries and text in the previous shot taken for the overlay look the same here
+        t["review"].append(f"入点在切点 f{head} 之前（先在上一个镜头出现），请看一眼是不是它")
     else:
         near = [x for x in cuts if 0 < i - x <= half]
         enter = f"切点 f{near[-1]} 后 {i - near[-1]} 帧出现" if near else "在镜头内出现"
@@ -420,6 +407,7 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS, workers: int = WORKERS) -
         read(src, c, v, seek, out_dir, targets, workers)
         for t in targets:
             if t.get("unread"):
+                t["cat"] = "字牌或实拍文字"
                 v["warnings"].append(f"「{t['text']}」原尺寸画面上没认出叠加文字（多半是 3D 字牌或实拍文字），已归入其他包装")
         others += [t for t in targets if t["cat"] == "字牌" or t.get("unread")]
         targets = [t for t in targets if t["cat"] != "字牌" and not t.get("unread")]
@@ -436,7 +424,7 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS, workers: int = WORKERS) -
     counter = {"花字": 0, "人名条": 0}
     for t in sorted(targets, key=lambda x: x["in"]):
         t["out"] = min(t["out"], last)
-        relations(t, r["shots"], fps, last)
+        relations(t, r["shots"], fps, last, max(1, math.ceil(step / EDGE_STEPS)))
         counter[t["cat"]] += 1
         t["id"] = f"H{counter['花字']:02d}" if t["cat"] == "花字" else f"N{counter['人名条']}"
         t.update(tc_in=tc(t["in"]), tc_out=tc(t["out"]), frames=t["out"] - t["in"] + 1,
@@ -478,16 +466,17 @@ def _note(t: dict) -> str:
 
 
 def render_md(doc: dict) -> str:
-    fps, dur = doc["fps"], doc["duration"]
+    fps, dur, every = doc["fps"], doc["duration"], doc["edge_every_frames"]
     lines = [f"# {doc['file']} 花字表", "",
              f"- 源文件：`{doc['file']}`，{doc['width']}×{doc['height']}，{fps:g}fps，{doc['frames']} 帧，"
              f"{int(dur // 60)}:{dur % 60:05.2f}",
              f"- 生成：{doc['generated']}，genius-footage overlays.py，模型 {doc['model']}。每 {doc['sample_every_frames']} "
-             f"帧抽一帧找花字，原尺寸画面认字，再裁出花字区域看连续帧定入点和出点（先每 {doc['edge_every_frames']} 帧一格，再逐帧）",
+             f"帧抽一帧找花字，原尺寸画面认字，再裁出花字区域、每 {every} 帧一格定入点和出点",
              f"- 帧号从 0 开始；时间码格式为 `时:分:秒:帧`，每秒 {round(fps)} 帧",
-             "- **入点** = 第一帧能看到任何元素（包括先出的线条、底条、闪光）；**出点** = 最后一帧还能看到（含这一帧）。"
+             f"- 入出点是给剪辑的参考，精度约 {every} 帧（{every / fps:.2f} 秒）："
+             "**入点** = 看得到任何元素（包括先出的线条、底条、闪光）的第一格；**出点** = 还看得到的最后一格（含这一帧），"
              "剪辑软件里出点通常要填「出点帧 + 1」",
-             "- **可读** = 第一行文字完整可读的第一帧",
+             "- **可读** = 第一行文字完整可读的第一格",
              "- **框** = 模型在原尺寸画面上框的大致范围（像素 x,y 宽×高），没有逐像素测量，盖旧花字前请外扩",
              "- 不算进来的：底部台词字幕、水印、画面里实拍到的文字",
              f"- 状态：**{doc['status']}**", ""]
