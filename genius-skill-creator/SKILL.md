@@ -2,7 +2,7 @@
 name: genius-skill-creator
 description: "创建、修复、审计、评测与优化 SKILL.md 技能包及多平台适配器：支持工作流脚手架生成、规范审计与安全扫描。不要用于普通业务代码编写、应用排错或通用文本翻译。"
 metadata:
-  version: "2.0.1"
+  version: "2.1.0"
 ---
 
 # Genius Skill Creator
@@ -74,14 +74,17 @@ For trigger tuning, read `references/eval-workflow.md`. For checkable behavior, 
 
 ### Optimize
 
-Audit is read-only. For Optimize, state the limited file scope before editing, then validate only that scope; do not perform unrelated refactors.
+Audit is read-only. For Optimize, state the file scope before editing, then validate that scope. Inside it, restructure as far as the goal below needs (split, merge, rewrite, move); do not touch what does not serve it, such as reformatting for its own sake. Before restructuring, tell the user the plan (what moves where, what is split, merged or rewritten) and the reason for each part, and start only after they agree.
+
+The goal is a leaner skill that works at least as well and that the model reads more precisely. Leaner alone is not success: cutting, moving or splitting text changes what the model reads, so treat every Optimize as a behavior change even when none is intended.
 
 1. Capture the six requirement fields in `references/skill-optimization-template.md`.
 2. Reshape to that template: `SKILL.md` keeps trigger, mode routing, workflow, resource map, and output contract; reusable detail moves to `references/`, deterministic work to `scripts/`, runtime facts to `agents/`.
 3. Cut what is said twice, but keep every resource path named once (see Gotchas).
 4. Update evals when trigger or output risk changes.
 5. Check referenced resources and script entrypoints exist, adapters match declared runtimes, and description triggers align with evals.
-6. Validate before hub sync.
+6. Compare before and after: snapshot the pre-edit skill as `old_skill/`, run the same eval prompts (covering every module the change touched) against both per `references/eval-run-loop.md`, and compare the route or module chosen, the commands and the output contract. Ship only when the new version is equal or better on every prompt; on a regression, fix or revert.
+7. Validate before hub sync.
 
 ### Port
 

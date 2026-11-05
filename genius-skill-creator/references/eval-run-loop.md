@@ -10,7 +10,10 @@ Run a with-skill vs baseline comparison when:
 
 - output is a file, command result, or other checkable artifact;
 - you are creating a new skill or changing behavior of an existing one;
+- you optimized or merged a skill (thinned `SKILL.md`, split or joined modules, moved text between files), even if no behavior was meant to change;
 - the user did not opt out.
+
+For an optimization, reuse the skill's own `evals/evals.json` prompts instead of inventing new ones. When the checkable result is the chosen route and command, a pass may stop at the planned command without calling paid APIs.
 
 Skip for pure writing style unless the user wants a side-by-side read.
 

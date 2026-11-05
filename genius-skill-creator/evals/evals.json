@@ -19,16 +19,18 @@
       "id": "optimize-existing-skill",
       "prompt": "Optimize this existing skill so it can be the template for the rest of my Skill Hub.",
       "trigger_expected": true,
-      "expected_output": "Classifies the request as Optimize, reads skill-optimization-template.md, keeps SKILL.md thin, moves detailed guidance into references, records output standard, and validates before delivery.",
+      "expected_output": "Classifies the request as Optimize, reads skill-optimization-template.md, keeps SKILL.md thin, moves detailed guidance into references, records output standard, compares the pre-edit snapshot (old_skill) against the new version on the same eval prompts, and validates before delivery.",
       "files": [
         "SKILL.md",
-        "references/skill-optimization-template.md"
+        "references/skill-optimization-template.md",
+        "references/eval-run-loop.md"
       ],
       "assertions": [
         {"type": "contains", "value": "Optimize"},
         {"type": "contains", "value": "skill-optimization-template.md"},
         {"type": "contains", "value": "SKILL.md"},
-        {"type": "contains", "value": "references"}
+        {"type": "contains", "value": "references"},
+        {"type": "contains", "value": "old_skill"}
       ]
     },
     {

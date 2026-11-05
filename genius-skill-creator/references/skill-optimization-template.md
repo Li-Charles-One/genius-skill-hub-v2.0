@@ -103,7 +103,7 @@ Run the smallest set that proves the change:
 - parse every `agents/*.yaml`;
 - run `node --check` or language syntax checks for changed scripts;
 - run representative script smoke tests when scripts changed;
-- run or manually review evals when trigger/output behavior changed. Use `eval-run-loop.md` for with-skill vs baseline.
+- run or manually review evals when trigger/output behavior changed, and always after an optimization or merge (text cut, moved or split). Use `eval-run-loop.md` for with-skill vs baseline or old vs new.
 - review commands against `cross-platform-command-standard.md` when command examples changed.
 
 When syncing to Skill Hub, validate both the local source package and the synced package.
