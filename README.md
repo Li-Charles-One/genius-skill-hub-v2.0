@@ -35,6 +35,7 @@
 | [genius-voice](./genius-voice/) | Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo, audio generation via Doubao Seed Audio（语音） |
 | [genius-subtitle](./genius-subtitle/) | Subtitles for a finished video: from a genius-sound project, ASR or SRT; bilingual layout, Netflix line/speed checks, SRT/ASS, burn-in（字幕） |
 | [genius-sound](./genius-sound/) | Film sound post, module by module: spotting, dialogue & narration, foley, SFX & ambience, music, mix & master to delivery specs with DME stems and M&E（声音后期） |
+| [genius-openscreen](./genius-openscreen/) | Edit OpenScreen screen recordings via its MCP: cut frozen pauses, cursor-centered tracking zooms on clicks and text selections, speed up AI waits（录屏剪辑） |
 
 ### Tools
 
@@ -52,6 +53,7 @@ genius-skill-hub-v2.0/
 ├── genius-design/
 ├── genius-footage/
 ├── genius-omni/
+├── genius-openscreen/
 ├── genius-skill-creator/
 ├── genius-sound/
 ├── genius-subtitle/

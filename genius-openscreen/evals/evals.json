@@ -1,0 +1,79 @@
+{
+  "skill_name": "genius-openscreen",
+  "evals": [
+    {
+      "id": "full-edit",
+      "prompt": "OpenScreen 里刚录的这条 take 帮我剪一下：先去掉停顿，再加缩放，要有动感",
+      "trigger_expected": true,
+      "expected_output": "Creates a checkpoint, runs scan_take.py on the take, trims pause candidates with addTrims, plans manual cursor-centered zoom keyframes (not addAutoZooms) at 2.2-2.5x, checks frames with getFrames, and reports trims, zooms, checkpoint id and estimated duration.",
+      "files": ["SKILL.md", "references/zoom-keyframes.md", "references/pauses-and-speed.md"],
+      "assertions": [
+        {"type": "contains", "value": "scan_take.py"},
+        {"type": "contains", "value": "manual"},
+        {"type": "contains", "value": "createCheckpoint"}
+      ]
+    },
+    {
+      "id": "selection-tracking",
+      "prompt": "缩放不够明显，我划词的时候也要放大跟着走，鼠标最好一直在画面中间",
+      "trigger_expected": true,
+      "expected_output": "Replaces auto zooms with a chain of manual keyframes at the cursor telemetry positions, ends each hold when the drag starts and places the next keyframe at the drag end about 0.7 s later, uses 2.5x on selections, then verifies centering with getFrames.",
+      "files": ["SKILL.md", "references/zoom-keyframes.md"],
+      "assertions": [
+        {"type": "contains", "value": "drag"},
+        {"type": "contains", "value": "focus"}
+      ]
+    },
+    {
+      "id": "speed-ai-wait",
+      "prompt": "录屏里 AI 输出那段太慢了，帮我加速一下",
+      "trigger_expected": true,
+      "expected_output": "Adds a speed region (about 3x) from after the click that started the output until the answer is complete, merges zoom keyframes inside it into one zoom, checks no transition is cut, and reports the time saved.",
+      "files": ["SKILL.md", "references/pauses-and-speed.md"],
+      "assertions": [
+        {"type": "contains", "value": "addSpeed"}
+      ]
+    },
+    {
+      "id": "silent-pauses",
+      "prompt": "这条录屏没有说话，帮我把中间卡住不动的地方剪掉",
+      "trigger_expected": true,
+      "expected_output": "Runs scan_take.py, uses frozen picture (-70 dB) intersected with idle cursor spans of at least 1.5 s with 0.3 s padding, applies the agreed trims in one addTrims call and reports the total cut.",
+      "files": ["SKILL.md", "references/pauses-and-speed.md"],
+      "assertions": [
+        {"type": "contains", "value": "scan_take.py"},
+        {"type": "contains", "value": "addTrims"}
+      ]
+    },
+    {
+      "id": "near-miss-subtitles",
+      "prompt": "给这条录屏加中英双语字幕并烧进画面",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-subtitle, not genius-openscreen.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "scan_take.py"}
+      ]
+    },
+    {
+      "id": "near-miss-shot-list",
+      "prompt": "这条素材一共几个镜头？每个镜头从第几帧到第几帧",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-footage, not genius-openscreen.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "scan_take.py"}
+      ]
+    },
+    {
+      "id": "near-miss-promo",
+      "prompt": "用我这个前端项目做一条产品宣传片，带镜头卡和音效",
+      "trigger_expected": false,
+      "expected_output": "Uses video-shotcraft, not genius-openscreen.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "scan_take.py"}
+      ]
+    }
+  ]
+}
