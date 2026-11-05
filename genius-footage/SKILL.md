@@ -1,21 +1,22 @@
 ---
 name: genius-footage
-description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于剪辑或生成视频。"
+description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、逐帧精确的入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于剪辑或生成视频。"
 metadata:
-  version: "2.3.5"
+  version: "2.4.0"
 ---
 
 # Genius Footage（素材说明书）
 
-This skill exists to write **one footage brief per clip** for an editor: `<clip>.footage.md` (readable), `<clip>.footage.json` (full data: word times, measurements) and `<clip>.footage/` (storyboards), next to the clip. Nothing else.
+This skill exists to write **one footage brief per clip** for an editor: `<clip>.footage.md` (readable), `<clip>.footage.json` (full data: word times, measurements) and `<clip>.footage/` (storyboards), next to the clip. On request it writes the overlay sheet instead: `<clip>.overlays.md` / `.overlays.json` / `.overlays/` (`scripts/overlays.py`, see Overlay Sheet). Nothing else.
 
 Format: AG_FOOTAGE/1.1, produced by `scripts/footage.py`. Cut detection rules: `references/measurement.md`. Editing lexicon read into the shot-description prompt (用途, 景别, 角度, 运镜, 标记): `references/lexicon.md` (edit it, not the code). The cut check keeps its own coarse categories. Trigger checks: `evals/evals.json`.
 
 ## Non-Negotiables
 
 - Frame numbers, timecode, shot count and line start/end come only from local frame measurement (`measure.py`) and ASR word times (Doubao, `asr.py`). The model describes and judges, and refers to shots, lines, people and segments by ID only (S/U/P/G); the script converts IDs to frames.
+- In the overlay sheet the model names numbered storyboard cells only; every frame comes from the sampling grid. Never have the model watch the video and report overlay times.
 - Possible mishearings are proposed in `待确认`, never written into the transcript.
-- The brief is the deliverable: report status and paths, do not paste the brief unless asked.
+- The brief (or overlay sheet) is the deliverable: report status and paths, do not paste it unless asked.
 
 ## Run
 
@@ -23,6 +24,7 @@ Format: AG_FOOTAGE/1.1, produced by `scripts/footage.py`. Cut detection rules: `
 python3 "<skill_dir>/scripts/footage.py" --check
 python3 "<skill_dir>/scripts/footage.py" <clip> [--script script.txt] [--model M] [--workers 3] [--output text|json]
 python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list only: no model, no brief
+python3 "<skill_dir>/scripts/overlays.py" <clip> [--fps 1] [--model M] [--workers 3] [--output text|json]   # overlay sheet only
 ```
 
 `<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; no Python packages. The model key lives in `scripts/.env`, never in the package: `FOOTAGE_API_KEY` (or `CPA_API_KEY`); optional `FOOTAGE_BASE_URL` (default the CPA relay `https://cpa-jp.charles-ai.space/v1`) and `FOOTAGE_MODEL` (default `gemini-4-argon-high`). Speech needs `DOUBAO_API_KEY` (Doubao file ASR 2.0 at `https://openspeech.bytedance.com/api/v3/auc/bigmodel/`, `scripts/asr.py`, a copy of genius-voice's ASR code, so footage never calls genius-voice's script): the key belongs to genius-voice and is read from its `scripts/.env` (next to this skill, or `GENIUS_VOICE_DIR`); a `DOUBAO_API_KEY` in the environment or this `scripts/.env` overrides it; without it the transcript is skipped and the status is `needs_review`.
@@ -33,9 +35,20 @@ python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list 
 - Clips longer than 30 minutes skip the whole-clip step (warned).
 - Speech and the whole-clip proxy start at once and run beside the storyboard steps; storyboard sheets go `--workers` (default 3) at a time. Run one clip at a time; more requests in flight make the CPA gateway return 502 (retried after 5 / 15 / 30 s). Measured: an 8-min clip with 217 shots took 7.2 min at 3 workers (17 min one sheet at a time), with no 502.
 
+## Overlay Sheet（花字表）
+
+For a finished edit whose 花字 (designed captions) and 人名条 (name lower thirds) are to be redesigned or covered. Not part of the brief, and it leaves the AG_FOOTAGE format alone.
+
+- Steps: find (one frame per second, `--fps`, on numbered 384×216 storyboard sheets, 40 cells each; the model names the cells each overlay is on) → read (one full-resolution frame per overlay, 60% of the way through its cells; the model copies the text and boxes it) → edges (cells cropped around that box: every few frames across the gap between two samples, then every frame; the model picks the first / last cell where any part shows, searching up to two more seconds out when it already shows at a run's outer end) → `measure.py` cuts say how each one enters and leaves (with a cut, a few frames before or after one, or inside a shot).
+- Definitions in the sheet: 入点 = first frame where any element shows (lines, bars and sparkles that lead the text included); 出点 = last frame where any shows, inclusive (an editor enters 出点 + 1); 可读 = first frame where its first line is complete. The box is the model's, on the full-resolution frame: approximate, widen it before covering an old overlay.
+- Listed with sampled times only (± one sample): 3D text signs (字牌), title cards, full-screen graphics, labels. Not listed: dialogue subtitles, watermarks, text filmed in the scene. Not provided: the frame each further line of a multi-line overlay appears.
+- `--fps 2` doubles the find sheets; use it when overlays may be shorter than about one second.
+
 ## Report
 
 The status (`ok` / `needs_review`), counts (shots, lines, people, segments), the `.footage.md` path, and every review, validation and warning line as printed. `needs_review` with only uncertain words is normal: list them for the user to confirm.
+
+Overlay sheet: the status, counts (花字, 人名条, other packaging), the `.overlays.md` path, and every review and warning line as printed.
 
 Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `UNSUPPORTED_FORMAT` 4, `DEPENDENCY_MISSING` 5, `PROVIDER_ERROR` 6, `TIMEOUT` 7. Report the code and message as-is.
 
@@ -47,11 +60,17 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 - Two suspects close together on one transition (f4056 / f4062) can place the same cut a few frames apart between runs.
 - On a finished edit with music, sung lyrics and speech can land in one line, and cut points then fall inside the lyrics.
 - Homophones survive ASR (采销 → 彩销); they appear as suspect words when the script or on-screen text shows the right spelling.
+- Overlay text must be read on the full-resolution frame: on 384-px cells the model misread brand names differently every run and once invented text (「拿捏Midea！」 for 「京东JWELL」). The read pass got 20/20 on 京东.mp4 (7:10, 17 花字 + 3 人名条, hand-checked baseline, 2026-11-05).
+- Overlay edges on that clip: out-points 19/20 within ±2 frames (worst +3); in-points 15/20, because the model picks the first frame it can clearly see and misses the faint first frames of a fade-in or a thin leading line (H07 +6). Widen a cover over an old overlay by a few frames. 7 min, about 37 requests at 3 workers.
+- The every-frame pass sometimes answers nothing (8 of 50 runs); the coarse pick stands (within 5 frames at 50 fps) and goes to review. Once the coarse pick was itself wrong: subtitles and a printed logo in the crop were taken for a name bar, 14 frames early, in review.
+- 3D text signs get listed as 花字 on the find sheets; the read pass sees no overlay text on them and moves them to other packaging, with a warning.
+- Boxes drawn on storyboard sheets are unreliable; on the full-resolution frame they were right on 22 of 23, the miss a half-drawn name bar.
 
 ## Resource Map
 
 - `scripts/footage.py`: the brief, end to end; `--check`.
 - `scripts/measure.py`: frame-by-frame cut measurement; the shot list on its own.
+- `scripts/overlays.py`: the overlay sheet (花字表), end to end.
 - `scripts/asr.py`: Doubao file ASR with word times and speaker labels.
 - `scripts/client.py`: model requests (CPA relay by default) and the compressed whole-clip proxy.
 - `scripts/storyboard.py`: exact-frame storyboard sheets with drawn-in labels.

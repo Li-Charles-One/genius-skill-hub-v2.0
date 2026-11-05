@@ -36,21 +36,30 @@ FONT = {  # 5x7, '#' = ink
 }
 
 
-def grab(path: str, seek_times: list[float], fps: float, frames: list[int], workers: int = 4) -> dict[int, bytes]:
+def grab(path: str, seek_times: list[float], fps: float, frames: list[int], workers: int = 4,
+         crop: tuple[int, int, int, int] | None = None) -> dict[int, bytes]:
     """{frame: CELL_W x CELL_H rgb24 bytes}, letterboxed. seek_times = measure.frame_times(path, for_seek=True).
-    Seeks half a frame early so the first frame decoded at or after the seek point is exactly the requested one."""
-    vf = (f"scale={CELL_W}:{CELL_H}:force_original_aspect_ratio=decrease,"
-          f"pad={CELL_W}:{CELL_H}:(ow-iw)/2:(oh-ih)/2")
+    Seeks half a frame early so the first frame decoded at or after the seek point is exactly the requested one.
+    crop = (x, y, w, h) in source pixels, cut out before scaling."""
+    return {f: b for (f, _), b in _grab(path, seek_times, fps, [(f, crop) for f in frames], workers).items()}
 
-    def one(f: int) -> tuple[int, bytes]:
+
+def _grab(path: str, seek_times: list[float], fps: float, keys: list, workers: int = 4) -> dict:
+    """{(frame, crop): cell bytes} for (frame, crop or None) keys."""
+    fit = (f"scale={CELL_W}:{CELL_H}:force_original_aspect_ratio=decrease,"
+           f"pad={CELL_W}:{CELL_H}:(ow-iw)/2:(oh-ih)/2")
+
+    def one(key: tuple) -> tuple[tuple, bytes]:
+        f, crop = key
+        vf = (f"crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]}," if crop else "") + fit
         t = max(0.0, seek_times[f] - 0.5 / fps)
         out = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.6f}", "-i", path, "-map", "0:v:0",
                               "-frames:v", "1", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                              capture_output=True).stdout
-        return f, out if len(out) == CELL_W * CELL_H * 3 else bytes(CELL_W * CELL_H * 3)
+        return key, out if len(out) == CELL_W * CELL_H * 3 else bytes(CELL_W * CELL_H * 3)
 
     with ThreadPoolExecutor(workers) as ex:
-        return dict(ex.map(one, sorted(set(frames))))
+        return dict(ex.map(one, sorted(set(keys), key=lambda k: (k[0], k[1] or ()))))
 
 
 def _label(cell: bytearray, text: str) -> None:
@@ -70,9 +79,11 @@ def _label(cell: bytearray, text: str) -> None:
 
 
 def sheets(path: str, seek_times: list[float], fps: float, groups: list[tuple[str, list[tuple[str, int]]]],
-           out_dir: Path, prefix: str) -> list[tuple[Path, list[str]]]:
+           out_dir: Path, prefix: str, crops: dict | None = None) -> list[tuple[Path, list[str]]]:
     """groups: [(group id, [(cell label, frame), ...])]. A group is never split across sheets.
+    crops: {group id: (x, y, w, h)} to show only that part of the frame in the group's cells.
     Returns [(sheet path, [group ids on it])]."""
+    crops = crops or {}
     out_dir.mkdir(parents=True, exist_ok=True)
     pages, cur = [], []
     for g in groups:
@@ -82,15 +93,15 @@ def sheets(path: str, seek_times: list[float], fps: float, groups: list[tuple[st
         cur.append(g)
     if cur:
         pages.append(cur)
-    pix = grab(path, seek_times, fps, [f for _, cells in groups for _, f in cells])
+    pix = _grab(path, seek_times, fps, [(f, crops.get(g)) for g, cells in groups for _, f in cells])
     result = []
     for n, page in enumerate(pages, 1):
-        cells = [(label, f) for _, c in page for label, f in c]
+        cells = [(label, (f, crops.get(g))) for g, c in page for label, f in c]
         rows = (len(cells) + COLS - 1) // COLS
         sw, sh = COLS * CELL_W + (COLS + 1) * PAD, rows * CELL_H + (rows + 1) * PAD
         sheet = bytearray(bytes(BG) * (sw * sh))
-        for k, (label, f) in enumerate(cells):
-            cell = bytearray(pix[f])
+        for k, (label, key) in enumerate(cells):
+            cell = bytearray(pix[key])
             _label(cell, label)
             x0, y0 = PAD + (k % COLS) * (CELL_W + PAD), PAD + (k // COLS) * (CELL_H + PAD)
             for y in range(CELL_H):

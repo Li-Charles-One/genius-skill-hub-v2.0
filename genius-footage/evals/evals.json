@@ -81,6 +81,26 @@
       "assertions": [
         {"type": "contains", "value": "sound.py"}
       ]
+    },
+    {
+      "id": "overlay-sheet",
+      "prompt": "桌面上这条成片 京东.mp4 一共多少个花字？每个从第几帧出现到第几帧消失，我要重新设计花字再压制",
+      "trigger_expected": true,
+      "expected_output": "Runs overlays.py on the clip and reports the status, the counts of 花字 / 人名条, the .overlays.md path and every review line; does not hand-roll OCR or frame grabs, and does not have the model report times from the video.",
+      "files": ["SKILL.md"],
+      "assertions": [
+        {"type": "contains", "value": "overlays.py"}
+      ]
+    },
+    {
+      "id": "burn-subtitles-near-miss",
+      "prompt": "给这条宣传片 promo.mp4 加中英双语字幕，然后烧进画面",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-subtitle (ASR, translation, SRT/ASS, burn-in); no footage brief or overlay sheet.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "overlays.py"}
+      ]
     }
   ]
 }
