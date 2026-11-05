@@ -17,7 +17,7 @@
       "prompt": "用温柔的女声把这段文案读出来，导出 mp3：晚安，今天辛苦了。",
       "trigger_expected": true,
       "expected_output": "Runs tts with a Chinese female preset (冰糖 or 茉莉), a 温柔 style tag or --style, and --out ending in .mp3; reports path and duration.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "files": ["SKILL.md", "references/tts.md"],
       "assertions": [
         {"type": "contains", "value": "tts"},
         {"type": "contains", "value": ".mp3"}
@@ -59,7 +59,7 @@
       "prompt": "把这段采访录音逐字转写，标上时间和说话人 interview.wav",
       "trigger_expected": true,
       "expected_output": "Runs asr with --speakers and --output json; reports the [S1]/[S2] transcript with segment times.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "files": ["SKILL.md", "references/asr.md"],
       "assertions": [
         {"type": "contains", "value": "--speakers"}
       ]
@@ -69,7 +69,7 @@
       "prompt": "生成一段 15 秒的雨夜老街环境声，远处偶尔有闷雷",
       "trigger_expected": true,
       "expected_output": "Runs scripts/voice.py gen with a scene prompt describing the rain and thunder; reports path and duration.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "files": ["SKILL.md", "references/gen.md"],
       "assertions": [
         {"type": "contains", "value": "gen"}
       ]
@@ -79,7 +79,7 @@
       "prompt": "做一首 30 秒的儿歌，木琴伴奏，童声唱，导出 mp3",
       "trigger_expected": true,
       "expected_output": "Runs gen (not tts with (唱歌)) with instruments, voice and lyrics in the prompt, and --out ending in .mp3.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "files": ["SKILL.md", "references/gen.md"],
       "assertions": [
         {"type": "contains", "value": "gen"},
         {"type": "contains", "value": ".mp3"}
@@ -90,7 +90,7 @@
       "prompt": "按这个时间轴配一段双人对白：0-2.5 秒女声小声问“有人吗？”，4.2-6 秒男声低沉回答“别出声。”",
       "trigger_expected": true,
       "expected_output": "Runs gen with [开始s:结束s] line prefixes for each cue, ideally with --subtitle to check timing.",
-      "files": ["SKILL.md", "references/usage.md"],
+      "files": ["SKILL.md", "references/gen.md"],
       "assertions": [
         {"type": "contains", "value": "gen"},
         {"type": "contains", "value": "s:"}
