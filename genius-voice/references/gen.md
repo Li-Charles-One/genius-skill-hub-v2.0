@@ -53,8 +53,9 @@ A 10s, 3-line timeline matched the total length exactly, line ends within 0.1s, 
 ## Gotchas
 
 - A length written in plain words is only a hint (measured: "3秒钟" gave 0.54s). Use `[开始s:结束s]` tags when length or timing matters.
-- Timing is close, not exact (measured: total length exact, line ends within 0.1s, line starts usually 0.2–0.4s late but once 1.7s late on a whispered opening line; shifting starts earlier did not reliably help). It can also add words that are not in the script (measured: an extra “嘘”). When the script or timing must be exact, check the result with `asr` or `--subtitle`.
+- Timing is close, not exact (measured: total length exact, line ends within 0.1s, line starts usually 0.2–0.4s late but once 1.7s late on a whispered opening line; shifting starts earlier did not reliably help). It can also add words that are not in the script (measured: an extra “嘘”). When the script or timing must be exact, check the result with `asr` (`--subtitle` can show the script even when the audio is wrong, see below).
 - Keep a character's voice across takes by passing the first take as `--ref` and starting the prompt `In the exact voice of @音频1, …`. Redubbing a video to the lips (one `gen` per line, placed locally) is genius-sound's job.
+- A `--ref` clip that reads the same script gets copied instead of the prompt: lines come back repeated or missing (measured: "一杯 Whisky" and "日复一日" each said twice, "又是完美的一天，今夜" dropped, "所所有"), while `--subtitle` still showed every line correct. `--subtitle` is no check for the words here; run `asr` on the output. With a reference of the same voice saying unrelated content, and "每句台词只说一遍，一字不差" in the prompt, an 11-line timeline came back word-perfect.
 - Whispers dropped words ("Easy…", "Grip") until the prompt said "clear, audible stage whisper" and the `[开始s:结束s]` window was about 1.5× the spoken length.
 - Output is quiet: speech peaked around −32 dBFS. Normalise before mixing.
 - A sound-effect timeline can return a loud sound the prompt never asked for (measured: 37.4–40s of a 16s segment). Check the level over time before using it as a bed.
