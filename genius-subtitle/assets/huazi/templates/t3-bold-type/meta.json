@@ -1,0 +1,10 @@
+{
+  "id": "t3-bold-type",
+  "name": "粗字排版",
+  "description": "无底板的纯字排版：粗黑体微斜，{重点} 放大、其余缩小形成大小对比；行尾带品牌色金属光泽并有一次扫光；下方英文小字、右上小标签、▶ 引导副标题；数字用窄体大号。适合数据、口号、章节标题，透明叠在任何画面上。",
+  "reference": "用户提供的参考图（黑底白色粗字排版合集）：只借风格语言",
+  "default_brand": "2F7BFF",
+  "types": ["title", "stack", "number", "list", "name"],
+  "aligns": ["left", "right", "center"],
+  "fonts": ["Source Han Sans SC Heavy / Bold (SIL OFL 1.1, 系统安装)", "Rajdhani (SIL OFL 1.1, assets/huazi/fonts)"]
+}

@@ -1,0 +1,43 @@
+/* 模板 3 · 粗字排版（t3-bold-type）：无底板，大小字对比 + 行尾品牌色光泽 */
+.hz { padding: 12px 24px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.45)) drop-shadow(0 0 1px rgba(0,0,0,.35)); }
+.align-right { text-align: right; } .align-center { text-align: center; }
+.hz-line { position: relative; display: block; width: max-content; }
+.align-right .hz-line { margin-left: auto; } .align-center .hz-line { margin: 0 auto; }
+.hz-bar { display: none; }
+.hz-t { display: inline-block; transform: skewX(-7deg); font-weight: 900; font-size: 44px; line-height: 1.12; letter-spacing: .02em;
+        background: linear-gradient(90deg, #fff 0%, #fff 64%, rgb(var(--brand-light)) 84%, rgb(var(--brand)) 100%), #fff;
+        -webkit-background-clip: text; background-clip: text; color: transparent; position: relative; }
+/* 大小对比：有 {重点} 的行，非重点字缩小 */
+.hz-t:has(.hz-em) { font-size: 34px; }
+.hz-em { font-size: 1.5em; letter-spacing: .01em; }
+.hz-t .hz-lat { font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 1.12em; }
+/* 扫光：一道品牌色亮带划过文字（文字自身的背景层在动） */
+.hz-t { background-size: 300% 100%, 100% 100%; background-repeat: no-repeat;
+        background-image: linear-gradient(100deg, transparent 42%, rgba(var(--brand-light), 1) 50%, transparent 58%),
+                          linear-gradient(90deg, #fff 0%, #fff 64%, rgb(var(--brand-light)) 84%, rgb(var(--brand)) 100%);
+        animation: t3-sweep 1.2s ease-in-out calc(var(--d, 0s) + .45s) both; }
+@keyframes t3-sweep { from { background-position: 100% 0, 0 0; } to { background-position: 0% 0, 0 0; } }
+.hz-l2 { margin-top: 2px; }
+.type-stack.align-left .hz-l2 { margin-left: 1.6em; } .type-stack.align-right .hz-l2 { margin-right: 1.6em; }
+/* 数字 */
+.hz-num { display: inline-flex; align-items: baseline; margin-left: 6px; transform: skewX(-7deg); }
+.hz-v { font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 74px; line-height: .9;
+        background: linear-gradient(180deg, #fff 30%, rgb(var(--brand-light)) 75%, rgb(var(--brand)) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hz-u { font-weight: 900; font-size: 30px; margin-left: 2px; color: rgb(var(--brand-light)); }
+/* 副标题：▶ 引导 */
+.hz-sub, .hz-items li { display: flex; align-items: center; gap: 8px; width: max-content; margin-top: 6px; font-weight: 800; font-size: 22px; letter-spacing: .04em; transform: skewX(-7deg); }
+.align-right .hz-sub, .align-right .hz-items li { margin-left: auto; } .align-center .hz-sub, .align-center .hz-items li { margin: 6px auto 0; }
+.hz-items { list-style: none; margin: 0; padding: 0; }
+.hz-bullet { width: 0; height: 0; border-left: 11px solid rgb(var(--brand-light)); border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
+/* 小标签：右上角小字 */
+.hz-kicker { font-weight: 800; font-size: 15px; letter-spacing: .08em; margin-bottom: 2px; padding-left: 40%; transform: skewX(-7deg); }
+.align-right .hz-kicker { padding: 0 40% 0 0; } .align-center .hz-kicker { padding: 0; }
+/* 英文小字 */
+.hz-en { margin-top: 4px; font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.92); transform: skewX(-7deg); }
+.hz-ghost { display: none; }
+/* 人名条 */
+.type-name .hz-n { font-size: 42px; letter-spacing: .14em; }
+.type-name .hz-bullet { border-left-color: rgb(var(--brand)); }
+/* 动画：上浮 + 去模糊 */
+.hz-a { animation: t3-in .55s cubic-bezier(.2,.8,.2,1) var(--d, 0s) both, hz-out .35s ease-in var(--out) forwards !important; }
+@keyframes t3-in { from { opacity: 0; transform: translateY(18px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }

@@ -1,0 +1,35 @@
+/* 模板 2 · 电影极简（t2-cinema-serif）：无底板，细宋体 + 大字距 + 方括号 */
+.hz { padding: 10px 20px; text-shadow: 0 0 14px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.45); }
+.align-right { text-align: right; } .align-center { text-align: center; }
+.hz-line { display: block; width: max-content; }
+.align-right .hz-line { margin-left: auto; } .align-center .hz-line { margin: 0 auto; }
+.hz-bar { display: none; }
+.hz-t { font-family: "HZ Serif", serif; font-weight: 500; font-size: 30px; line-height: 1.75; letter-spacing: .38em; color: #fff; }
+.hz-t .hz-lat { font-family: "HZ Serif", serif; letter-spacing: .1em; }
+.hz-em { font-weight: 700; color: rgb(var(--brand)); }
+.hz-l1 .hz-t::before { content: "["; margin-right: .12em; font-weight: 300; }
+.hz-last .hz-t::after { content: "]"; margin-left: -.26em; font-weight: 300; }
+.hz-l2 { margin-left: 2.2em; } .align-right .hz-l2 { margin-left: auto; margin-right: -2.2em; } .align-center .hz-l2 { margin: 0 auto; }
+.hz-l3 { margin-left: 4.4em; }
+/* 数字：细宋体大字 */
+.hz-num { display: inline-flex; align-items: baseline; margin-left: .4em; }
+.hz-v { font-family: "HZ Serif", serif; font-weight: 300; font-size: 64px; letter-spacing: .02em; line-height: 1; }
+.hz-u { font-family: "HZ Serif", serif; font-size: 22px; margin-left: .2em; letter-spacing: .2em; }
+/* 副标题 / 列表 / 小标签 / 英文 */
+.hz-sub, .hz-items li { font-weight: 300; font-size: 15px; letter-spacing: .42em; line-height: 1.8; margin-top: 10px; color: rgba(255,255,255,.88); }
+.hz-items { list-style: none; margin: 4px 0 0; padding: 0; }
+.hz-bullet { display: none; }
+.hz-items li::before { content: "— "; letter-spacing: 0; }
+.hz-kicker { font-family: "HZ Serif", serif; font-weight: 400; font-size: 14px; letter-spacing: .6em; margin-bottom: 8px; color: rgba(255,255,255,.75); }
+.hz-en { font-family: "HZ Serif", serif; font-style: italic; font-size: 13px; letter-spacing: .3em; margin-top: 8px; color: rgba(255,255,255,.7); }
+.hz-ghost { display: none; }
+/* 人名条：细竖线 + 名字 + 职务 */
+.type-name .hz-l1 .hz-t::before, .type-name .hz-last .hz-t::after { content: none; }
+.type-name { border-left: 1px solid rgba(255,255,255,.8); padding-left: 22px; }
+.align-right.type-name { border-left: 0; border-right: 1px solid rgba(255,255,255,.8); padding: 10px 22px 10px 20px; }
+.type-name .hz-n { font-size: 32px; letter-spacing: .5em; }
+.type-name .hz-sub { margin-top: 2px; }
+/* 动画：模糊、字距收拢、慢淡 */
+.hz-a { animation: t2-in 1.4s cubic-bezier(.2,.7,.2,1) var(--d, 0s) both, t2-out .4s ease-in var(--out) forwards !important; }
+@keyframes t2-in { from { opacity: 0; filter: blur(8px); transform: translateY(6px); } to { opacity: 1; filter: none; transform: none; } }
+@keyframes t2-out { to { opacity: 0; filter: blur(4px); } }

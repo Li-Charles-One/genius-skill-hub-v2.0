@@ -1,0 +1,23 @@
+/* Genius Subtitle 花字公共样式：画布、字体、入场/出场动画骨架。模板的 style.css 叠在它后面。 */
+@font-face { font-family: "HZ Num"; font-weight: 600; src: url(fonts/BarlowCondensed-SemiBold.ttf); }
+@font-face { font-family: "HZ Tech"; font-weight: 600; src: url(fonts/Rajdhani-SemiBold.ttf); }
+@font-face { font-family: "HZ Tech"; font-weight: 700; src: url(fonts/Rajdhani-Bold.ttf); }
+
+html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+#stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background-size: cover; background-position: center; }
+.hz { position: absolute; color: #fff; font-family: "Source Han Sans SC", "Noto Sans CJK SC", sans-serif; }
+.hz-lat { font-family: "HZ Tech", "Source Han Sans SC", sans-serif; }
+
+/* 入场：按对齐方向滑入；出场：在 --out 时刻淡出。--d 是每个元素的入场延迟 */
+.hz-a { animation: hz-in-l .6s cubic-bezier(.2,.8,.2,1) var(--d, 0s) both, hz-out .35s ease-in var(--out) forwards; }
+.align-right .hz-a { animation-name: hz-in-r, hz-out; }
+.align-center .hz-a { animation-name: hz-in-c, hz-out; }
+@keyframes hz-in-l { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
+@keyframes hz-in-r { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
+@keyframes hz-in-c { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes hz-out { to { opacity: 0; } }
+/* 装饰层整体跟着出场 */
+.hz-deco { position: absolute; inset: 0; pointer-events: none; animation: hz-fade .5s ease-out .25s both, hz-out .35s ease-in var(--out) forwards; }
+@keyframes hz-fade { from { opacity: 0; } to { opacity: 1; } }
+@font-face { font-family: "HZ Serif"; font-weight: 200 900; src: url(fonts/NotoSerifSC.ttf); }
+.hz-t, .hz-sub, .hz-items li, .hz-en, .hz-kicker, .t5-ghost { white-space: nowrap; }

@@ -1,13 +1,22 @@
 ---
 name: genius-subtitle
-description: "Genius 字幕：给一条成片做字幕并交付：台词来源可以是 genius-sound 声音工程（台词与译文）、视频的语音识别（豆包 ASR，按句切成一行一条），或现成的 SRT；中英等双语排版（默认中上英下、中文字号大），按 Netflix 规范检查每行字数、阅读速度、时长与间隔，中文标点规则（不用逗号句号、改空格），按镜头切点对齐出入点；输出 SRT、ASS，并烧录进画面（遇黑边放进黑边）。用户说「给这条视频加中英字幕」「把字幕烧进去」「这条 vlog 出个字幕文件」「把配好音的片子加上双语字幕」「这个 SRT 帮我检查一下有没有太长太快」「把英文字幕翻成中英双语」时使用。不要用于单纯语音转文字或会议纪要（用 genius-voice），不要用于花字、标题、动态文字包装（扒成片里现有花字的出现时间用 genius-footage），不要用于配音、音效、配乐或混音（用 genius-sound），不要用于视频内容总结（用 genius-omni）。"
+description: "Genius 字幕：给一条成片做字幕并交付：台词来源可以是 genius-sound 声音工程（台词与译文）、视频的语音识别（豆包 ASR，按句切成一行一条），或现成的 SRT；中英等双语排版（默认中上英下、中文字号大），按 Netflix 规范检查每行字数、阅读速度、时长与间隔，中文标点规则（不用逗号句号、改空格），按镜头切点对齐出入点；输出 SRT、ASS，并烧录进画面（遇黑边放进黑边）。另有花字模式：在成片上做花字、人名条、数据标注，内置 5 套代码模板（光带科技、电影极简、粗字排版、玻璃方块、黑金质感）并可按参考图或品牌规范自定义模板，品牌色可换，先在真实画面上出样稿确认风格，再逐帧渲染成带透明通道的 MOV（macOS 默认 H.265 预乘透明，否则 ProRes 4444）和烧录预览；可直接读 genius-footage 扒出的花字表重做旧花字。用户说「给这条视频加中英字幕」「把字幕烧进去」「这条 vlog 出个字幕文件」「把配好音的片子加上双语字幕」「这个 SRT 帮我检查一下有没有太长太快」「把英文字幕翻成中英双语」「按花字表把花字重新做一版」「给这条片子加花字和人名条」「照这张参考图做一套花字模板」时使用。不要用于单纯语音转文字或会议纪要（用 genius-voice），不要用于扒成片里现有花字的文字和出现时间（用 genius-footage），不要用于整条产品宣传片或页面录屏成片（用 video-shotcraft），不要用于配音、音效、配乐或混音（用 genius-sound），不要用于视频内容总结（用 genius-omni）。"
 metadata:
-  version: "1.0.3"
+  version: "1.1.0"
 ---
 
 # Genius Subtitle（字幕）
 
 This skill exists to **put subtitles on a finished video**: get the text (a genius-sound project, ASR, or an SRT), translate, check against subtitle limits, render SRT and ASS, burn in. One folder per video, driven by `subs.json`; `scripts/subs.py` does the work, ASR goes through **genius-voice**, shots come from **genius-footage**. Rules, limits and sources: `references/rules.md`.
+
+**花字模式** (designed captions, name bars, data callouts; not dialogue subtitles) is `scripts/huazi.py`, one folder per video driven by `huazi.json`; workflow, schema, templates, alpha and custom templates: `references/huazi.md`.
+
+## Pick a mode
+
+| The user wants | Mode |
+|---|---|
+| Dialogue / narration as subtitles (SRT, ASS, burned) | 字幕: the source table below |
+| 花字, 人名条, titles or data callouts on a video; redo old 花字 from an overlay sheet; a new 花字 template from a reference | 花字: `huazi.py`, `references/huazi.md` |
 
 ## Pick a source
 
@@ -25,6 +34,7 @@ Then translate into every `layout` language (`events[].text`), `check`, fix, `re
 - Translation is your work: write it into `subs.json`, keep names in their established form, and show the user the subtitle table before burning a long video.
 - Run `check` before `render` and report what is still flagged; never claim lines fit or read in time without that output.
 - ASR text is a draft: names and terms it mishears stay wrong until someone reads them.
+- 花字: get the style confirmed on a `preview` sheet before rendering all items; keep the user's text verbatim (layout and `{…}` emphasis only), add English or decorative words only with their consent, and use only the commercially free fonts listed in `references/huazi.md`.
 
 ## Run
 
@@ -36,9 +46,16 @@ python3 "<skill_dir>/scripts/subs.py" from-asr <dir> [--language auto|zh|en]
 python3 "<skill_dir>/scripts/subs.py" from-srt <dir> <file.srt> [--lang zh|en]
 python3 "<skill_dir>/scripts/subs.py" check <dir>
 python3 "<skill_dir>/scripts/subs.py" render <dir> [--no-burn] [--png]
+
+python3 "<skill_dir>/scripts/huazi.py" --check
+python3 "<skill_dir>/scripts/huazi.py" templates
+python3 "<skill_dir>/scripts/huazi.py" init <video> [--overlays X.overlays.json] [--template T] [--brand HEX]
+python3 "<skill_dir>/scripts/huazi.py" preview <dir> [--ids H03,N3] [--template T1,T2] [--brand HEX]
+python3 "<skill_dir>/scripts/huazi.py" render <dir> [--ids …] [--format hevc|prores] [--no-burn]
+python3 "<skill_dir>/scripts/huazi.py" new-template <id> [--from T] [--name 名称]
 ```
 
-`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; genius-voice for `from-asr`. Stdlib only, except burning when ffmpeg lacks the `subtitles` filter: then run `render` with a Python that has Pillow (a venv: `python3 -m venv .venv`, then `.venv/bin/pip install Pillow`; Windows `.venv\Scripts\pip`). `--check` reports which burn path is available.
+`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; genius-voice for `from-asr`. Stdlib only, except burning when ffmpeg lacks the `subtitles` filter: then run `render` with a Python that has Pillow (a venv: `python3 -m venv .venv`, then `.venv/bin/pip install Pillow`; Windows `.venv\Scripts\pip`). `--check` reports which burn path is available. `huazi.py` also needs a Chromium browser (Chrome, Edge, Chromium or Brave; `HUAZI_BROWSER` to point at one) and Source Han Sans SC installed; HEVC with alpha needs macOS (VideoToolbox).
 
 ## Workflow
 
@@ -54,16 +71,29 @@ Inside a genius-sound project the files land in `<project>/out/`, where `deliver
 
 The SRT, ASS and burned video paths, the burn path (libass or PNG overlay) and placement (letterbox bar or picture bottom), the `check` lines still flagged, and which text came from ASR unreviewed. Failures print `Error [CODE]: …`: `INPUT_NOT_FOUND` 3, `UNSUPPORTED_FORMAT` 4, `DEPENDENCY_MISSING` 5, `PROVIDER_ERROR` 6, `TIMEOUT` 7. Report the code and message as-is.
 
+花字: the preview sheet path(s), the template and brand colour, the MOV format and its alpha mode (HEVC premultiplied / ProRes straight), the burned preview and `out/huazi.md` paths, and any item changed from the source text or left unchecked.
+
 ## Gotchas
 
 - A mixed video's picture started at 0.046 s: SRT times from frame ÷ fps alone ran 46 ms early. `init` records the start and every time carries it; burned PNG overlays go by frame number.
 - This machine's Homebrew ffmpeg had neither `drawtext` nor `subtitles`; burning went through Pillow PNG overlays (43 s at 1080p: 26 s).
 - `from-srt` splits a bilingual SRT by script, line by line: any line with Chinese characters goes to `zh`. A single-language SRT that mixes scripts on one line needs `--lang`.
 - ASR wrote 三千 as 3千; numbers and names in ASR text need a read.
+- 花字 HEVC alpha: VideoToolbox tags it premultiplied while browser frames are straight; unpremultiplied files came out with too-bright glows (6107 of 6642 soft pixels off on 京东.mp4 H07). `render` premultiplies first. ffmpeg's libx265 here could not encode alpha at all.
+- 花字 on a finished edit: the burned preview stacks the new 花字 over the old ones; the MOVs are for the clean timeline. Set `preview_frame` to a clean frame for style sheets.
+- A negative margin cancelling trailing letter-spacing made Chrome wrap the last character of every serif line; `base.css` forbids wrapping, lines break only where `fields.lines` does.
+- Capture ran about 14 frames/s at 720p (H03: 150 frames in 10.5 s); re-encoding the 7-min burned preview took about 2.5 min.
+- Orbitron's A has no crossbar: an outlined MIDEA read as MIDER. Check Latin display fonts on the actual words.
+- `quick_validate.py` wants every asset path named in this file: a new custom template's files must be added to the Resource Map.
 
 ## Resource Map
 
 - `scripts/subs.py`: every command above.
 - `references/rules.md`: sources, limits and their origin, Chinese text rules, timing, layout, outputs.
+- `scripts/huazi.py`: 花字模式, every `huazi.py` command above (DevTools capture, alpha encode, burn).
+- `references/huazi.md`: 花字 workflow, `huazi.json` schema, rules, alpha formats, templates, template contract, custom mode.
+- `assets/huazi/runtime.js` (layout, seek), `assets/huazi/base.css` (canvas, fonts, entrance and exit).
+- Templates: `assets/huazi/templates/t1-light-band/meta.json`, `assets/huazi/templates/t1-light-band/style.css`, `assets/huazi/templates/t1-light-band/decorate.js`; `assets/huazi/templates/t2-cinema-serif/meta.json`, `assets/huazi/templates/t2-cinema-serif/style.css`; `assets/huazi/templates/t3-bold-type/meta.json`, `assets/huazi/templates/t3-bold-type/style.css`; `assets/huazi/templates/t4-glass-cube/meta.json`, `assets/huazi/templates/t4-glass-cube/style.css`, `assets/huazi/templates/t4-glass-cube/decorate.js`; `assets/huazi/templates/t5-black-gold/meta.json`, `assets/huazi/templates/t5-black-gold/style.css`, `assets/huazi/templates/t5-black-gold/decorate.js`.
+- Fonts (SIL OFL, licence beside each): `assets/huazi/fonts/BarlowCondensed-SemiBold.ttf`, `assets/huazi/fonts/OFL-Barlow.txt`, `assets/huazi/fonts/Rajdhani-Bold.ttf`, `assets/huazi/fonts/Rajdhani-SemiBold.ttf`, `assets/huazi/fonts/OFL-Rajdhani.txt`, `assets/huazi/fonts/NotoSerifSC.ttf`, `assets/huazi/fonts/OFL-NotoSerifSC.txt`.
 - `evals/evals.json`: trigger and behaviour checks.
 - `agents/openai.yaml`: Codex/UI metadata.

@@ -1,0 +1,10 @@
+{
+  "id": "t4-glass-cube",
+  "name": "玻璃方块",
+  "description": "细体与粗斜体混排（{重点} 粗、其余细），身后两块错位的半透明品牌色平行四边形；漂浮旋转的玻璃方块、闪烁的方形粒子、半圈弧线；英文小字带品牌色底条；小标签为品牌色实底块。适合科技、数字化、产品卖点。",
+  "reference": "用户提供的参考图（蓝色平行四边形 + 玻璃立方体科技字幕）：只借风格语言",
+  "default_brand": "1F63E6",
+  "types": ["title", "stack", "number", "list", "name"],
+  "aligns": ["left", "right", "center"],
+  "fonts": ["Source Han Sans SC Light / Heavy (SIL OFL 1.1, 系统安装)", "Rajdhani (SIL OFL 1.1, assets/huazi/fonts)"]
+}

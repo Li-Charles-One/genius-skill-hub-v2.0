@@ -1,0 +1,10 @@
+{
+  "id": "t2-cinema-serif",
+  "name": "电影极简",
+  "description": "细宋体白字、大字距、方括号包住整句，两行错位；没有底板和装饰，靠字距与留白；入场模糊散开后收拢，出场慢淡。适合文艺、情绪、片头题记。",
+  "reference": "用户提供的参考图（日落海面方括号文案）：只借风格语言",
+  "default_brand": "FFFFFF",
+  "types": ["title", "stack", "number", "list", "name"],
+  "aligns": ["left", "right", "center"],
+  "fonts": ["Noto Serif SC = 思源宋体 (SIL OFL 1.1, assets/huazi/fonts)", "Source Han Sans SC Light (SIL OFL 1.1, 系统安装)"]
+}

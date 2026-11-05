@@ -1,88 +1,188 @@
 {
-  "skill_name": "genius-subtitle",
-  "evals": [
+ "skill_name": "genius-subtitle",
+ "evals": [
+  {
+   "id": "sound-project-bilingual",
+   "prompt": "刚才配好音的奥德修斯片子，加上中英双语字幕，中文在上，烧进画面",
+   "trigger_expected": true,
+   "expected_output": "Runs subs.py init on <project>/out/<title>_mix.mp4 with --dir <project> and --layout zh,en, from-sound, check, render; reports SRT/ASS/burned paths, burn path and placement.",
+   "files": [
+    "SKILL.md",
+    "references/rules.md"
+   ],
+   "assertions": [
     {
-      "id": "sound-project-bilingual",
-      "prompt": "刚才配好音的奥德修斯片子，加上中英双语字幕，中文在上，烧进画面",
-      "trigger_expected": true,
-      "expected_output": "Runs subs.py init on <project>/out/<title>_mix.mp4 with --dir <project> and --layout zh,en, from-sound, check, render; reports SRT/ASS/burned paths, burn path and placement.",
-      "files": ["SKILL.md", "references/rules.md"],
-      "assertions": [
-        {"type": "contains", "value": "from-sound"},
-        {"type": "contains", "value": "render"}
-      ]
+     "type": "contains",
+     "value": "from-sound"
     },
     {
-      "id": "vlog-asr",
-      "prompt": "这条 vlog.mp4 没有字幕，帮我出个中英字幕文件，不用烧进去",
-      "trigger_expected": true,
-      "expected_output": "Runs init, from-asr --language zh, writes English translations into events[].text, check, render --no-burn; says ASR text needs a read for names and numbers.",
-      "files": ["SKILL.md", "references/rules.md"],
-      "assertions": [
-        {"type": "contains", "value": "from-asr"},
-        {"type": "contains", "value": "--no-burn"}
-      ]
-    },
-    {
-      "id": "srt-check",
-      "prompt": "这个 SRT 帮我检查一下有没有太长太快的，然后烧到 film.mp4 上",
-      "trigger_expected": true,
-      "expected_output": "Runs init film.mp4, from-srt, check and reports LINE/FAST/SHORT/GAP flags with fixes before render.",
-      "files": ["SKILL.md", "references/rules.md"],
-      "assertions": [
-        {"type": "contains", "value": "from-srt"},
-        {"type": "contains", "value": "check"}
-      ]
-    },
-    {
-      "id": "missing-video",
-      "prompt": "给 /tmp/does-not-exist.mp4 加字幕",
-      "trigger_expected": true,
-      "expected_output": "Reports INPUT_NOT_FOUND from subs.py init instead of inventing a folder.",
-      "files": ["SKILL.md"],
-      "assertions": [
-        {"type": "contains", "value": "INPUT_NOT_FOUND"}
-      ]
-    },
-    {
-      "id": "qc-near-miss",
-      "prompt": "这条成片交付前帮我检查一下烧录字幕有没有错字",
-      "trigger_expected": false,
-      "expected_output": "Does not trigger genius-subtitle.",
-      "files": [],
-      "assertions": [
-        {"type": "not_contains", "value": "subs.py"}
-      ]
-    },
-    {
-      "id": "transcript-near-miss",
-      "prompt": "把这段会议录音转成文字，标出说话人",
-      "trigger_expected": false,
-      "expected_output": "Uses genius-voice asr --speakers.",
-      "files": [],
-      "assertions": [
-        {"type": "not_contains", "value": "subs.py"}
-      ]
-    },
-    {
-      "id": "dub-near-miss",
-      "prompt": "给这段无声片配台词、配音和配乐",
-      "trigger_expected": false,
-      "expected_output": "Uses genius-sound.",
-      "files": [],
-      "assertions": [
-        {"type": "not_contains", "value": "subs.py"}
-      ]
-    },
-    {
-      "id": "motion-text-near-miss",
-      "prompt": "片头做一个弹出来的花字标题动画",
-      "trigger_expected": false,
-      "expected_output": "Not a subtitle task: motion text and titles are packaging work.",
-      "files": [],
-      "assertions": [
-        {"type": "not_contains", "value": "subs.py"}
-      ]
+     "type": "contains",
+     "value": "render"
     }
-  ]
+   ]
+  },
+  {
+   "id": "vlog-asr",
+   "prompt": "这条 vlog.mp4 没有字幕，帮我出个中英字幕文件，不用烧进去",
+   "trigger_expected": true,
+   "expected_output": "Runs init, from-asr --language zh, writes English translations into events[].text, check, render --no-burn; says ASR text needs a read for names and numbers.",
+   "files": [
+    "SKILL.md",
+    "references/rules.md"
+   ],
+   "assertions": [
+    {
+     "type": "contains",
+     "value": "from-asr"
+    },
+    {
+     "type": "contains",
+     "value": "--no-burn"
+    }
+   ]
+  },
+  {
+   "id": "srt-check",
+   "prompt": "这个 SRT 帮我检查一下有没有太长太快的，然后烧到 film.mp4 上",
+   "trigger_expected": true,
+   "expected_output": "Runs init film.mp4, from-srt, check and reports LINE/FAST/SHORT/GAP flags with fixes before render.",
+   "files": [
+    "SKILL.md",
+    "references/rules.md"
+   ],
+   "assertions": [
+    {
+     "type": "contains",
+     "value": "from-srt"
+    },
+    {
+     "type": "contains",
+     "value": "check"
+    }
+   ]
+  },
+  {
+   "id": "missing-video",
+   "prompt": "给 /tmp/does-not-exist.mp4 加字幕",
+   "trigger_expected": true,
+   "expected_output": "Reports INPUT_NOT_FOUND from subs.py init instead of inventing a folder.",
+   "files": [
+    "SKILL.md"
+   ],
+   "assertions": [
+    {
+     "type": "contains",
+     "value": "INPUT_NOT_FOUND"
+    }
+   ]
+  },
+  {
+   "id": "qc-near-miss",
+   "prompt": "这条成片交付前帮我检查一下烧录字幕有没有错字",
+   "trigger_expected": false,
+   "expected_output": "Does not trigger genius-subtitle.",
+   "files": [],
+   "assertions": [
+    {
+     "type": "not_contains",
+     "value": "subs.py"
+    }
+   ]
+  },
+  {
+   "id": "transcript-near-miss",
+   "prompt": "把这段会议录音转成文字，标出说话人",
+   "trigger_expected": false,
+   "expected_output": "Uses genius-voice asr --speakers.",
+   "files": [],
+   "assertions": [
+    {
+     "type": "not_contains",
+     "value": "subs.py"
+    }
+   ]
+  },
+  {
+   "id": "dub-near-miss",
+   "prompt": "给这段无声片配台词、配音和配乐",
+   "trigger_expected": false,
+   "expected_output": "Uses genius-sound.",
+   "files": [],
+   "assertions": [
+    {
+     "type": "not_contains",
+     "value": "subs.py"
+    }
+   ]
+  },
+  {
+   "id": "huazi-title",
+   "prompt": "给这条片子的片头加一个弹出来的花字标题",
+   "trigger_expected": true,
+   "expected_output": "花字模式: huazi.py --check, templates, init <video>, writes a title item, preview for style confirmation before render; reports MOV format and alpha mode.",
+   "files": [
+    "SKILL.md",
+    "references/huazi.md"
+   ],
+   "assertions": [
+    {
+     "type": "contains",
+     "value": "huazi.py"
+    },
+    {
+     "type": "contains",
+     "value": "preview"
+    }
+   ]
+  },
+  {
+   "id": "huazi-redo-from-sheet",
+   "prompt": "按京东.overlays.md 这张花字表，用京东红把花字和人名条重新做一版，要带通道的",
+   "trigger_expected": true,
+   "expected_output": "init <video> --brand E1251B (reads the .overlays.json next to it), refines item types and {} emphasis keeping text verbatim, preview on clean frames, render; reports HEVC premultiplied MOVs (or ProRes straight off macOS), burned preview and huazi.md.",
+   "files": [
+    "SKILL.md",
+    "references/huazi.md"
+   ],
+   "assertions": [
+    {
+     "type": "contains",
+     "value": "init"
+    },
+    {
+     "type": "contains",
+     "value": "render"
+    }
+   ]
+  },
+  {
+   "id": "huazi-custom-template",
+   "prompt": "照这张参考图做一套我们自己的花字模板，以后都能用",
+   "trigger_expected": true,
+   "expected_output": "Custom mode: new-template <id> --from closest, edits style.css/decorate.js/meta.json under the contract, previews every type, says the reference is used for style only.",
+   "files": [
+    "SKILL.md",
+    "references/huazi.md"
+   ],
+   "assertions": [
+    {
+     "type": "contains",
+     "value": "new-template"
+    }
+   ]
+  },
+  {
+   "id": "overlay-timing-near-miss",
+   "prompt": "这片子一共多少花字、每个什么时候出现，帮我扒出来",
+   "trigger_expected": false,
+   "expected_output": "Uses genius-footage overlays.py, not genius-subtitle.",
+   "files": [],
+   "assertions": [
+    {
+     "type": "not_contains",
+     "value": "huazi.py"
+    }
+   ]
+  }
+ ]
 }

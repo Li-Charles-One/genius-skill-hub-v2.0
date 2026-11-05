@@ -1,0 +1,53 @@
+/* 模板 5 · 黑金质感（t5-black-gold） */
+.hz { padding: 30px 40px 24px; }
+.align-right { text-align: right; } .align-center { text-align: center; }
+.hz-line { position: relative; z-index: 2; display: block; width: max-content; }
+.align-right .hz-line { margin-left: auto; } .align-center .hz-line { margin: 0 auto; }
+.hz-bar { display: none; }
+.hz-t { display: inline-block; transform: skewX(-8deg); font-weight: 900; font-size: 46px; line-height: 1.18; letter-spacing: .06em;
+        background: linear-gradient(180deg, #fff 0%, #fff 38%, rgb(var(--brand-light)) 58%, rgb(var(--brand)) 72%, #fff8e8 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+        filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)) drop-shadow(0 0 10px rgba(var(--brand), .35)); }
+.hz-t:has(.hz-em) { font-size: 34px; }
+.hz-em { font-size: 1.45em; }
+.hz-t .hz-lat { font-family: "HZ Tech", sans-serif; font-weight: 700; }
+.type-stack.align-left .hz-l2, .type-number.align-left .hz-l2 { margin-left: 2.4em; }
+.type-stack.align-right .hz-l2, .type-number.align-right .hz-l2 { margin-right: 2.4em; }
+/* 描边虚字（decorate.js 复制第一行，或用 fields.ghost） */
+.t5-ghost { position: absolute; z-index: 1; white-space: nowrap; font-weight: 900; font-size: 50px; letter-spacing: .06em; transform: skewX(-8deg);
+            color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.38); opacity: .9; }
+/* 数字 */
+.hz-num { display: inline-flex; align-items: baseline; margin-left: 10px; transform: skewX(-4deg); }
+.hz-v { font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 104px; line-height: .86; letter-spacing: -.01em;
+        background: linear-gradient(180deg, #fff 0%, #fff 40%, rgb(var(--brand-light)) 62%, rgb(var(--brand)) 80%, #fff 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.hz-u { font-family: "HZ Tech", sans-serif; font-weight: 700; font-size: 52px; color: #fff; margin-left: 2px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+/* 小标签：数字上方的小字 */
+.hz-kicker { position: relative; z-index: 2; font-weight: 900; font-size: 18px; letter-spacing: .14em; margin-bottom: 2px; color: #fff; transform: skewX(-8deg);
+             text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+/* 副标题 / 英文：◀◀ 引导 */
+.hz-sub, .hz-items li, .hz-en { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; width: max-content; margin-top: 8px; color: rgba(255,255,255,.92);
+          text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+.align-right .hz-sub, .align-right .hz-items li, .align-right .hz-en { margin-left: auto; }
+.align-center .hz-sub, .align-center .hz-items li, .align-center .hz-en { margin: 8px auto 0; }
+.hz-sub, .hz-items li { font-weight: 500; font-size: 18px; letter-spacing: .2em; }
+.hz-items { list-style: none; margin: 0; padding: 0; }
+.hz-en { font-family: "HZ Tech", sans-serif; font-weight: 600; font-size: 13px; letter-spacing: .32em; text-transform: uppercase; }
+.hz-bullet { flex: none; width: 18px; height: 9px; background: linear-gradient(90deg, rgba(255,255,255,.85) 0 45%, transparent 45% 55%, rgba(255,255,255,.5) 55%);
+             clip-path: polygon(0 50%, 45% 0, 45% 100%, 0 50%, 55% 50%, 100% 0, 100% 100%, 55% 50%); }
+.hz-ghost { display: none; }
+.type-name .hz-n { font-size: 44px; letter-spacing: .18em; }
+/* 底部金色光线 + 光斑 + 尾点 */
+.t5-line { position: absolute; z-index: 1; height: 2px; background: linear-gradient(90deg, transparent, rgba(var(--brand-light), .95) 30%, #fff 50%, rgba(var(--brand-light), .9) 70%, transparent);
+           box-shadow: 0 0 8px rgba(var(--brand), .9); transform-origin: center; animation: t5-grow .8s cubic-bezier(.2,.8,.2,1) .2s both; }
+@keyframes t5-grow { from { transform: scaleX(0); opacity: 0; } to { transform: none; opacity: 1; } }
+.t5-flare { position: absolute; z-index: 3; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+            background: radial-gradient(circle, #fff 0%, rgba(var(--brand-light), .85) 22%, rgba(var(--brand), .3) 50%, transparent 70%);
+            animation: t5-flash 2.6s ease-in-out infinite; }
+@keyframes t5-flash { 0%, 100% { opacity: .5; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.15); } }
+.t5-dots { position: absolute; z-index: 2; height: 3px; width: 34px; background: repeating-linear-gradient(90deg, rgba(255,255,255,.8) 0 3px, transparent 3px 7px); }
+/* 入场：光带扫过显字 */
+.hz-a { animation: t5-in .8s cubic-bezier(.3,.7,.2,1) var(--d, 0s) both, hz-out .35s ease-in var(--out) forwards !important; }
+.align-right .hz-a { animation-name: t5-in-r, hz-out !important; }
+@keyframes t5-in { from { clip-path: inset(-20% 100% -20% 0); filter: brightness(2.6); } 70% { filter: brightness(1.4); } to { clip-path: inset(-20% 0 -20% 0); filter: none; } }
+@keyframes t5-in-r { from { clip-path: inset(-20% 0 -20% 100%); filter: brightness(2.6); } 70% { filter: brightness(1.4); } to { clip-path: inset(-20% 0 -20% 0); filter: none; } }

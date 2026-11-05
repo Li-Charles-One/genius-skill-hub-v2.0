@@ -1,0 +1,10 @@
+{
+  "id": "t5-black-gold",
+  "name": "黑金质感",
+  "description": "粗黑体微斜、白到品牌色（默认香槟金）的金属渐变；第一行身后压一层放大的描边虚字；◀◀ 小箭头引导英文小字，字距拉开；底部一道金色光线和光斑、尾端小点；数字用大号金属窄体；入场为光带扫过显字。适合企业宣传、年报数据、高端品牌。",
+  "reference": "用户提供的参考图（黑金金属质感企业字幕）：只借风格语言",
+  "default_brand": "C9A15B",
+  "types": ["title", "stack", "number", "list", "name"],
+  "aligns": ["left", "right", "center"],
+  "fonts": ["Source Han Sans SC Heavy / Medium (SIL OFL 1.1, 系统安装)", "Rajdhani (SIL OFL 1.1, assets/huazi/fonts)"]
+}

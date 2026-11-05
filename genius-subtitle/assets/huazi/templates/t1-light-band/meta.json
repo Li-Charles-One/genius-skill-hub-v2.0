@@ -1,0 +1,10 @@
+{
+  "id": "t1-light-band",
+  "name": "光带科技",
+  "description": "粗黑体白字向品牌色渐变 + 辉光；字下是两端淡出的半透明品牌色光带，下沿亮线、扫光、端头光斑；两行错位排列配点阵；右上错位小方块、× 标记、条码短线；副标题双菱形项目符号、拉开字距；标题型带椭圆轨道光点，两行型带 HUD 圆环。",
+  "reference": "用户提供的「模版1」参考图（蓝色科技字幕包）：只借风格语言，图形与排布为原创",
+  "default_brand": "1E6BFF",
+  "types": ["title", "stack", "number", "list", "name"],
+  "aligns": ["left", "right", "center"],
+  "fonts": ["Source Han Sans SC Heavy / Normal (SIL OFL 1.1, 系统安装)", "Rajdhani (SIL OFL 1.1, assets/huazi/fonts)"]
+}
