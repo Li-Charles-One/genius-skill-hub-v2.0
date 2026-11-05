@@ -63,13 +63,13 @@
       ]
     },
     {
-      "id": "qc-near-miss",
-      "prompt": "这条成片交付前检查一下字幕和声音 final.mp4",
-      "trigger_expected": false,
-      "expected_output": "Does not trigger genius-footage.",
-      "files": [],
+      "id": "frame-review-film",
+      "prompt": "片子在桌面，你先逐帧看一下",
+      "trigger_expected": true,
+      "expected_output": "Finds the video, runs footage.py on it (finished edits included) and reports the status, counts and the .footage.md path; does not hand-roll frame extraction or OCR.",
+      "files": ["SKILL.md"],
       "assertions": [
-        {"type": "not_contains", "value": "footage.py"}
+        {"type": "contains", "value": "footage.py"}
       ]
     },
     {
