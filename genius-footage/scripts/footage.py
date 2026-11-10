@@ -2,12 +2,14 @@
 """
 Genius Footage — AG_FOOTAGE/1.1 brief for one clip (`<clip>.footage.md` + `.footage.json` + `.footage/`).
 
-    python3 footage.py <clip> [--script FILE] [--model M] [--output text|json]
+    python3 footage.py <clip> [--talking-head] [--script FILE] [--model M] [--output text|json]
     python3 footage.py --check
 
 Steps: measure.py (cuts frame by frame) → storyboard check of doubtful cuts → per-shot description from
 storyboards → asr.py, Doubao ASR with speakers (words → frames, cut points) → one whole-clip request where
 the model answers with IDs only (S001, U001, P1, G01) → IDs converted to frames and timecode → validate.
+--talking-head (口播): doubtful cuts are not checked; pauses, fillers and restarts come from word times; the
+whole-clip request also returns keep[] (line ID + verbatim first / last words), converted here to frames.
 Speech via asr.py (DOUBAO_API_KEY); models via client.py.
 Protocol: ArtisticCut/AG_FOOTAGE.md.
 """
@@ -36,6 +38,13 @@ HERE = Path(__file__).resolve().parent
 PROTOCOL = "AG_FOOTAGE/1.1"
 CUT_GAP, JOINED_GAP = 4, 2     # frames: a pause ≥4 is a clean cut; <2 at punctuation is run-together
 PUNCT = set("，。！？；：、,.!?;:…—")
+# Talking head (口播)
+TH_PAUSE_SEC = 0.8                 # dead air listed for the editor
+TH_PAD_IN, TH_PAD_OUT = 6, 12      # frames kept before the first / after the last word, never into a neighbour
+TH_MERGE = 20                      # consecutive kept pieces closer than this (frames) become one piece
+FILLERS = set("嗯呃额啊哦唔")         # a filler only at a line start or right after punctuation
+STUTTER = set("我你他她这那就是在跟")   # one-character words that, said twice in a row, are a stutter
+TH_HINT = (50, 0.6)                # default mode: ≤2 measured shots, >50 suspects, speech >60% → suggest --talking-head
 
 
 def audio_info(src: str) -> dict:
@@ -110,6 +119,97 @@ def cut_points(utts: list, n: int) -> None:
                      "inside": inside, "joined": joined}
 
 
+# ── Talking head: marks from word times, keep[] → frames ─────────────────
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^\w%×]", "", s)
+
+
+def _chars(u: dict) -> tuple[str, list[int], list[int]]:
+    """Normalised text of a line's words, the word owning each character, and each word's first character."""
+    text, owner, off = "", [], []
+    for k, w in enumerate(u["words"]):
+        t = _norm(w["text"])
+        off.append(len(text))
+        text += t
+        owner += [k] * len(t)
+    return text, owner, off
+
+
+def speech_marks(utts: list, fps: float) -> dict:
+    """Dead air (≥TH_PAUSE_SEC), fillers and restarts inside a line, all from word frames; hints, not cuts."""
+    words = [(u, w) for u in utts for w in u["words"]]
+    gap = round(TH_PAUSE_SEC * fps)
+    pauses = [{"after": a[0]["id"], "before": b[0]["id"], "first": a[1]["last"] + 1, "last": b[1]["first"] - 1}
+              for a, b in zip(words, words[1:]) if b[1]["first"] - a[1]["last"] - 1 >= gap]
+    fillers, restarts = [], []
+    for u in utts:
+        ws = u["words"]
+        punct = dict(_boundaries(u))  # boundary after word k → punctuation there?
+        fillers += [{"u": u["id"], "word": w["text"], "first": w["first"], "last": w["last"]}
+                    for k, w in enumerate(ws) if w["text"] in FILLERS and (k == 0 or punct.get(k - 1))]
+        text, owner, off = _chars(u)
+        j = 1
+        while j < len(ws):
+            best = None  # (i, chars) of the longest earlier run the line starts over with at word j
+            for i in range(max(0, j - 20), j):
+                n = 0
+                while off[j] + n < len(text) and off[i] + n < off[j] and text[off[i] + n] == text[off[j] + n]:
+                    n += 1
+                stutter = n == 1 and i == j - 1 and ws[i]["text"] in STUTTER and ws[j]["text"] == ws[i]["text"]
+                if (n >= 3 or stutter) and (best is None or n > best[1]):
+                    best = (i, n)
+            if best:
+                i = best[0]
+                restarts.append({"u": u["id"], "dropped": "".join(w["text"] for w in ws[i:j]),
+                                 "first": ws[i]["first"], "last": ws[j]["first"] - 1, "retake": ws[j]["text"]})
+                j = owner[off[j] + best[1] - 1] + 1
+            else:
+                j += 1
+    return {"pauses": pauses, "fillers": fillers, "restarts": restarts}
+
+
+def keep_frames(keep: list, utts: list, n: int) -> tuple[list, list, list[str]]:
+    """keep[] from the model (line ID + verbatim first / last words) → frame pieces and merged edit ranges.
+    A repeated 'from' resolves to its last occurrence that still has 'to' after it (retakes come later)."""
+    umap = {u["id"]: u for u in utts}
+    allw = sorted((w for u in utts for w in u["words"]), key=lambda w: w["first"])
+    pieces, bad = [], []
+    for item in keep or []:
+        u = umap.get(str(item.get("u")))
+        if not u or not u["words"]:
+            bad.append(f"精剪建议引用了不存在或无字级时间的台词 {item.get('u')}")
+            continue
+        text, owner, off = _chars(u)
+        fr, to = _norm(str(item.get("from") or "")), _norm(str(item.get("to") or ""))
+        starts = [k for k in range(len(text)) if text.startswith(fr, k)][::-1] if fr else [0]
+        a = b = None
+        for k in starts:
+            e = text.find(to, off[owner[k]]) if to else len(text) - 1
+            if e != -1:
+                a, b = owner[k], owner[e + len(to) - 1] if to else len(u["words"]) - 1
+                break
+        if a is None or b < a:
+            bad.append(f"精剪建议 {u['id']} 对不上原文：从“{item.get('from')}”到“{item.get('to')}”")
+            continue
+        w0, w1 = u["words"][a], u["words"][b]
+        prev = max((w["last"] for w in allw if w["last"] < w0["first"]), default=-1)
+        nxt = min((w["first"] for w in allw if w["first"] > w1["last"]), default=n)
+        pieces.append({"id": f"K{len(pieces) + 1:02d}", "u": u["id"], "from": item.get("from") or "",
+                       "to": item.get("to") or "", "why": item.get("why") or "",
+                       "first": max(w0["first"] - TH_PAD_IN, prev + 1, 0), "last": min(w1["last"] + TH_PAD_OUT, nxt - 1, n - 1),
+                       "text": "".join(w["text"] for w in u["words"][a:b + 1])})
+    edit = []
+    for p in pieces:
+        e = edit[-1] if edit else None
+        if e and e["first"] <= p["first"] and p["first"] - e["last"] - 1 < TH_MERGE:
+            e["last"] = max(e["last"], p["last"])
+            e["keep"].append(p["id"])
+        else:
+            edit.append({"id": f"E{len(edit) + 1:02d}", "keep": [p["id"]], "first": p["first"], "last": p["last"]})
+    return pieces, edit, bad
+
+
 # ── IDs from the model ───────────────────────────────────────────────────
 
 def id_range(spec: str, prefix: str) -> list[str]:
@@ -150,8 +250,9 @@ def _short_ids(ids: list[str]) -> str:
 
 
 def build(r: dict, utts: list, ov: dict, asr_note: str | None, tools: dict, fingerprint: str,
-          generated: str, audio: dict) -> dict:
-    """Assemble the protocol document (the .footage.json body) from the parts."""
+          generated: str, audio: dict, marks: dict | None = None) -> dict:
+    """Assemble the protocol document (the .footage.json body) from the parts.
+    marks is set in talking-head mode: segments then run over lines (U), and keep[] becomes frames."""
     shots = {s["id"]: s for s in r["shots"]}
     umap = {u["id"]: u for u in utts}
     people = ov.get("people") or []
@@ -160,12 +261,15 @@ def build(r: dict, utts: list, ov: dict, asr_note: str | None, tools: dict, fing
         u["person"] = spk.get(str(u.get("speaker")))
     segments = []
     for g in ov.get("segments") or []:
-        ids = id_range(g.get("shots", ""), "S")
-        sp = span(ids, shots)
+        us = id_range(g.get("us", ""), "U") if marks is not None else []
+        sp = span(us, umap) if us else span(id_range(g.get("shots", ""), "S"), shots)
         if sp:
-            segments.append({"id": g.get("id"), "shots": ids, "first": sp[0], "last": sp[1],
+            ids = [s["id"] for s in r["shots"] if s["first"] <= sp[1] and s["last"] >= sp[0]]
+            segments.append({"id": g.get("id"), **({"us": us} if us else {}), "shots": ids, "first": sp[0], "last": sp[1],
                              **{k: g.get(k, "") for k in ("content", "emotion", "use")}})
     uncertain = list(ov.get("uncertain") or [])
+    keep, edit, keep_bad = keep_frames(ov.get("keep"), utts, r["frames"]) if marks is not None else ([], [], [])
+    uncertain += keep_bad
     for s in r["suspects"]:
         if "check" not in s:
             uncertain.append(f"疑似切点未复核：f{s['first']}–f{s['last']}（{s['kind']}）")
@@ -186,10 +290,16 @@ def build(r: dict, utts: list, ov: dict, asr_note: str | None, tools: dict, fing
            "shots": r["shots"], "utterances": utts, "highlights": ov.get("highlights") or {},
            "uncertain": uncertain, "suspects": r["suspects"], "storyboards": r.get("storyboards", []),
            "warnings": r.get("warnings", [])}
+    if marks is not None:
+        doc.update(mode="talking-head", speech_marks=marks, keep=keep, edit=edit)
     doc["counts"] = {"shots": len(r["shots"]), "utterances": len(utts), "people": len(people), "segments": len(segments)}
     doc["review"] = {"unresolved_suspects": sum(s.get("check", "unsure") == "unsure" for s in r["suspects"]),
                      "uncertain_words": len(ov.get("suspect_words") or []),
                      "missing_descriptions": sum("desc" not in s for s in r["shots"])}
+    if marks is not None:
+        doc["review"]["unmatched_keep"] = len(keep_bad) + (0 if keep or not utts else 1)
+        if not keep and utts:
+            uncertain.append("精剪建议缺失：全片分析没有返回 keep")
     doc["validation"] = validate(doc)
     doc["status"] = "ok" if not doc["validation"] and not any(doc["review"].values()) and not asr_note else "needs_review"
     return doc
@@ -198,8 +308,8 @@ def build(r: dict, utts: list, ov: dict, asr_note: str | None, tools: dict, fing
 def render_md(doc: dict, md_dir: Path) -> str:
     v, tc = doc["video"], _tc(doc)
     rel = lambda p: os.path.relpath(p, md_dir)
-    head = {k: doc[k] for k in ("protocol", "file", "fingerprint", "generated", "tools", "video", "audio",
-                                "counts", "review", "status")}
+    head = {k: doc[k] for k in ("protocol", "mode", "file", "fingerprint", "generated", "tools", "video", "audio",
+                                "counts", "review", "status") if k in doc}
     L = ["---"] + [f"{k}: {json.dumps(val, ensure_ascii=False)}" for k, val in head.items()] + ["---", ""]
     L += [f"# {doc['file']}", "", "## 1. 概览", "", doc["summary"] or "（全片分析未完成）", ""]
     if doc["footage"]:
@@ -211,9 +321,11 @@ def render_md(doc: dict, md_dir: Path) -> str:
                  f"{', '.join('S' + str(s).lstrip('Ss') for s in p.get('speakers') or []) or '—'} | "
                  f"{_short_ids(id_range(p.get('shots', ''), 'S'))} |")
 
-    L += ["", "## 3. 分段", "", "| 分段 | 镜头 | 帧 | 时间码 | 内容 | 情绪 | 适合用作 |", "|---|---|---|---|---|---|---|"]
+    by_line = "mode" in doc
+    L += ["", "## 3. 分段", "", f"| 分段 | {'台词' if by_line else '镜头'} | 帧 | 时间码 | 内容 | 情绪 | 适合用作 |",
+          "|---|---|---|---|---|---|---|"]
     for g in doc["segments"]:
-        L.append(f"| {g['id']} | {_short_ids(g['shots'])} | f{g['first']}–f{g['last']} | {tc(g['first'])}–{tc(g['last'])} | "
+        L.append(f"| {g['id']} | {_short_ids(g.get('us') or g['shots'])} | f{g['first']}–f{g['last']} | {tc(g['first'])}–{tc(g['last'])} | "
                  f"{_cell(g['content'])} | {_cell(g['emotion'])} | {_cell(g['use'])} |")
 
     L += ["", "## 4. 镜头", "", "| 镜头 | 帧 | 时间码 入–出 | 时长 | 切入 | 用途 | 景别 | 角度 | 运镜 | 人物 | 场景 | 画面 | 表演 | 标记 |",
@@ -241,16 +353,43 @@ def render_md(doc: dict, md_dir: Path) -> str:
     L += [f"- 金句：{q.get('u')}（{q.get('person', '')}）——{_cell(q.get('why'))}" for q in h.get("quotes") or []]
     L += [f"- 最佳反应镜头：{b.get('s')}——{_cell(b.get('why'))}" for b in h.get("best_reaction") or []]
     L += [f"- 同一句拍了多遍：{' / '.join(t.get('us') or [])}，推荐 {t.get('pick')}（{_cell(t.get('why'))}）" for t in h.get("retakes") or []]
-    L += [f"- 不可用：{x.get('shots')} {_cell(x.get('why'))}（判）" for x in h.get("unusable") or []]
-    if not any(h.get(k) for k in ("quotes", "best_reaction", "retakes", "unusable")):
+    L += [f"- 画面事件：{x.get('u')}——{_cell(x.get('what'))}" for x in h.get("visual_events") or []]
+    L += [f"- 不可用：{x.get('us') or x.get('shots')} {_cell(x.get('why'))}（判）" for x in h.get("unusable") or []]
+    if not any(h.get(k) for k in ("quotes", "best_reaction", "visual_events", "retakes", "unusable")):
         L.append("- 无")
 
     L += ["", "## 7. 待确认", ""] + ([f"- {x}" for x in doc["uncertain"]] or ["- 无"])
     if doc["validation"]:
         L += [f"- 校验未通过：{x}" for x in doc["validation"]]
+    if by_line:
+        L += _render_talking_head(doc, tc)
     if doc["storyboards"]:
         L += ["", "故事板：" + "、".join(f"[{Path(p).name}]({rel(p)})" for p in doc["storyboards"])]
     return "\n".join(L) + "\n"
+
+
+def _render_talking_head(doc: dict, tc) -> list[str]:
+    fps, kmap = doc["video"]["fps"], {k["id"]: k for k in doc["keep"]}
+    total = sum(e["last"] - e["first"] + 1 for e in doc["edit"])
+    L = ["", "## 8. 精剪建议", "",
+         f"共 {len(doc['edit'])} 段，约 {total / fps:.1f}s（原 {doc['video']['duration']:.1f}s）。入点 = 首字 −{TH_PAD_IN} 帧、"
+         f"出点 = 末字 +{TH_PAD_OUT} 帧，不压相邻字；同一素材间隔 <{TH_MERGE} 帧的相邻片段已合并。区间含首尾两帧。", "",
+         "| 段 | 帧 | 时间码 | 时长 | 台词 | 保留内容 | 理由 |", "|---|---|---|---|---|---|---|"]
+    for e in doc["edit"]:
+        ks = [kmap[k] for k in e["keep"]]
+        L.append(f"| {e['id']} | f{e['first']}–f{e['last']} | {tc(e['first'])}–{tc(e['last'])} | "
+                 f"{(e['last'] - e['first'] + 1) / fps:.2f}s | {', '.join(dict.fromkeys(k['u'] for k in ks))} | "
+                 f"{_cell('／'.join(k['text'] for k in ks))} | {_cell('；'.join(k['why'] for k in ks if k['why']))} |")
+    m = doc["speech_marks"]
+    sec = lambda a, b: f"{(b - a + 1) / fps:.1f}s"
+    L += ["", "## 9. 口播标记（按字级时间算，供参考）", "",
+          f"- 长停顿（≥{TH_PAUSE_SEC}s）{len(m['pauses'])} 处：" +
+          ("、".join(f"f{p['first']}–f{p['last']}（{p['after']} 后，{sec(p['first'], p['last'])}）" for p in m["pauses"]) or "无"),
+          f"- 语气词 {len(m['fillers'])} 处：" +
+          ("、".join(f"{x['u']}“{x['word']}” f{x['first']}" for x in m["fillers"]) or "无"),
+          f"- 句内重复起头 {len(m['restarts'])} 处：" +
+          ("、".join(f"{x['u']} 弃“{x['dropped']}” f{x['first']}–f{x['last']}" for x in m["restarts"]) or "无")]
+    return L
 
 
 def _tc(doc: dict):
@@ -296,7 +435,12 @@ def validate(doc: dict) -> list[str]:
         prev = g["last"]
     h = doc["highlights"]
     refs = [q.get("u") for q in h.get("quotes") or []] + [b.get("s") for b in h.get("best_reaction") or []] + \
+           [x.get("u") for x in h.get("visual_events") or []] + \
            [x for t in h.get("retakes") or [] for x in (t.get("us") or []) + [t.get("pick")]]
+    # 8. talking head: edit pieces inside the clip and in order of the merged ranges
+    for e in doc.get("edit") or []:
+        if not (0 <= e["first"] <= e["last"] < n):
+            errs.append(f"精剪建议 {e['id']} 帧超出素材范围")
     errs += [f"引用了不存在的编号 {x}" for x in refs if x and x not in ids]
     # 5. no estimates in precise fields (frames / timecode are generated, so check model-supplied ranges)
     errs += [f"{g['id']} 的镜头范围含估计值" for g in doc["segments"] if "~" in "".join(g["shots"])]
@@ -426,7 +570,7 @@ def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path, worker
         measure.add_boundaries(r, extra, spans)
 
 
-def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int) -> dict:
+def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int, talking_head: bool = False) -> dict:
     """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
     from labelled storyboard sheets, never times or counts them."""
     try:
@@ -436,7 +580,14 @@ def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int) -> dict:
     print(f"[genius-footage] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
           f"{len(r['suspects'])} suspects", file=sys.stderr)
     r["storyboards"] = []
-    check_suspects(src, c, r, seek, out_dir, workers)
+    r["measured_shots"] = r["shot_count"]
+    if talking_head:  # one take with a hand-held camera: weak suspects are shake, not cuts
+        for s in r["suspects"]:
+            s.update(check="skipped")
+        if r["suspects"]:
+            r["warnings"].append(f"口播模式：{len(r['suspects'])} 处弱疑似切点未核对，镜头只按测得的硬切划分")
+    else:
+        check_suspects(src, c, r, seek, out_dir, workers)
 
     # 2. Describe every shot from its first / (middle) / last frames.
     groups = []
@@ -488,9 +639,41 @@ OVERVIEW_PROMPT = (
     "once. suspect_words: likely mishearings (homophones, names, brands, models) — propose, do not rewrite. "
     "Empty lists are fine."
 )
+# Talking head: one take of one person speaking. Segments run over lines; the model also proposes the edit.
+_TH_SWAPS = [
+    ('"segments": [{"id": "G01", "shots": "S001–S006",', '"segments": [{"id": "G01", "us": "U001–U012",'),
+    ('"best_reaction": [{"s": "S023", "why": ""}], ',
+     '"visual_events": [{"u": "U023", "what": "转身展示身后的车 / 低头看手机 / 捂嘴忘词 / 前后两遍画面跳动大，接缝宜推近"}], '),
+    ('"unusable": [{"shots": "S030–S031", "why": "跑焦/杂音/说错/打板…"}]},\n',
+     '"unusable": [{"us": "U030–U031", "why": "说错/忘词/杂音…"}]},\n'
+     ' "keep": [{"u": "U010", "from": "first words kept, copied verbatim from that line; empty = line start", '
+     '"to": "last words kept, verbatim; empty = line end", "why": "short reason"}],\n'),
+    ("Segments are runs of consecutive shots that cover all shots in order without overlap.",
+     "Segments are runs of consecutive lines (U) that cover all lines in order without overlap."),
+]
+TH_RULES = (
+    "\n\nTALKING HEAD: this is one person speaking to camera in one take. keep is the tight edit an editor "
+    "would cut, in playback order: one entry per kept piece; a line may give several pieces. Keep one take "
+    "of each idea — the cleanest retake, usually the last complete one; drop abandoned starts, restarts inside "
+    "a line, stutters, fillers, dead air, forgotten-line pauses and off-topic asides. Cut a line by giving "
+    "from / to as words copied exactly from that line (at least 4 characters when the words repeat in the "
+    "line). You may move a hook or an outro to where it belongs and say so in why. The marks below were "
+    "measured from word times; use them as hints.\n\nMARKS\n{marks}"
+)
+OVERVIEW_PROMPT_TH = OVERVIEW_PROMPT
+for _a, _b in _TH_SWAPS:
+    assert _a in OVERVIEW_PROMPT_TH, _a
+    OVERVIEW_PROMPT_TH = OVERVIEW_PROMPT_TH.replace(_a, _b)
 
 
-def _overview(c: dict, r: dict, utts: list, script: str | None, proxy) -> dict:
+def _marks_text(marks: dict, fps: float) -> str:
+    p = [f"pause {x['after']}→{x['before']} {(x['last'] - x['first'] + 1) / fps:.1f}s" for x in marks["pauses"]]
+    f = [f"filler {x['u']} “{x['word']}”" for x in marks["fillers"]]
+    r = [f"restart {x['u']} drops “{x['dropped']}”" for x in marks["restarts"]]
+    return "\n".join(p + f + r) or "(none)"
+
+
+def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: dict | None = None) -> dict:
     if proxy is None:
         r["warnings"].append(f"clip longer than {client.MAX_VIDEO_SEC // 60} min: whole-clip overview skipped")
         return {}
@@ -499,7 +682,8 @@ def _overview(c: dict, r: dict, utts: list, script: str | None, proxy) -> dict:
         + " | ".join(s.get("desc", {}).get(k, "") for k in ("shot_size", "scene", "action")) for s in r["shots"])
     utt_lines = "\n".join(f"{u['id']} [{u.get('speaker') or '?'}] {u['shots'][0] if u['shots'] else ''} | {u['text']}"
                           for u in utts) or "(no transcript)"
-    prompt = (OVERVIEW_PROMPT.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
+    base = OVERVIEW_PROMPT if marks is None else OVERVIEW_PROMPT_TH + TH_RULES.replace("{marks}", _marks_text(marks, r["fps"]))
+    prompt = (base.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
               .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + LANGUAGE_RULE
     upload = proxy.result()
     print("[genius-footage] whole-clip overview…", file=sys.stderr)
@@ -510,7 +694,7 @@ def _overview(c: dict, r: dict, utts: list, script: str | None, proxy) -> dict:
     return ov
 
 
-def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS) -> dict:
+def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, talking_head: bool = False) -> dict:
     """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip.
     Speech and the whole-clip proxy need no shot list, so they run alongside the storyboard steps."""
     clip = Path(src)
@@ -523,7 +707,7 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS) ->
     speech_job = bg.submit(asr.transcribe, src)
     duration = asr.probe_duration(src)
     proxy = bg.submit(client.video_proxy, src, duration) if duration <= client.MAX_VIDEO_SEC else None
-    r = shots(src, c, Path(f"{base}.footage"), seek, workers)
+    r = shots(src, c, Path(f"{base}.footage"), seek, workers, talking_head)
 
     asr_note, utts, asr_model = None, [], None
     try:
@@ -535,28 +719,41 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS) ->
         asr_note = str(e)
         print(f"[genius-footage] {asr_note}", file=sys.stderr)
 
-    ov = _overview(c, r, utts, script, proxy)
+    marks = speech_marks(utts, r["fps"]) if talking_head else None
+    spoken = sum(u["last"] - u["first"] + 1 for u in utts) / max(1, r["frames"])
+    if not talking_head and r["measured_shots"] <= 2 and len(r["suspects"]) > TH_HINT[0] and spoken > TH_HINT[1]:
+        r["warnings"].append(f"像是口播（测得 {r['measured_shots']} 个镜头、{len(r['suspects'])} 处疑似切点、"
+                             f"台词占 {spoken:.0%}）：下次可加 --talking-head，更快，并给出精剪建议")
+    ov = _overview(c, r, utts, script, proxy, marks)
     bg.shutdown()
     doc = build(r, utts, ov, asr_note,
                 {"measure": "genius-footage measure.py", "asr": asr_model, "storyboard": c["model"],
                  "overview": c["model"] if ov else None},
                 client.fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
-                audio_info(src))
+                audio_info(src), marks)
     md_path, json_path = Path(f"{base}.footage.md"), Path(f"{base}.footage.json")
     md_path.write_text(render_md(doc, md_path.parent), encoding="utf-8")
     json_path.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
-    return {"footage_md": str(md_path), "footage_json": str(json_path), "status": doc["status"],
-            "counts": doc["counts"], "review": doc["review"], "validation": doc["validation"],
-            "warnings": doc["warnings"]}
+    res = {"footage_md": str(md_path), "footage_json": str(json_path), "status": doc["status"],
+           "counts": doc["counts"], "review": doc["review"], "validation": doc["validation"],
+           "warnings": doc["warnings"]}
+    if talking_head:
+        res["edit"] = {"pieces": len(doc["edit"]), "seconds": round(sum(e["last"] - e["first"] + 1 for e in doc["edit"]) / r["fps"], 1),
+                       "source_seconds": round(r["duration"], 1)}
+    return res
 
 
 def render_result(res: dict) -> str:
     c, rv = res["counts"], res["review"]
     lines = [f"状态：**{res['status']}** · {c['shots']} 镜头 · {c['utterances']} 句台词 · {c['people']} 人 · {c['segments']} 段",
              f"说明书：`{res['footage_md']}`", f"数据：`{res['footage_json']}`"]
+    if "edit" in res:
+        e = res["edit"]
+        lines.append(f"精剪建议：{e['pieces']} 段，约 {e['seconds']}s（原 {e['source_seconds']}s）")
     if any(rv.values()):
         lines.append(f"待复核：未复核切点 {rv['unresolved_suspects']} · 可能听错的词 {rv['uncertain_words']} · "
-                     f"缺描述镜头 {rv['missing_descriptions']}")
+                     f"缺描述镜头 {rv['missing_descriptions']}"
+                     + (f" · 对不上的精剪建议 {rv['unmatched_keep']}" if "unmatched_keep" in rv else ""))
     lines += [f"校验未通过：{x}" for x in res["validation"]] + [f"⚠️ {w}" for w in res["warnings"]]
     return "\n".join(lines)
 
@@ -573,6 +770,8 @@ def main() -> None:
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     parser.add_argument("--workers", type=int, default=WORKERS, help=f"Storyboard requests at once (default {WORKERS})")
+    parser.add_argument("--talking-head", action="store_true",
+                        help="口播 / one take: skip the doubtful-cut check, add pauses, fillers, restarts and a keep[] edit")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and the ASR key")
     args = parser.parse_args()
     c = client.conf(args.model)
@@ -593,7 +792,8 @@ def main() -> None:
             raise FootageError("UNSUPPORTED_FORMAT", "footage needs a local video file")
         if not c["api_key"]:
             raise FootageError("PROVIDER_ERROR", "API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env")
-        res = run(args.file, c, Path(args.script).read_text(encoding="utf-8") if args.script else None, args.workers)
+        res = run(args.file, c, Path(args.script).read_text(encoding="utf-8") if args.script else None, args.workers,
+                  args.talking_head)
         print(json.dumps(res, ensure_ascii=False, indent=2) if args.output == "json"
               else f"## Footage\n\n{render_result(res)}")
     except FootageError as e:

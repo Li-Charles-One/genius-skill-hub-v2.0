@@ -1,8 +1,8 @@
 ---
 name: genius-footage
-description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、约 0.1 秒精度的入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于剪辑或生成视频。"
+description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md（AG_FOOTAGE/1.1）：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；口播（一镜到底、单人对镜头讲）可加口播模式，跳过逐帧切点核对，另出停顿、语气词、句内重复起头和按字精确到帧的精剪建议；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、约 0.1 秒精度的入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这条口播帮我出说明书和精剪建议」「口播里哪些停顿、口误、重复要剪掉」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于实际剪辑、拼时间线、导出或生成视频（口播模式只给精剪建议）。"
 metadata:
-  version: "2.5.0"
+  version: "2.6.0"
 ---
 
 # Genius Footage（素材说明书）
@@ -22,7 +22,7 @@ Format: AG_FOOTAGE/1.1, produced by `scripts/footage.py`. Cut detection rules: `
 
 ```bash
 python3 "<skill_dir>/scripts/footage.py" --check
-python3 "<skill_dir>/scripts/footage.py" <clip> [--script script.txt] [--model M] [--workers 3] [--output text|json]
+python3 "<skill_dir>/scripts/footage.py" <clip> [--talking-head] [--script script.txt] [--model M] [--workers 3] [--output text|json]
 python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list only: no model, no brief
 python3 "<skill_dir>/scripts/overlays.py" <clip> [--fps 1] [--model M] [--workers 3] [--output text|json]   # overlay sheet only
 python3 "<skill_dir>/scripts/overlays.py" <clip> --look ID FIRST-LAST[:STEP]     # agent check: labelled frames
@@ -35,6 +35,16 @@ python3 "<skill_dir>/scripts/overlays.py" <clip> --fix ["ID in=N" "ID out=N" "ID
 - `--script`: a script or keyword file (names, brands, models). The model uses it to flag likely mishearings.
 - Steps: `measure.py` (cuts frame by frame) → doubtful cuts judged by the model on a storyboard (six frames each side of a jump, nine per second across a sustained change) → every shot described from its first / middle / last frames → `asr.py` with speaker labels (words → frame ranges and cut points: pause ≥4 frames is a clean cut, <2 frames at punctuation is run-together) → one whole-clip request (summary, people, segments, highlights, retakes, unusable shots, suspect words) → validate.
 - Clips longer than 30 minutes skip the whole-clip step (warned).
+
+## Talking Head（口播）
+
+Use `--talking-head` when the clip is one person talking to camera in one take (口播, 一镜到底, 自拍讲解); ask if unsure, since a real multi-camera clip loses its weak cuts.
+
+- Measured hard cuts stay; weak suspects are not sent to the model (hand-held shake, gestures and turning read as cuts there) and are marked `skipped`, not review items.
+- From word times only, section 9 of the brief: dead air ≥0.8 s, fillers (嗯呃额啊哦唔 at a line start or after punctuation), restarts inside a line (a run of ≥3 characters said again, or 我我-type stutters). Hints, not cuts.
+- The whole-clip request returns segments over lines (`us`), visual events tied to lines, and `keep[]`: line ID + `from` / `to` words copied verbatim from that line, in playback order. The script turns them into frames (first word −6, last word +12, never into a neighbouring word; a repeated `from` resolves to its last occurrence), merges pieces closer than 20 frames, and writes section 8 精剪建议 plus `keep` / `edit` in the JSON. A `from` / `to` that does not match the line goes to `待确认` and `review.unmatched_keep`.
+- The brief stays a brief: assembling or exporting the edit is a separate step for the editor or an editing tool.
+- In the default mode, a clip with ≤2 measured shots, >50 suspects and speech over 60% gets a warning suggesting `--talking-head`; the mode never switches by itself.
 - Speech and the whole-clip proxy start at once and run beside the storyboard steps; storyboard sheets go `--workers` (default 3) at a time. Run one clip at a time; more requests in flight make the CPA gateway return 502 (retried after 5 / 15 / 30 s). Measured: an 8-min clip with 217 shots took 7.2 min at 3 workers (17 min one sheet at a time), with no 502.
 
 ## Overlay Sheet（花字表）
@@ -57,7 +67,7 @@ The model's sheet is checked by the agent, roughly, and the agent corrects the f
 
 ## Report
 
-The status (`ok` / `needs_review`), counts (shots, lines, people, segments), the `.footage.md` path, and every review, validation and warning line as printed. `needs_review` with only uncertain words is normal: list them for the user to confirm.
+The status (`ok` / `needs_review`), counts (shots, lines, people, segments), in talking-head mode the 精剪建议 line (pieces, seconds vs source), the `.footage.md` path, and every review, validation and warning line as printed. `needs_review` with only uncertain words is normal: list them for the user to confirm.
 
 Overlay sheet, after the agent check: the counts (花字, 人名条, other packaging), the `.overlays.md` path, and what the check changed (or that nothing needed changing).
 
@@ -76,6 +86,8 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 - Agent check on 京东.mp4 (2.5.0): 4 check sheets and 2 `--look` strips, one fix (人名条 text 「韩 耘」 → 「韩耘」, letter spacing read as a space); after it count and text 20/20, out-points 20/20 and in-points 18/20 within 5 frames, the other two faint fade-in starts within 0.2 s, passed as roughly right.
 - A run widened into the previous shot can take other text there for the overlay: N1 came out 14 and 24 frames early on two runs (a 3D sign in the crop). True early entries (H16, H17) look the same, so every 先在上一个镜头出现 goes to review.
 - 3D text signs get listed as 花字 on the find sheets; the read pass sees no overlay text on them and moves them to other packaging as 字牌或实拍文字, with a warning. A caption that grows out of a 3D sign can carry the sign's text in its read (H06 once read 爆款 / 的诞生 / …).
+- Talking head on a hand-held 口播 (IMG_7724, 6:32, one take, 2026-11-10): the default mode flagged 381 weak suspects (90 sheets, about 20 min) and the cut check turned the one take into 12 shots (IMG_7722, 3:57: 6). `--talking-head` (2.6.0): 1 shot, 3 min 16 s. Its keep[] gave 20 pieces, 209 s; against a hand-made edit of the same clip (208 s) 187 s overlap (90%). It kept two messy restart passages the hand edit dropped (~8 s) and moved the hook to the front on its own. ASR line numbering differs between runs (63 vs 66 lines), so compare edits by frames, not U IDs.
+- Once in two runs the single shot-description request got no reply within 300 s (`TIMEOUT`, exit 7); the rerun passed in about a minute. Timeouts are not retried, so rerun the clip.
 - Boxes drawn on storyboard sheets are unreliable; on the full-resolution frame they were right on 22 of 23, the miss a half-drawn name bar.
 
 ## Resource Map

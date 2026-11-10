@@ -6,10 +6,18 @@
       "prompt": "给这条原始素材做一份素材说明书，方便剪辑 A001_C003.mov，脚本在 script.txt",
       "trigger_expected": true,
       "expected_output": "Runs footage.py on the clip with --script script.txt; reports the status, counts, the .footage.md path and any review items without pasting the brief.",
-      "files": ["SKILL.md"],
+      "files": [
+        "SKILL.md"
+      ],
       "assertions": [
-        {"type": "contains", "value": "footage.py"},
-        {"type": "contains", "value": "--script"}
+        {
+          "type": "contains",
+          "value": "footage.py"
+        },
+        {
+          "type": "contains",
+          "value": "--script"
+        }
       ]
     },
     {
@@ -17,9 +25,14 @@
       "prompt": "帮我筛一下这条采访素材 interview_01.mp4，哪些镜头能用，哪句话可以下刀",
       "trigger_expected": true,
       "expected_output": "Runs footage.py on the clip and points to the shot table flags, unusable shots, retakes and the cut points in the .footage.md.",
-      "files": ["SKILL.md"],
+      "files": [
+        "SKILL.md"
+      ],
       "assertions": [
-        {"type": "contains", "value": "footage.py"}
+        {
+          "type": "contains",
+          "value": "footage.py"
+        }
       ]
     },
     {
@@ -27,9 +40,14 @@
       "prompt": "这条素材一共几个镜头？每个镜头从第几帧到第几帧 footage.mov",
       "trigger_expected": true,
       "expected_output": "Runs measure.py for the frame-accurate shot list (or footage.py when descriptions are wanted) and reports measured counts and frame ranges.",
-      "files": ["SKILL.md"],
+      "files": [
+        "SKILL.md"
+      ],
       "assertions": [
-        {"type": "contains", "value": "measure.py"}
+        {
+          "type": "contains",
+          "value": "measure.py"
+        }
       ]
     },
     {
@@ -37,9 +55,14 @@
       "prompt": "给 /tmp/does-not-exist.mov 做素材说明书",
       "trigger_expected": true,
       "expected_output": "Reports INPUT_NOT_FOUND instead of inventing a brief.",
-      "files": ["SKILL.md"],
+      "files": [
+        "SKILL.md"
+      ],
       "assertions": [
-        {"type": "contains", "value": "INPUT_NOT_FOUND"}
+        {
+          "type": "contains",
+          "value": "INPUT_NOT_FOUND"
+        }
       ]
     },
     {
@@ -49,7 +72,10 @@
       "expected_output": "Uses genius-omni video-summary, not a footage brief.",
       "files": [],
       "assertions": [
-        {"type": "not_contains", "value": "footage.py"}
+        {
+          "type": "not_contains",
+          "value": "footage.py"
+        }
       ]
     },
     {
@@ -59,7 +85,10 @@
       "expected_output": "Uses genius-voice asr --speakers.",
       "files": [],
       "assertions": [
-        {"type": "not_contains", "value": "footage.py"}
+        {
+          "type": "not_contains",
+          "value": "footage.py"
+        }
       ]
     },
     {
@@ -67,9 +96,14 @@
       "prompt": "片子在桌面，你先逐帧看一下",
       "trigger_expected": true,
       "expected_output": "Finds the video, runs footage.py on it (finished edits included) and reports the status, counts and the .footage.md path; does not hand-roll frame extraction or OCR.",
-      "files": ["SKILL.md"],
+      "files": [
+        "SKILL.md"
+      ],
       "assertions": [
-        {"type": "contains", "value": "footage.py"}
+        {
+          "type": "contains",
+          "value": "footage.py"
+        }
       ]
     },
     {
@@ -79,7 +113,10 @@
       "expected_output": "Uses genius-sound (foley and ambience); genius-footage only runs inside its spotting step, not as the deliverable.",
       "files": [],
       "assertions": [
-        {"type": "contains", "value": "sound.py"}
+        {
+          "type": "contains",
+          "value": "sound.py"
+        }
       ]
     },
     {
@@ -87,9 +124,14 @@
       "prompt": "桌面上这条成片 京东.mp4 一共多少个花字？每个从第几帧出现到第几帧消失，我要重新设计花字再压制",
       "trigger_expected": true,
       "expected_output": "Runs overlays.py on the clip and reports the status, the counts of 花字 / 人名条, the .overlays.md path and every review line; does not hand-roll OCR or frame grabs, and does not have the model report times from the video.",
-      "files": ["SKILL.md"],
+      "files": [
+        "SKILL.md"
+      ],
       "assertions": [
-        {"type": "contains", "value": "overlays.py"}
+        {
+          "type": "contains",
+          "value": "overlays.py"
+        }
       ]
     },
     {
@@ -99,7 +141,44 @@
       "expected_output": "Uses genius-subtitle (ASR, translation, SRT/ASS, burn-in); no footage brief or overlay sheet.",
       "files": [],
       "assertions": [
-        {"type": "not_contains", "value": "overlays.py"}
+        {
+          "type": "not_contains",
+          "value": "overlays.py"
+        }
+      ]
+    },
+    {
+      "id": "talking-head-brief",
+      "prompt": "这条是一镜到底的口播 IMG_7724.MOV，帮我出素材说明书，顺便告诉我哪些停顿、口误、重复要剪掉",
+      "trigger_expected": true,
+      "expected_output": "Runs footage.py on the clip with --talking-head; reports status, counts, the 精剪建议 line (pieces, seconds vs source), the .footage.md path and review items, pointing to sections 8 精剪建议 and 9 口播标记; does not assemble or export an edit.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "footage.py"
+        },
+        {
+          "type": "contains",
+          "value": "--talking-head"
+        }
+      ]
+    },
+    {
+      "id": "assemble-edit-near-miss",
+      "prompt": "按这份精剪建议直接在达芬奇里把口播拼好并导出 mp4",
+      "trigger_expected": false,
+      "expected_output": "Not this skill: assembling a timeline and exporting is editing, outside the footage brief.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "footage.py"
+        }
       ]
     }
   ]
