@@ -46,9 +46,20 @@ Gen writes 48 kHz stereo 16-bit audio (non-wav outputs at 192 kbps) and prints `
 
 The output path, duration, and the references used (`--ref` files, `--speaker` id, `--image`). Pass on the 120s-cap warning if it was printed.
 
+## Re-voicing narration (clean dry voice from a mixed video)
+
+When a video's narration sits under music and the user wants the narration dry (旁白干声), re-voice it rather than separate it. No downloads, no installs.
+
+1. `asr <video> --output json` for the script and per-line `start`/`end`. Speech before the first music-free pause and short words are easy to lose under music (see `asr.md`); have the user confirm the script, and drop sung lyrics.
+2. Cut a 5–15s reference of the speaker from the least musical stretch and clone it with `tts --clone` into a clip of **unrelated** text, about 10–15s, in the tone wanted (natural chat or emotional). A reference that reads the script gets copied (Gotchas).
+3. `gen --ref <that clip>` with one `[start s:end s]` line per sentence taken **from the original timestamps**. Then the pace is the speaker's own, the take is the original's length and lines up with the picture. Prompt: "In the exact voice of @音频1", the tone, "纯人声干声，没有背景音乐、没有音效、没有混响", "每句台词只说一遍，一字不差"; for an English name in a Chinese line add "（英文 X 要清楚完整地读出来）".
+4. Make 3 takes and `asr` each; name files by what the check found (complete, missing line…) so the user can choose by ear.
+
 ## Measured (2026-11-04)
 
 A 10s, 3-line timeline matched the total length exactly, line ends within 0.1s, line starts 0.2–0.4s late. A 43s, 17-line redub landed starts between 0.28s early and 0.38s late; moving every start 0.3s earlier did not reliably help, and the model added a “嘘” not in the script. A free-text "3秒钟" sound came back 0.54s long. A 6s, 3-line check with `--subtitle` came back exactly 6.0s, but put line 1 (tagged 0–2.5s, a whisper) at 1.72–2.68s and line 3 (tagged 4.2–6s) at 4.48–5.84s. `--ref` with `--speaker` in one request is accepted by the API; which voice wins has not been checked by ear. A 320×240 `--image` was rejected (`402 InvalidPayload:ImageSizeOutOfRange`); 512×512 and 1024×1024 worked. One request was dropped by the server without a response (retried as a network error); typical short requests return in 5–20s. To check male vs female per line, cut each line into its own clip and read `asr --output json` `gender` (on the whole clip ASR merged two lines under one label).
+
+Re-voicing (2026-11-10, 29.6s Chinese radio narration, 7 lines on the original timeline): every take came back exactly 29.6s and the user judged the pace as natural speech. A loose hand-made timeline (41s for the same lines, plus inserted 0.9s pauses) and MiMo `tts` (25–38s) were both judged "too slow, not like talking". Of 8 takes, the English song title in "今夜放 Gentle Years Journey" was dropped in 3 and read whole in 5 (adding the "清楚完整地读出来" note raised it to 4 of 6).
 
 ## Gotchas
 

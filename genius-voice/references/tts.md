@@ -65,6 +65,8 @@ The output path, duration, and voice used (preset id, clone reference, or design
 
 - TTS on one long request (≈250+ chars) skips, repeats or garbles sentences. Keep `VOICE_TTS_CHUNK_CHARS` at 150 or below.
 - `--clone` on a very short line (≤8 chars) sent on its own is unreliable: it invents words (measured: "又是完美的一天。" came back followed by "帮我导航到大湾公园"), misreads ("嗨，我是 Leo" as "哎，好实力哦"), drops characters, and once left a 4.5s gap mid-line. Piling on direction drags the pace: a leading `(温柔 开心)`, inline `（轻叹）` and "……" plus a hard order in `--style` such as "每秒三个字" slowed it to 1–2 chars/s. The same ~100-char script in one request came back word-perfect. Generate the whole passage in one request, skip hard pace numbers, and set pauses in the edit.
+- A strong emotion tag with `--clone` can swallow words: with `（动情）` and "声音微微发颤" in `--style`, 3 of 3 takes of a 140-char script replaced "晚安" before the last line with ~2.5s of loud non-speech (a sigh or sob; `asr` on that stretch: `NO_SPEECH_DETECTED`). After any emotional take, `asr` it and check the line ends.
+- Cloned narration in "close-mic, breathy, emotional" styles reads slower than the speaker did (users heard it as "not like talking"). To match a real speaker's pace, re-voice with `gen` on the original timeline (`references/gen.md` § Re-voicing narration); use `tts --clone` to make that recipe's reference clip.
 - A designed voice has no reusable id. The script designs chunk 1 and clones it for later chunks; to reuse a designed voice later, pass its output file to `--clone`.
 - Preset voices, cloning and design are separate models; they cannot be combined in one call. Singing `(唱歌)` works only with preset voices; for a song with accompaniment use `gen` (`references/gen.md`).
 

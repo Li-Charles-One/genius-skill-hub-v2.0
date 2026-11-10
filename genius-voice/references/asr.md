@@ -39,6 +39,7 @@ The transcript as returned, in the source language, unedited (`[S1]`, `[S2]` pre
 - Without `--speakers`, a second speaker who cuts in with no pause can be dropped entirely (measured: two voices back to back lost the second; a 0.6s gap or the speaker pass kept it). With `--speakers` the script fills such gaps from the speaker pass, so use it whenever more than one person talks.
 - Homophones survive (采销 → 彩销, JOVO → Jovi). Report the transcript as returned; do not correct it.
 - Silent audio returns `NO_SPEECH_DETECTED`.
+- Under music, short words at a line start can vanish: a video's opening "嗨，我是 Leo" came back as "我是 Leo"; the same audio after vocal separation, or its first 4s on their own, gave "嗨"/"Hi". When the transcript becomes a script to re-voice, recheck the first seconds alone and ask the user about greetings. English names in Chinese speech also drift ("放 Gentle" → "放晴").
 
 ## Verification
 

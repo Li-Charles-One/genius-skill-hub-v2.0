@@ -34,6 +34,19 @@
       ]
     },
     {
+      "id": "narration-dry-revoice",
+      "prompt": "桌面上 Leo.mp4 里的旁白混着背景音乐，帮我提取一下旁白干声",
+      "trigger_expected": true,
+      "expected_output": "Does not install Demucs, UVR, audio-separator or torch. Transcribes with asr --output json, clones an unrelated reference clip with tts --clone, then runs gen --ref on the original per-line timestamps, makes several takes and checks each with asr.",
+      "files": ["SKILL.md", "references/gen.md"],
+      "assertions": [
+        {"type": "contains", "value": "asr"},
+        {"type": "contains", "value": "gen"},
+        {"type": "not_contains", "value": "demucs"},
+        {"type": "not_contains", "value": "pip install"}
+      ]
+    },
+    {
       "id": "voice-design",
       "prompt": "帮我设计一个低沉沙哑的老人声音，用它念这段旁白 story.txt",
       "trigger_expected": true,
