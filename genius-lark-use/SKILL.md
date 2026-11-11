@@ -34,6 +34,10 @@ This skill is the single entry point for Lark/Feishu work through the official `
 - Do not install, update, log in, or reconfigure `lark-cli` unless the user explicitly asks.
 - Do not expose secrets, app credentials, OAuth tokens, or raw sensitive payloads.
 
+## Gotchas
+
+None known.
+
 ## Final Response Contract
 
 Report what was checked or changed; the relevant URL, token, file, chat, event, or record/task count; any confirmation obtained; and any failed or skipped step with its actionable error.

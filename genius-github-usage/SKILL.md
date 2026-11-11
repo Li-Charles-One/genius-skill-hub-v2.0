@@ -38,4 +38,8 @@ Before a push: check `git status --short`, `git diff --check`, `git diff --stat`
 
 Local `git status` / `git commit` with no GitHub step is not this skill.
 
+## Gotchas
+
+The `gh` traps are the Must Follow items above (silent list caps, `--comments` showing issue comments only, bots being apps). None known beyond them.
+
 Trigger checks: `evals/evals.json`.

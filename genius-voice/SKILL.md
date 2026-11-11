@@ -49,6 +49,10 @@ Each module's file says what to report. Never edit or "fix" a transcript.
 
 Failures print `Error [CODE]: …` with a non-zero exit (a missing input is `INPUT_NOT_FOUND`, exit 3). Report the code and message as-is; the code table is in `references/setup.md`.
 
+## Gotchas
+
+Each module's file has its own Gotchas section: `references/asr.md`, `references/tts.md`, `references/gen.md`.
+
 ## Resource Map
 
 - `scripts/voice.py`: every command above.

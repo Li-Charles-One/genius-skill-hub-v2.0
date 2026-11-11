@@ -57,6 +57,10 @@ node <skill_dir>/scripts/init-memory.cjs <root> --agent <name> --project "<name>
 - Read is recorded state, not a live verification. Obey the script's stop lines (no pending tasks, unknown, waiting on the user, invalid task number, sync conflict): never invent a task, fall back to #1 or write while copies conflict. `--brief` cuts long items to their label: run a full read before acting on one.
 - Write: say whether anything persisted, the change ID and the exact next step. Relay any `[audit]` warning; do not trim memory unasked.
 
+## Gotchas
+
+`references/reference.md` § Pitfalls: `--reinit` destroys history; `--next-step` and `--blockers` replace a section instead of merging; sync-conflict copies block every write until resolved.
+
 ## Resource Map
 
 - `references/reference.md`: full CLI, file schema and pitfalls.
