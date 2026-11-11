@@ -13,22 +13,19 @@ whole-clip request also returns keep[] (line ID + verbatim first / last words), 
 --breakdown (拉片): a reference film; the whole-clip request answers how it is built (structure, editing,
 picture and sound, packaging, takeaways) and rhythm figures are computed from the measured shots; several
 films also get one comparison (拉片汇总). Several clips run --jobs at a time; model requests share one cap.
-Speech via asr.py (DOUBAO_API_KEY); models via client.py.
-Protocol: ArtisticCut/AG_FOOTAGE.md.
+Speech via asr.py (DOUBAO_API_KEY); models via client.py; links via download.py. One failed model request
+does not lose the clip: what is missing goes to 待确认 and the status is needs_review.
+Protocol: AG_FOOTAGE/1.1 (the spec, AG_FOOTAGE.md, is kept in the ArtisticCut project, not in this package).
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
 import shutil
-import subprocess
 import sys
-import threading
-import urllib.request
 from bisect import bisect_left, bisect_right
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
@@ -36,6 +33,7 @@ from pathlib import Path
 
 import asr
 import client
+import download
 import measure
 import storyboard
 from asr import SpeechError
@@ -54,17 +52,6 @@ STUTTER = set("我你他她这那就是在跟")   # one-character words that, sa
 TH_HINT = (50, 0.6)                # default mode: ≤2 measured shots, >50 suspects, speech >60% → suggest --talking-head
 JOBS = 6                           # clips at once; their model requests share client.MAX_REQUESTS
 _procs = None                      # several clips: cut measurement (pure Python, holds the GIL) runs in processes
-_ctx = threading.local()           # .tag = short clip name, prefixed to log lines when several clips run
-
-
-def _tagged(fn):
-    """fn run in a worker thread keeps the calling clip's log tag."""
-    tag = getattr(_ctx, "tag", None)
-
-    def call(*a, **k):
-        _ctx.tag = tag
-        return fn(*a, **k)
-    return call
 
 
 class _TagStream:
@@ -72,7 +59,7 @@ class _TagStream:
         self._s = stream
 
     def write(self, text):
-        tag = getattr(_ctx, "tag", None)
+        tag = getattr(client.ctx, "tag", None)
         return self._s.write(text.replace("[genius-footage]", f"[genius-footage {tag}]") if tag else text)
 
     def __getattr__(self, name):
@@ -473,7 +460,9 @@ def validate(doc: dict) -> list[str]:
         nums = [int(x[1:]) for x in g["shots"]]
         if nums != list(range(nums[0], nums[0] + len(nums))):
             errs.append(f"{g['id']} 的镜头不连续")
-        if g["first"] <= prev:
+        # Two lines said without a pause share a frame (a line's start rounds down, its end rounds up),
+        # so segments over lines (talking head) may share that one frame; segments over shots may not.
+        if g["first"] < prev or (g["first"] == prev and not g.get("us")):
             errs.append(f"{g['id']} 与上一分段重叠")
         prev = g["last"]
     h = doc["highlights"]
@@ -528,7 +517,6 @@ SHOT_CHECK_PROMPT = (
 )
 CHECK_PER_SEC = 9  # frames per second for a sustained-change suspect
 CHECK_SIDE = 6     # frames each side of a one-frame jump
-WORKERS = 3        # storyboard requests in flight at once (more makes the CPA gateway return 502)
 # Storyboard sheets, not the video: shots and timing were measured locally (measure.py).
 SHOT_PROMPT = (
     "These images are storyboard sheets of one video. Every cell is one exact frame, labelled at its "
@@ -552,21 +540,7 @@ SHOT_FIELDS = ("roll", "shot_size", "angle", "movement", "people", "scene", "act
 SHOT_MIDDLE_SEC = 4.0  # shots at least this long get a middle frame on the storyboard
 
 
-def _json(text: str, open_ch: str, close_ch: str):
-    a, b = text.find(open_ch), text.rfind(close_ch)
-    try:
-        return json.loads(text[a:b + 1]) if a != -1 and b > a else None
-    except ValueError:
-        return None
-
-
-def _ask(c: dict, jobs: list[tuple[Path, str]], workers: int) -> list:
-    """One storyboard request per (sheet, prompt), up to `workers` at once; answers in input order."""
-    with ThreadPoolExecutor(max(1, workers)) as ex:
-        return list(ex.map(_tagged(lambda j: _json(client.call(c, [str(j[0])], j[1], 300), "[", "]")), jobs))
-
-
-def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path, workers: int) -> None:
+def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path) -> None:
     """1. Suspects: a one-frame jump gets six frames each side, a sustained change nine frames per second
     across it. The model judges: what changes, on which cell, and whether a new shot starts there. A new shot
     starts on the cell it points to; unsure ones stay unresolved for review."""
@@ -591,12 +565,12 @@ def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path, worker
         r["storyboards"].append(str(sheet))
         print(f"[genius-footage] checking {len(gids)} suspects on {sheet.name}…", file=sys.stderr)
         listing = ", ".join(f"{x} ({span_of[x]} frames, {span_of[x] / r['fps']:.2f}s)" for x in gids)
-        jobs.append((sheet, SHOT_CHECK_PROMPT.replace("{ids}", listing)))
-    for answer in _ask(c, jobs, workers):
-        for item in answer if isinstance(answer, list) else []:
+        jobs.append(([str(sheet)], SHOT_CHECK_PROMPT.replace("{ids}", listing)))
+    for answer in client.ask(c, jobs, [g for _, g in pages], r["errors"]):
+        for item in answer or []:
             s = ids.get(str(item.get("id")))
             verdict = str(item.get("verdict", "")).strip().lower()
-            if not s or verdict not in ("new shot", "same shot", "unsure"):
+            if not s or "check" in s or verdict not in ("new shot", "same shot", "unsure"):
                 continue
             # The timeline stays measured: a one-frame jump shows every frame, so the model's cell is exact;
             # a sustained change shows every few frames, so it starts where measure.py found it.
@@ -613,13 +587,35 @@ def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path, worker
         measure.add_boundaries(r, extra, spans)
 
 
-def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int, talking_head: bool = False) -> dict:
-    """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
-    from labelled storyboard sheets, never times or counts them."""
+def measured(src: str, duration: float) -> dict:
+    """measure.py's result, cached per file. A first run on a clip writes the whole-clip proxy from the same
+    decode: one pass over the source instead of two (four clips at once: 140–169 s → 81–90 s of decoding)."""
+    def fresh() -> dict:
+        go = lambda second: _procs.submit(measure.measure, src, second).result() if _procs else measure.measure(src, second)  # noqa: E731
+        out, kbps = client.proxy_file(src, duration)
+        if duration > client.MAX_VIDEO_SEC or out.is_file():
+            return go(None)
+        client.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        part = out.with_suffix(".part.mp4")
+        try:
+            r = go((client.PROXY_VF, client.proxy_output(kbps, client.PROXY_ENCODERS[0], part)))
+        except measure.MeasureError:  # e.g. that encoder is missing: measure alone, video_proxy has the fallback
+            part.unlink(missing_ok=True)
+            return go(None)
+        if part.is_file() and part.stat().st_size:
+            part.replace(out)
+        return r
+
     try:
-        r = _procs.submit(measure.measure, src).result() if _procs else measure.measure(src)
+        return client.cached(src, "measure", fresh, measure.__file__)
     except measure.MeasureError as e:
         raise FootageError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
+
+
+def shots(src: str, c: dict, r: dict, out_dir: Path, seek: list, talking_head: bool = False) -> dict:
+    """r = the shot list measured locally (measured()); the model only judges suspects and describes shots
+    from labelled storyboard sheets, never times or counts them."""
+    r["file"], r["errors"] = src, []  # errors: model requests that failed twice (client.ask)
     print(f"[genius-footage] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
           f"{len(r['suspects'])} suspects", file=sys.stderr)
     r["storyboards"] = []
@@ -630,7 +626,7 @@ def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int, talking_he
         if r["suspects"]:
             r["warnings"].append(f"口播模式：{len(r['suspects'])} 处弱疑似切点未核对，镜头只按测得的硬切划分")
     else:
-        check_suspects(src, c, r, seek, out_dir, workers)
+        check_suspects(src, c, r, seek, out_dir)
 
     # 2. Describe every shot from its first / (middle) / last frames.
     groups = []
@@ -646,11 +642,11 @@ def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int, talking_he
     for sheet, gids in pages:
         r["storyboards"].append(str(sheet))
         print(f"[genius-footage] describing {gids[0]}–{gids[-1]} on {sheet.name}…", file=sys.stderr)
-        jobs.append((sheet, SHOT_PROMPT.replace("{ids}", ", ".join(gids)).replace("{fps}", f"{r['fps']:g}")))
-    for answer in _ask(c, jobs, workers):
-        for item in answer if isinstance(answer, list) else []:
+        jobs.append(([str(sheet)], SHOT_PROMPT.replace("{ids}", ", ".join(gids)).replace("{fps}", f"{r['fps']:g}")))
+    for answer in client.ask(c, jobs, [g for _, g in pages], r["errors"]):
+        for item in answer or []:
             s = by_id.get(str(item.get("id")))
-            if s:
+            if s and "desc" not in s:
                 s["desc"] = {k: str(item.get(k, "")) for k in SHOT_FIELDS}
     missing = [s["id"] for s in r["shots"] if "desc" not in s]
     if missing:
@@ -904,11 +900,8 @@ def compare(c: dict, docs: list[tuple[str, dict]], out_dir: Path) -> str:
     return str(out)
 
 
-def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: dict | None = None,
+def _overview(c: dict, r: dict, utts: list, script: str | None, upload: str, marks: dict | None = None,
               breakdown: bool = False) -> dict:
-    if proxy is None:
-        r["warnings"].append(f"clip longer than {client.MAX_VIDEO_SEC // 60} min: whole-clip overview skipped")
-        return {}
     shot_lines = "\n".join(
         f"{s['id']} {s['tc_in']} {s['end'] - s['start']:.1f}s | "
         + " | ".join(s.get("desc", {}).get(k, "") for k in ("shot_size", "scene", "action")) for s in r["shots"])
@@ -919,20 +912,18 @@ def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: di
         base = BREAKDOWN_PROMPT.replace("{rhythm}", _rhythm_text(rhythm(r["shots"], r["fps"], r["frames"], [], utts)))
     prompt = (base.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
               .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + LANGUAGE_RULE
-    upload = proxy.result()
     print("[genius-footage] whole-clip overview…", file=sys.stderr)
-    ov = _json(client.call(c, [upload], prompt, max(300, min(900, r["duration"] * 0.6))), "{", "}")
+    ov = client.parse_json(client.call(c, [upload], prompt, max(300, min(900, r["duration"] * 0.6))), "{", "}")
     if not isinstance(ov, dict) or not ov:
         r["warnings"].append("whole-clip overview returned no JSON")
         return {}
     return ov
 
 
-def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, talking_head: bool = False,
-        breakdown: bool = False) -> dict:
+def run(src: str, c: dict, script: str | None = None, talking_head: bool = False, breakdown: bool = False) -> dict:
     """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip
     (--breakdown: <stem>.breakdown.md / .breakdown.json, storyboards still in <stem>.footage/).
-    Speech and the whole-clip proxy need no shot list, so they run alongside the storyboard steps."""
+    Speech needs no shot list, so it runs alongside the measurement and the storyboard steps."""
     clip = Path(src)
     base = clip.with_suffix("")
     if not os.access(clip.parent, os.W_OK):
@@ -940,10 +931,11 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, ta
     seek = measure.frame_times(src, for_seek=True)
     bg = ThreadPoolExecutor(2)
     print("[genius-footage] transcribing (Doubao ASR) in the background…", file=sys.stderr)
-    speech_job = bg.submit(_tagged(asr.transcribe), src)
+    speech_job = bg.submit(client.tagged(lambda: client.cached(src, "asr", lambda: asr.transcribe(src), asr.__file__)))
     duration = asr.probe_duration(src)
-    proxy = bg.submit(_tagged(client.video_proxy), src, duration) if duration <= client.MAX_VIDEO_SEC else None
-    r = shots(src, c, Path(f"{base}.footage"), seek, workers, talking_head)
+    r = measured(src, duration)  # also leaves the whole-clip proxy in the cache, so the next line only checks
+    proxy = bg.submit(client.tagged(client.video_proxy), src, duration) if duration <= client.MAX_VIDEO_SEC else None
+    r = shots(src, c, r, Path(f"{base}.footage"), seek, talking_head)
 
     asr_note, utts, asr_model = None, [], None
     try:
@@ -960,13 +952,26 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, ta
     if not talking_head and not breakdown and r["measured_shots"] <= 2 and len(r["suspects"]) > TH_HINT[0] and spoken > TH_HINT[1]:
         r["warnings"].append(f"像是口播（测得 {r['measured_shots']} 个镜头、{len(r['suspects'])} 处疑似切点、"
                              f"台词占 {spoken:.0%}）：下次可加 --talking-head，更快，并给出精剪建议")
-    ov = _overview(c, r, utts, script, proxy, marks, breakdown)
+    ov = {}
+    if proxy is None:
+        r["warnings"].append(f"clip longer than {client.MAX_VIDEO_SEC // 60} min: whole-clip overview skipped")
+    else:
+        try:
+            ov = _overview(c, r, utts, script, proxy.result(), marks, breakdown)
+        except FootageError as e:
+            r["errors"].append(e)
     bg.shutdown()
+    if r["errors"] and not ov and not any("desc" in s for s in r["shots"]):
+        raise r["errors"][0]  # the model gave nothing at all (bad key, gateway down): fail as before
+    r["warnings"] += list(dict.fromkeys(f"模型请求失败 [{e.code}]：{e}（缺的部分见待确认，重跑可补）" for e in r["errors"]))
     doc = build(r, utts, ov, asr_note,
                 {"measure": "genius-footage measure.py", "asr": asr_model, "storyboard": c["model"],
                  "overview": c["model"] if ov else None},
                 client.fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
                 audio_info(src), marks)
+    if proxy is not None and not ov:  # failed or empty: the brief still has shots and lines
+        doc["uncertain"].append("全片分析缺失：概览、人物、分段、亮点为空，重跑可补")
+        doc["status"] = "needs_review"
     kind = "breakdown" if breakdown else "footage"
     if breakdown:
         doc.update(mode="breakdown", breakdown={k: ov.get(k) for k in ("genre", "structure", "editing", "language",
@@ -1006,210 +1011,18 @@ def render_result(res: dict) -> str:
 
 # ── CLI ───────────────────────────────────────────────────────────────────
 
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mxf"}
-
-
-BROWSER_SITES = r"https?://([\w-]+\.)?(douyin\.com|iesdouyin\.com|xiaohongshu\.com|xhslink\.com)/"
-# Runs in ego-browser's Node.js: open the page, find the real video URL, save it from the page (its cookies go along).
-BROWSER_JS = r"""
-const task = await taskSpace(__NAME__);
-const page = task.page("p1");
-let res = {};
-try {
-  let url = __URL__, vid = __VID__;
-  if (/douyin\.com/.test(url)) {
-    // A fresh tab opening /video/<id> gets sent to another video; the 精选 player opens the right one.
-    // Its <video> plays a blob:, so take the file URL the player requests, tagged __vid=<id>.
-    if (!vid) {
-      await page.goto(url, { timeout: 45000 });
-      const u = await page.url();
-      vid = (u.match(/\/video\/(\d+)/) || u.match(/modal_id=(\d+)/) || [])[1];
-      if (!vid) throw new Error("找不到视频 ID：" + u);
-    }
-    await page.cdp("Network.enable", {});
-    await page.events();
-    await page.goto("https://www.douyin.com/jingxuan?modal_id=" + vid, { timeout: 45000 });
-    let src = null;
-    for (let k = 0; k < 30 && !src; k++) {
-      await page.waitForTimeout(1000);
-      src = (await page.events()).filter((e) => e.method === "Network.requestWillBeSent").map((e) => e.params.request.url)
-        .find((u) => /douyinvod\.com|\/aweme\/v1\/play/.test(u) && u.includes("__vid=" + vid));
-    }
-    const wall = await page.evaluate(() => !!document.querySelector("[class*=login-container], [class*=verify], #captcha_container"));
-    if (!src) res = { error: wall ? "wall" : "no-video", url: await page.url() };
-    else {
-      const r = await page.fetch(src, { saveAs: __PART__, timeout: 300000 });
-      const title = await page.evaluate(() => document.title);
-      res = r.ok ? { title, url: "https://www.douyin.com/video/" + vid } : { error: "HTTP " + r.status };
-    }
-  } else {
-    // 小红书: the note data in the page has the file (its <video> plays a blob:)
-    await page.goto(url, { timeout: 45000 });
-    await page.waitForFunction(() => Object.keys(window.__INITIAL_STATE__?.note?.noteDetailMap || {}).length, undefined,
-      { timeout: 25000 }).catch(() => {});
-    const info = await page.evaluate(() => {
-      const m = window.__INITIAL_STATE__?.note?.noteDetailMap || {};
-      const note = Object.values(m).map((x) => x?.note).find((n) => n?.video) || {};
-      const all = Object.values(note.video?.media?.stream || {}).flat().filter((x) => x?.masterUrl);
-      return { src: all.sort((a, b) => (b.height || 0) - (a.height || 0))[0]?.masterUrl, title: note.title || document.title,
-               url: location.href, wall: !!document.querySelector("[class*=login-container], [class*=verify]") };
-    });
-    if (!info.src) res = { error: info.wall ? "wall" : "no-video", url: info.url };
-    else {
-      const r = await page.fetch(info.src, { saveAs: __PART__, timeout: 300000 });
-      res = r.ok ? { title: info.title, url: info.url } : { error: "HTTP " + r.status, url: info.url };
-    }
-  }
-} catch (e) { res = { error: String(e?.message || e).slice(0, 300) }; }
-await task.finish({ keep: [] });
-console.log("@@RESULT " + JSON.stringify(res));
-"""
-
-
-def _safe(title: str, limit: int = 60) -> str:
-    t = re.sub(r'[\\/:*?"<>|\n\r\t]+', " ", re.sub(r"\s*[-|]\s*(抖音|小红书|小紅書)\s*$", "", title)).strip() or "video"
-    while len(t.encode("utf-8")) > limit:
-        t = t[:-1]
-    return t
-
-
-def _video_id(url: str) -> str | None:
-    m = re.search(r"/(?:video|note|explore|discovery/item|search_result)/([0-9a-f]{24}|\d{15,})", url)
-    return m.group(1) if m else None
-
-
-def fetch_browser(url: str, out_dir: Path) -> str:
-    """抖音 / 小红书: the logged-in ego browser opens the page and saves the video it plays."""
-    exe = shutil.which("ego-browser")
-    if not exe:
-        raise FootageError("DEPENDENCY_MISSING", "抖音、小红书要用 ego 浏览器下载：先装 ego lite（ego-browser 技能）")
-    vid = _video_id(url)
-    old = list(out_dir.glob(f"* [{vid}].mp4")) if vid else []
-    if old:
-        return str(old[0])
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tag = hashlib.sha1(f"{url}{os.getpid()}{threading.get_ident()}".encode()).hexdigest()[:8]
-    part = out_dir / f".part-{tag}.mp4"
-    js = (BROWSER_JS.replace("__NAME__", json.dumps(f"genius-footage download {tag}"))
-          .replace("__URL__", json.dumps(url)).replace("__VID__", json.dumps(vid))
-          .replace("__PART__", json.dumps(str(part.resolve()))))
-    print(f"[genius-footage] downloading {url} in the ego browser…", file=sys.stderr)
-    try:
-        p = subprocess.run([exe, "nodejs"], input=js, capture_output=True, text=True, timeout=600)
-    except subprocess.TimeoutExpired as e:
-        part.unlink(missing_ok=True)
-        raise FootageError("TIMEOUT", f"浏览器下载超过 10 分钟：{url}") from e
-    line = next((x for x in reversed((p.stdout + "\n" + p.stderr).splitlines()) if "@@RESULT " in x), None)
-    res = json.loads(line.split("@@RESULT ", 1)[1]) if line else {"error": (p.stderr or p.stdout).strip()[-300:]}
-    landed = _video_id(res.get("url") or "") or (re.search(r"modal_id=(\d+)", res.get("url") or "") or [None, None])[1]
-    if vid and landed and landed != vid:  # the site sent us to another video: this one is gone or private
-        res = {"error": f"视频打不开（被删、不公开或需要权限），网站跳到了 {res.get('url')}"}
-    if res.get("error") or not part.is_file() or not part.stat().st_size:
-        part.unlink(missing_ok=True)
-        err = res.get("error", "no file")
-        hint = "：在 ego 浏览器里登录这个网站（或过验证）后重跑" if err == "wall" else ""
-        raise FootageError("PROVIDER_ERROR", f"浏览器下载失败 {url}：{err}{hint}")
-    out = out_dir / f"{_safe(res.get('title') or '')} [{_video_id(res.get('url') or '') or vid or tag}].mp4"
-    part.replace(out)
-    print(f"[genius-footage] downloaded → {out}", file=sys.stderr)
-    return str(out)
-
-
-REDFOX = "https://redfox.hk/story/api/parseWork/videoDownload/"
-
-
-def fetch_redfox(text: str, url: str, out_dir: Path) -> str | None:
-    """抖音 / 小红书 via the RedFox API (REDFOX_API_KEY, about ¥0.03 a call): it returns the video file URL.
-    text may be a whole share message; it is sent as-is. None when no key or on failure (a fallback follows)."""
-    key = client._env("REDFOX_API_KEY")
-    if not key:
-        return None
-    vid = _video_id(url)
-    old = list(out_dir.glob(f"* [{vid}].mp4")) if vid else []
-    if old:
-        return str(old[0])
-    site = "douyin" if re.search(r"douyin\.com/", url) else "xhs"
-    print(f"[genius-footage] downloading {url} via RedFox…", file=sys.stderr)
-    req = urllib.request.Request(REDFOX + site, data=json.dumps({"url": text}).encode("utf-8"), method="POST",
-                                 headers={"REDFOX_API_KEY": key, "Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            res = json.loads(r.read().decode("utf-8"))
-    except Exception as e:
-        print(f"[genius-footage] RedFox failed ({e}), falling back…", file=sys.stderr)
-        return None
-    data = res.get("data") or {}
-    src = data.get("videoUrl") or next((x.get("downloadUrl") for x in data.get("resources") or []
-                                        if x.get("type") == "video" and x.get("downloadUrl")), None)
-    if res.get("code") != 2000 or not src:
-        print(f"[genius-footage] RedFox: code {res.get('code')} {res.get('msg') or res.get('message') or ''}"
-              f"{'' if src else '（没有视频）'}, falling back…", file=sys.stderr)
-        return None
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tag = vid or hashlib.sha1(text.encode()).hexdigest()[:10]
-    part = out_dir / f".part-{tag}.mp4"
-    try:
-        dl = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0", "Referer": f"https://www.{'douyin' if site == 'douyin' else 'xiaohongshu'}.com/"})
-        with urllib.request.urlopen(dl, timeout=600) as r, open(part, "wb") as f:
-            shutil.copyfileobj(r, f, 1 << 20)
-    except Exception as e:
-        part.unlink(missing_ok=True)
-        print(f"[genius-footage] RedFox file download failed ({e}), falling back…", file=sys.stderr)
-        return None
-    out = out_dir / f"{_safe(data.get('title') or (data.get('desc') or '').split(chr(10))[0])} [{tag}].mp4"
-    part.replace(out)
-    print(f"[genius-footage] downloaded → {out}", file=sys.stderr)
-    return str(out)
-
-
-def fetch(text: str, out_dir: Path, cookies: str | None = None) -> str:
-    """A link (or a share message with one) → a local mp4, kept in out_dir. 抖音 / 小红书: RedFox first, then
-    the logged-in ego browser (抖音) or yt-dlp and the browser (小红书, needs xsec_token); other sites yt-dlp."""
-    url = re.search(r"https?://[^\s，。！]+", text).group(0)
-    browser = re.match(BROWSER_SITES, url)
-    if browser:
-        got = fetch_redfox(text, url, out_dir)
-        if got:
-            return got
-    if re.match(r"https?://(www\.)?xiaohongshu\.com/", url) and "xsec_token=" not in url:
-        raise FootageError("UNSUPPORTED_FORMAT", f"小红书链接要带 xsec_token（从搜索结果或分享里复制完整链接），"
-                                                 f"不带时网站不给看这条笔记：{url}")
-    if browser and "xiaohongshu.com/" not in url:  # 抖音 (and xhslink short links) go straight to the browser
-        return fetch_browser(url, out_dir)
-    exe = shutil.which("yt-dlp")
-    if not exe:
-        raise FootageError("DEPENDENCY_MISSING", "链接需要 yt-dlp：brew install yt-dlp")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [exe, "--no-playlist", "--no-progress", "-f", "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
-           "--merge-output-format", "mp4", "-o", str(out_dir / "%(title).60B [%(id)s].%(ext)s"),
-           "--print", "after_move:filepath"] + (["--cookies-from-browser", cookies] if cookies else [])
-    print(f"[genius-footage] downloading {url}…", file=sys.stderr)
-    try:
-        p = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=1800)
-    except subprocess.TimeoutExpired as e:
-        raise FootageError("TIMEOUT", f"下载超过 30 分钟：{url}") from e
-    path = (p.stdout.strip().splitlines() or [""])[-1]
-    if p.returncode or not Path(path).is_file():
-        if browser:
-            print(f"[genius-footage] yt-dlp failed, trying the ego browser…", file=sys.stderr)
-            return fetch_browser(url, out_dir)
-        raise FootageError("PROVIDER_ERROR", f"下载失败 {url}：{p.stderr.strip()[-300:]}")
-    print(f"[genius-footage] downloaded → {path}", file=sys.stderr)
-    return path
-
-
 def _one(item: str, c: dict, args, script: str | None, tag: str | None) -> tuple[str, dict | None, FootageError | None]:
-    _ctx.tag = tag
+    client.ctx.tag = tag
     try:
         if not Path(item).is_file() and re.search(r"https?://", item):
-            item = fetch(item, Path(args.download_dir).expanduser(), args.cookies_from_browser)
+            item = download.fetch(item, Path(args.download_dir).expanduser(), args.cookies_from_browser)
         if not Path(item).is_file():
             raise FootageError("INPUT_NOT_FOUND", f"File not found: {item}")
-        if Path(item).suffix.lower() not in VIDEO_EXTENSIONS:
+        if Path(item).suffix.lower() not in client.VIDEO_EXTENSIONS:
             raise FootageError("UNSUPPORTED_FORMAT", f"footage needs a local video file: {item}")
         if args.download_only:
             return item, {"mode": "download", "path": item}, None
-        return item, run(item, c, script, args.workers, args.talking_head, args.breakdown), None
+        return item, run(item, c, script, args.talking_head, args.breakdown), None
     except FootageError as e:
         return item, None, e
     except Exception as e:
@@ -1224,7 +1037,6 @@ def main() -> None:
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
-    parser.add_argument("--workers", type=int, default=WORKERS, help=f"Storyboard requests at once per clip (default {WORKERS})")
     parser.add_argument("--jobs", "-j", type=int, default=JOBS, help=f"Clips at once (default {JOBS})")
     parser.add_argument("--max-requests", type=int, default=None,
                         help=f"Model requests in flight across all clips (default FOOTAGE_MAX_REQUESTS or {client.MAX_REQUESTS})")
@@ -1249,7 +1061,8 @@ def main() -> None:
               f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}\n"
               f"yt-dlp:       {shutil.which('yt-dlp') or 'not installed (links unsupported)'}\n"
               f"redfox:       key={'yes' if client._env('REDFOX_API_KEY') else 'no (抖音 / 小红书 via the ego browser)'}\n"
-              f"ego-browser:  {shutil.which('ego-browser') or 'not installed'}")
+              f"ego-browser:  {shutil.which('ego-browser') or 'not installed'}\n"
+              f"cache:        {client.CACHE_DIR} (whole-clip proxies, measured cuts, transcripts; delete to start fresh)")
         ok = bool(ff and c["api_key"] and asr_key)
         print("ok" if ok else "NOT READY")
         sys.exit(0 if ok else 2)

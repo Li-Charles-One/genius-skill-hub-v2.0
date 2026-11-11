@@ -8,19 +8,17 @@ Copied from genius-voice 2.1.0 voice.py so footage runs on its own. Config from 
 from __future__ import annotations
 
 import base64
-import http.client
 import json
 import os
-import socket
 import subprocess
 import sys
+import threading
 import time
-import urllib.error
-import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from client import RETRY_DELAYS, RETRY_HTTP, _dotenv, _env
+from client import FootageError, _dotenv, _env, post, tagged
 
 ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/"
 ASR_MODEL = "volc.seedasr.auc"
@@ -33,6 +31,8 @@ ASR_MAX_B64_BYTES = 100 * 1000 * 1000  # above this the provider wants audio.url
 ASR_POLL_SEC = 2
 ASR_WAIT_PER_AUDIO_SEC = 0.3  # measured ≈0.09s per audio second; 3× margin for queueing
 REQUEST_TIMEOUT = 600
+_jobs = threading.BoundedSemaphore(6)  # recognition jobs in flight: what six clips at once ran before the two
+                                       # passes of a clip ran side by side
 
 
 class SpeechError(RuntimeError):
@@ -65,35 +65,15 @@ def doubao_key() -> str:
 
 
 def _doubao(path: str, body: dict, request_id: str) -> tuple[str, str, dict]:
-    """Doubao ASR call with retries on 429/5xx/network errors. Returns (X-Api-Status-Code, X-Api-Message, body)."""
-    data = json.dumps(body).encode("utf-8")
-    headers = {"Content-Type": "application/json", "X-Api-Key": doubao_key(), "X-Api-Resource-Id": ASR_MODEL,
-               "X-Api-Request-Id": request_id, "X-Api-Sequence": "-1"}
-    for attempt, delay in enumerate((*RETRY_DELAYS, None), 1):
-        req = urllib.request.Request(ASR_URL + path, data=data, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-                raw = resp.read().decode("utf-8")
-                return (resp.headers.get("X-Api-Status-Code", ""), resp.headers.get("X-Api-Message", ""),
-                        json.loads(raw) if raw.strip() else {})
-        except urllib.error.HTTPError as e:
-            error = SpeechError(f"ASR API error {e.code}: {e.read().decode('utf-8', errors='replace')[:300]}")
-            transient = e.code in RETRY_HTTP
-        except (socket.timeout, TimeoutError) as e:
-            raise SpeechError(f"ASR: no response within {REQUEST_TIMEOUT}s") from e
-        except urllib.error.URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                raise SpeechError(f"ASR: no response within {REQUEST_TIMEOUT}s") from e
-            error = SpeechError(f"ASR network error: {e.reason}")
-            transient = True
-        except (http.client.HTTPException, ConnectionError) as e:  # getresponse() bypasses URLError
-            error = SpeechError(f"ASR network error: {e}")
-            transient = True
-        if delay is None or not transient:
-            raise error
-        log(f"{error} — retry {attempt}/{len(RETRY_DELAYS)} in {delay}s…")
-        time.sleep(delay)
-    raise AssertionError("unreachable")
+    """Doubao ASR call (client.post: retries on 429/5xx/network errors).
+    Returns (X-Api-Status-Code, X-Api-Message, body)."""
+    try:
+        headers, data = post(ASR_URL + path, {"X-Api-Key": doubao_key(), "X-Api-Resource-Id": ASR_MODEL,
+                                              "X-Api-Request-Id": request_id, "X-Api-Sequence": "-1"},
+                             body, REQUEST_TIMEOUT)
+    except FootageError as e:
+        raise SpeechError(f"ASR: {e}") from e
+    return headers.get("X-Api-Status-Code", ""), headers.get("X-Api-Message", ""), data
 
 
 def _run(cmd: list, timeout: float) -> subprocess.CompletedProcess:
@@ -124,24 +104,25 @@ def encode_mp3(path: str, duration: float) -> bytes:
 
 def _asr_pass(b64: str, options: dict, duration: float) -> list[dict]:
     """Submit one recognition job and poll until done. Returns raw utterances ([] for silence)."""
-    request_id = str(uuid.uuid4())  # doubles as the task id for polling
-    code, msg, _ = _doubao("submit", {"audio": {"data": b64, "format": "mp3"}, "request": {
-        "model_name": "bigmodel", "show_utterances": True, **options}}, request_id)
-    if code != "20000000":
-        raise SpeechError(f"ASR submit failed [{code}]: {msg}")
-    wait = max(REQUEST_TIMEOUT, duration * ASR_WAIT_PER_AUDIO_SEC)
-    deadline = time.monotonic() + wait
-    while True:
-        time.sleep(ASR_POLL_SEC)
-        code, msg, data = _doubao("query", {}, request_id)
-        if code == "20000000":
-            return (data.get("result") or {}).get("utterances") or []
-        if code == "20000003":  # no valid speech in audio
-            return []
-        if code not in ("20000001", "20000002"):  # queued / processing
-            raise SpeechError(f"ASR failed [{code}]: {msg}")
-        if time.monotonic() > deadline:
-            raise SpeechError(f"ASR job not finished within {wait:.0f}s")
+    with _jobs:
+        request_id = str(uuid.uuid4())  # doubles as the task id for polling
+        code, msg, _ = _doubao("submit", {"audio": {"data": b64, "format": "mp3"}, "request": {
+            "model_name": "bigmodel", "show_utterances": True, **options}}, request_id)
+        if code != "20000000":
+            raise SpeechError(f"ASR submit failed [{code}]: {msg}")
+        wait = max(REQUEST_TIMEOUT, duration * ASR_WAIT_PER_AUDIO_SEC)
+        deadline = time.monotonic() + wait
+        while True:
+            time.sleep(ASR_POLL_SEC)
+            code, msg, data = _doubao("query", {}, request_id)
+            if code == "20000000":
+                return (data.get("result") or {}).get("utterances") or []
+            if code == "20000003":  # no valid speech in audio
+                return []
+            if code not in ("20000001", "20000002"):  # queued / processing
+                raise SpeechError(f"ASR failed [{code}]: {msg}")
+            if time.monotonic() > deadline:
+                raise SpeechError(f"ASR job not finished within {wait:.0f}s")
 
 
 def _utterance(u: dict) -> dict:
@@ -165,16 +146,17 @@ def _overlap(a: dict, b: dict) -> float:
 
 
 def transcribe(path: str) -> dict:
-    """Two passes: text + word times, then speaker labels mapped on by time overlap."""
+    """Two passes side by side: text + word times, and speaker labels mapped on by time overlap."""
     doubao_key()
     duration = probe_duration(path)
     b64 = base64.b64encode(encode_mp3(path, duration)).decode("ascii")
     if len(b64) > ASR_MAX_B64_BYTES:
         raise SpeechError("Audio exceeds 100MB base64 (~3.5h at 64 kbps); transcript skipped")
-    log(f"asr pass 1/2: text + word timestamps ({duration:.0f}s)…")
-    utts = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_TEXT, duration)]
-    log("asr pass 2/2: speaker labels…")
-    labelled = [_utterance(u) for u in _asr_pass(b64, ASR_PASS_SPEAKER, duration)]
+    log(f"asr: text + word timestamps, and speaker labels ({duration:.0f}s)…")
+    with ThreadPoolExecutor(2) as ex:
+        utts, labelled = ([_utterance(u) for u in raw] for raw in
+                          ex.map(tagged(lambda options: _asr_pass(b64, options, duration)),
+                                 (ASR_PASS_TEXT, ASR_PASS_SPEAKER)))
     for u in utts:
         best = max(labelled, key=lambda s: _overlap(u, s), default=None)
         if best and _overlap(u, best) > 0:

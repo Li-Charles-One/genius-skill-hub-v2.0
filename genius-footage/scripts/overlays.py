@@ -3,7 +3,7 @@
 Genius Footage — overlay text sheet (花字表) for one edited video: `<clip>.overlays.md` + `.overlays.json`
 + `.overlays/` (storyboards), next to the clip.
 
-    python3 overlays.py <clip> [--fps 1] [--model M] [--workers 3] [--output text|json]
+    python3 overlays.py <clip> [--fps 1] [--model M] [--output text|json]
 
 Steps: find — frames sampled at --fps on numbered storyboard sheets, the model names the cells each overlay
 is on → read — one full-resolution frame per 花字 / 人名条, the model copies the text and boxes it → edges —
@@ -29,11 +29,9 @@ from pathlib import Path
 import client
 import measure
 import storyboard
-from client import FootageError
-from footage import VIDEO_EXTENSIONS, WORKERS, _ask, _json
+from client import VIDEO_EXTENSIONS, FootageError
 
 FIND_FPS = 1             # 京东.mp4 2026-11-05: 1 fps and 2 fps both found 20/20 overlays (shortest 2.2 s)
-FIND_CELL, FIND_COLS, FIND_PER_SHEET = (384, 216), 5, 40
 EDGE_STEPS = 10          # the edge pass splits the gap between two samples into this many steps (0.1 s at 1 fps)
 EDGE_WIDEN = 2           # sample gaps searched further out when an overlay already shows at the run's outer end
 READ_PER_CALL = 20       # full-resolution frames per read request
@@ -109,19 +107,6 @@ def _similar(a: str, b: str) -> float:
     return sum(m.size for m in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks()) / len(a)
 
 
-def _cell_size(w: int, h: int, cols: int = FIND_COLS, per_sheet: int = FIND_PER_SHEET) -> None:
-    storyboard.CELL_W, storyboard.CELL_H, storyboard.COLS, storyboard.MAX_CELLS = w, h, cols, per_sheet
-
-
-def _ask_twice(c: dict, jobs: list, workers: int) -> list:
-    """_ask, then once more for sheets whose answer was not a JSON array."""
-    answers = _ask(c, jobs, workers)
-    again = [k for k, a in enumerate(answers) if not isinstance(a, list)]
-    for k, a in zip(again, _ask(c, [jobs[k] for k in again], workers) if again else []):
-        answers[k] = a
-    return answers
-
-
 # ── 1. Find: which sampled cells show which overlay ─────────────────────
 
 def _cells(ranges, lo: int, hi: int) -> list[int]:
@@ -144,20 +129,19 @@ def _runs(cells: list[int]) -> list[list[int]]:
     return runs
 
 
-def find(src: str, c: dict, v: dict, seek: list, out_dir: Path, workers: int) -> list[dict]:
-    _cell_size(*FIND_CELL)
+def find(src: str, c: dict, v: dict, seek: list, out_dir: Path) -> list[dict]:
     groups = [(f"{k:04d}", [(f"{k:04d}", f)]) for k, f in v["grid"].items()]
     pages = storyboard.sheets(src, seek, v["fps"], groups, out_dir, "find")
     v["storyboards"] += [str(p) for p, _ in pages]
     print(f"[genius-footage] finding overlays on {len(groups)} cells, {len(pages)} sheets…", file=sys.stderr)
-    jobs = [(p, FIND_PROMPT.format(gap=v["step"] / v["fps"], first=g[0], last=g[-1])) for p, g in pages]
+    jobs = [([str(p)], FIND_PROMPT.format(gap=v["step"] / v["fps"], first=g[0], last=g[-1])) for p, g in pages]
     found = []
-    for (p, g), ans in zip(pages, _ask_twice(c, jobs, workers)):
-        if not isinstance(ans, list):
+    for (p, g), ans in zip(pages, client.ask(c, jobs, None, v["errors"])):
+        if ans is None:
             v["warnings"].append(f"no answer for {p.name}: overlays on cells {g[0]}–{g[-1]} may be missing")
             continue
         for it in ans:
-            if isinstance(it, dict) and str(it.get("text", "")).strip():
+            if str(it.get("text", "")).strip():
                 for run in _runs(_cells(it.get("cells"), int(g[0]), int(g[-1]))):
                     found.append({"cat": str(it.get("cat", "")).strip(), "text": str(it["text"]).strip(), "cells": run})
     found.sort(key=lambda o: o["cells"][0])
@@ -175,39 +159,30 @@ def find(src: str, c: dict, v: dict, seek: list, out_dir: Path, workers: int) ->
 
 # ── 2. Read: exact text and box from one full-resolution frame ──────────
 
-def read(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, workers: int) -> None:
+def read(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list) -> None:
     w = min(v["width"], READ_MAX_W)
-    _cell_size(w, round(v["height"] * w / v["width"] / 2) * 2)
+    h = round(v["height"] * w / v["width"] / 2) * 2
     for t in targets:
         a, b = t["cells"]
         t["read_frame"] = v["grid"][a + int((b - a + 1) * READ_AT)]
-    pix = storyboard.grab(src, seek, v["fps"], [t["read_frame"] for t in targets])
+    pix = storyboard.grab(src, seek, v["fps"], [(t["read_frame"], None) for t in targets], (w, h))
     files = []
     for k, t in enumerate(targets, 1):
-        cell = bytearray(pix[t["read_frame"]])
-        storyboard._label(cell, str(k))
+        cell = bytearray(pix[t["read_frame"], None])
+        storyboard.label(cell, str(k), w)
         path = out_dir / f"read_{k:02d}.jpg"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s",
-                        f"{storyboard.CELL_W}x{storyboard.CELL_H}", "-i", "-", "-q:v", "2", str(path)],
+                        f"{w}x{h}", "-i", "-", "-q:v", "2", str(path)],
                        input=bytes(cell), check=True)
         files.append(str(path))
     batches = [list(range(i, min(i + READ_PER_CALL, len(files)))) for i in range(0, len(files), READ_PER_CALL)]
     print(f"[genius-footage] reading {len(files)} overlays at full resolution…", file=sys.stderr)
-
-    def ask(batch: list) -> list | None:
-        prompt = READ_PROMPT.replace("{ids}", f"{batch[0] + 1}–{batch[-1] + 1}")
-        for _ in range(2):
-            ans = _json(client.call(c, [files[i] for i in batch], prompt, 300), "[", "]")
-            if isinstance(ans, list):
-                return ans
-        return None
-
+    jobs = [([files[i] for i in b], READ_PROMPT.replace("{ids}", f"{b[0] + 1}–{b[-1] + 1}")) for b in batches]
     by_img = {}
-    with ThreadPoolExecutor(max(1, workers)) as ex:
-        for ans in ex.map(ask, batches):
-            for r in ans or []:
-                if isinstance(r, dict) and str(r.get("image", "")).isdigit():
-                    by_img[int(r["image"])] = [x for x in r.get("items") or [] if isinstance(x, dict)]
+    for ans in client.ask(c, jobs, None, v["errors"]):
+        for r in ans or []:
+            if str(r.get("image", "")).isdigit():
+                by_img[int(r["image"])] = [x for x in r.get("items") or [] if isinstance(x, dict)]
     for k, t in enumerate(targets, 1):
         t["read_image"] = files[k - 1]
         if k not in by_img:
@@ -246,11 +221,10 @@ def _strip(lo: int, hi: int, every: int) -> list[int]:
 
 
 def _edge_pass(src: str, c: dict, v: dict, seek: list, out_dir: Path, strips: dict, targets: list,
-               every: int, prefix: str, workers: int) -> dict:
-    """strips: {group id like '03a': [frames]} → {group id: answer}. A sheet that comes back short is asked again once."""
+               every: int, prefix: str) -> dict:
+    """strips: {group id like '03a': [frames]} → {group id: answer}."""
     if not strips:
         return {}
-    _cell_size(*FIND_CELL)
     crops = {g: _crop(targets[int(g[:-1]) - 1].get("box"), v["width"], v["height"]) for g in strips}
     groups = [(g, [(f"{g}-{k}", f) for k, f in enumerate(fr, 1)]) for g, fr in strips.items()]
     pages = storyboard.sheets(src, seek, v["fps"], groups, out_dir, prefix, crops)
@@ -259,20 +233,13 @@ def _edge_pass(src: str, c: dict, v: dict, seek: list, out_dir: Path, strips: di
     for p, gids in pages:
         nums = dict.fromkeys(g[:-1] for g in gids)
         texts = "; ".join(f"{n} = 「{targets[int(n) - 1]['text']}」" for n in nums)
-        jobs.append((p, EDGE_PROMPT.replace("{every}", str(every)).replace("{texts}", texts)))
+        jobs.append(([str(p)], EDGE_PROMPT.replace("{every}", str(every)).replace("{texts}", texts)))
     print(f"[genius-footage] edges ({prefix}): {len(strips)} runs on {len(pages)} sheets…", file=sys.stderr)
     got = {}
-
-    def collect(answers: list, which: list) -> None:
-        for k, ans in zip(which, answers):
-            for it in ans if isinstance(ans, list) else []:
-                if isinstance(it, dict) and str(it.get("id")) in pages[k][1]:
-                    got[str(it["id"])] = it
-
-    collect(_ask(c, jobs, workers), list(range(len(pages))))
-    short = [k for k, (_, gids) in enumerate(pages) if any(g not in got for g in gids)]
-    if short:
-        collect(_ask(c, [jobs[k] for k in short], workers), short)
+    for (_, gids), ans in zip(pages, client.ask(c, jobs, [g for _, g in pages], v["errors"])):
+        for it in ans or []:
+            if str(it.get("id")) in gids:
+                got.setdefault(str(it["id"]), it)
     return got
 
 
@@ -282,7 +249,7 @@ def _index(label, gid: str, n: int) -> int | None:
     return int(m[2]) if m and m[1].lstrip("0") == gid.lstrip("0") and 1 <= int(m[2]) <= n else None
 
 
-def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, workers: int) -> None:
+def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list) -> None:
     last, step = v["frames"] - 1, v["step"]
     every = max(1, math.ceil(step / EDGE_STEPS))
     pending = {}
@@ -295,7 +262,7 @@ def edges(src: str, c: dict, v: dict, seek: list, out_dir: Path, targets: list, 
         if p1 < last:
             pending[f"{n:02d}b"] = _strip(p1, min(last, p1 + step), every)
     for rnd in range(1, EDGE_WIDEN + 2):
-        ans = _edge_pass(src, c, v, seek, out_dir, pending, targets, every, f"edges{rnd}", workers)
+        ans = _edge_pass(src, c, v, seek, out_dir, pending, targets, every, f"edges{rnd}")
         wider = {}
         for g, fr in pending.items():
             t, kind, it = targets[int(g[:-1]) - 1], g[-1], ans.get(g, {})
@@ -381,7 +348,7 @@ def _position(box: list | None) -> str:
 
 # ── Run and render ───────────────────────────────────────────────────────
 
-def run(src: str, c: dict, fps_find: float = FIND_FPS, workers: int = WORKERS) -> dict:
+def run(src: str, c: dict, fps_find: float = FIND_FPS) -> dict:
     clip = Path(src)
     base = clip.with_suffix("")
     if not os.access(clip.parent, os.W_OK):
@@ -398,15 +365,18 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS, workers: int = WORKERS) -
     fps = float(info["fps"])
     step = max(1, round(fps / fps_find))
     v = {"fps": fps, "width": info["width"], "height": info["height"], "frames": len(seek), "step": step,
-         "grid": {k + 1: f for k, f in enumerate(range(0, len(seek), step))}, "storyboards": [], "warnings": []}
+         "grid": {k + 1: f for k, f in enumerate(range(0, len(seek), step))}, "storyboards": [], "warnings": [],
+         "errors": []}  # errors: model requests that failed twice (client.ask)
     bg = ThreadPoolExecutor(1)
-    cuts_job = bg.submit(measure.measure, src)  # cuts are only needed at the end
+    cuts_job = bg.submit(client.cached, src, "measure", lambda: measure.measure(src), measure.__file__)  # needed at the end
 
-    found = find(src, c, v, seek, out_dir, workers)
+    found = find(src, c, v, seek, out_dir)
+    if v["errors"] and not found:
+        raise v["errors"][0]  # the model gave nothing at all (bad key, gateway down)
     targets = [dict(o, review=[]) for o in found if o["cat"] in TARGETS]
     others = [o for o in found if o["cat"] not in TARGETS]
     if targets:
-        read(src, c, v, seek, out_dir, targets, workers)
+        read(src, c, v, seek, out_dir, targets)
         for t in targets:
             if t.get("unread"):
                 t["cat"] = "字牌或实拍文字"
@@ -414,12 +384,13 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS, workers: int = WORKERS) -
         others += [t for t in targets if t["cat"] == "字牌" or t.get("unread")]
         targets = [t for t in targets if t["cat"] != "字牌" and not t.get("unread")]
     if targets:
-        edges(src, c, v, seek, out_dir, targets, workers)
+        edges(src, c, v, seek, out_dir, targets)
     try:
         r = cuts_job.result()
     except measure.MeasureError as e:
         raise FootageError("UNSUPPORTED_FORMAT", str(e))
     bg.shutdown()
+    v["warnings"] += list(dict.fromkeys(f"模型请求失败 [{e.code}]：{e}" for e in v["errors"]))
     _, tc, _, times = measure._clock(src, str(info["fps"]), info["timecode"])
     last = r["frames"] - 1
     t_of = lambda f: times[f] if f < len(times) else f / fps  # noqa: E731
@@ -466,12 +437,12 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS, workers: int = WORKERS) -
 def check_sheets(src: str, v: dict, seek: list, out_dir: Path, targets: list, every: int) -> list[str]:
     """One row per overlay, cropped to its box: ID-1 one cell before 入点 (should not show it), ID-2 入点,
     ID-3 出点, ID-4 one cell after 出点 (should not show it)."""
-    _cell_size(*CHECK_CELL, CHECK_COLS, CHECK_PER_SHEET)
     last = v["frames"] - 1
     groups = [(t["id"], [(f"{t['id']}-{k}", f) for k, f in enumerate(
         (max(0, t["in"] - every), t["in"], t["out"], min(last, t["out"] + every)), 1)]) for t in targets]
     crops = {t["id"]: _crop(t.get("box"), v["width"], v["height"]) for t in targets}
-    return [str(p) for p, _ in storyboard.sheets(src, seek, v["fps"], groups, out_dir, "check", crops)]
+    return [str(p) for p, _ in storyboard.sheets(src, seek, v["fps"], groups, out_dir, "check", crops,
+                                                 CHECK_CELL, CHECK_COLS, CHECK_PER_SHEET)]
 
 
 def _load(src: str) -> tuple[Path, dict]:
@@ -496,11 +467,10 @@ def look(src: str, oid: str, span: str) -> str:
         if o is None:
             raise FootageError("INPUT_NOT_FOUND", f"no overlay {oid} in the sheet")
         box = o.get("box")
-    _cell_size(*CHECK_CELL, 5, LOOK_MAX)
     out_dir = Path(f"{Path(src).with_suffix('')}.overlays")
     pages = storyboard.sheets(src, measure.frame_times(src, for_seek=True), doc["fps"],
                               [("look", [(str(f), f) for f in frames])], out_dir, f"look_{oid}_{frames[0]}-{frames[-1]}",
-                              {"look": _crop(box, doc["width"], doc["height"])})
+                              {"look": _crop(box, doc["width"], doc["height"])}, CHECK_CELL, 5, LOOK_MAX)
     return str(pages[0][0])
 
 
@@ -626,7 +596,6 @@ def main() -> None:
                         help=f"Samples per second for finding overlays (default {FIND_FPS}; 2 for overlays under ~1 s)")
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
-    parser.add_argument("--workers", type=int, default=WORKERS, help=f"Storyboard requests at once (default {WORKERS})")
     parser.add_argument("--look", nargs=2, metavar=("ID", "FIRST-LAST[:STEP]"),
                         help="Agent check: frames cropped to overlay ID ('full' = whole frame), labelled with frame numbers")
     parser.add_argument("--fix", nargs="*", metavar="EDIT",
@@ -647,7 +616,7 @@ def main() -> None:
             return
         if not c["api_key"]:
             raise FootageError("PROVIDER_ERROR", "API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env")
-        res = run(args.file, c, args.fps, args.workers)
+        res = run(args.file, c, args.fps)
         print(json.dumps(res, ensure_ascii=False, indent=2) if args.output == "json"
               else f"## Overlays\n\n{render_result(res)}")
     except FootageError as e:

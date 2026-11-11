@@ -94,12 +94,20 @@ def _area(a: bytes, b: bytes) -> float:
     return sum(d[k] + d[k + 1] + d[k + 2] > AREA_PIX for k in range(0, FRAME_BYTES, 3)) / (W * H)
 
 
-def features(path: str, k: int) -> tuple[list, list, list, list]:
+def features(path: str, k: int, second: tuple[str, list] | None = None) -> tuple[list, list, list, list]:
     """Per frame: change from the previous frame, change from k frames back, mean brightness,
-    share of pixels that changed from the previous frame."""
-    proc = subprocess.Popen(["ffmpeg", "-v", "error", "-i", path, "-map", "0:v:0", "-an", "-fps_mode", "passthrough",
-                             "-vf", f"scale={W}:{H}:flags=area", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    share of pixels that changed from the previous frame.
+    second = (video filter, ffmpeg output args): another output written from the same decode (footage.py
+    makes its whole-clip proxy this way, so the source is decoded once instead of twice)."""
+    raw = ["-an", "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    scale = f"scale={W}:{H}:flags=area"
+    cmd = ["ffmpeg", "-v", "error", "-y", "-i", path]
+    if second:
+        cmd += ["-filter_complex", f"[0:v:0]split=2[a][b];[a]{scale}[m];[b]{second[0]}[p]", "-map", "[m]", *raw,
+                "-map", "[p]", "-map", "0:a:0?", *second[1]]
+    else:
+        cmd += ["-map", "0:v:0", "-vf", scale, *raw]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     d1, dk, y, area, ring = [], [], [], [], []
     while True:
         f = proc.stdout.read(FRAME_BYTES)
@@ -205,11 +213,11 @@ def frames_to_tc(fn: int, nominal: int, df: bool) -> str:
 
 # ── Report ───────────────────────────────────────────────────────────────
 
-def measure(path: str) -> dict:
+def measure(path: str, second: tuple[str, list] | None = None) -> dict:
     info = probe(path)
     fps = float(info["fps"])
     t, tc, df, times = _clock(path, str(info["fps"]), info["timecode"])
-    d1, dk, y, area = features(path, max(1, round(fps / 2)))
+    d1, dk, y, area = features(path, max(1, round(fps / 2)), second)
     n = len(d1)
     warnings = []
     if info["avg_fps"] and abs(float(info["avg_fps"]) - fps) > 0.01:

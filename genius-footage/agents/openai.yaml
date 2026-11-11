@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius Footage"
-  short_description: "Footage brief, 拉片 breakdown and overlay sheet: shots, lines, cut points"
-  default_prompt: "Use $genius-footage to write a .footage.md brief for this clip: frame-accurate shots, lines with cut points, people, segments and highlights (add --talking-head for a one-take 口播 to get a keep[] edit suggestion; --breakdown for a 拉片 of reference films; pass several clips to run them in parallel)."
+  short_description: "Footage brief, 拉片 breakdown, overlay sheet, video download"
+  default_prompt: "Use $genius-footage to write a .footage.md brief for this clip: frame-accurate shots, lines with cut points, people, segments and highlights (add --talking-head for a one-take 口播 to get a keep[] edit suggestion; --breakdown for a 拉片 of reference films; pass several clips to run them in parallel; --download-only to only download links; overlays.py for the 花字 / 人名条 overlay sheet)."
