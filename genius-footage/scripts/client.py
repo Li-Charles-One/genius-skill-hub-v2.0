@@ -5,7 +5,7 @@ by default), the HTTP retry loop, storyboard questions asked side by side (ask),
 
     FOOTAGE_API_KEY (or CPA_API_KEY)   required
     FOOTAGE_BASE_URL                   default https://cpa-jp.charles-ai.space/v1
-    FOOTAGE_MODEL                      default gemini-4-argon-high
+    FOOTAGE_MODEL                      default gemini-3.8-flash-tiered
     FOOTAGE_MAX_REQUESTS               model requests in flight across all clips of one run (default 8)
 """
 
@@ -32,7 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 
 DEFAULT_BASE_URL = "https://cpa-jp.charles-ai.space/v1"
-DEFAULT_MODEL = "gemini-4-argon-high"
+DEFAULT_MODEL = "gemini-3.8-flash-tiered"
 RETRY_HTTP = {429, 500, 502, 503, 504}
 RETRY_DELAYS = (5, 15, 30)
 REFUSAL_RE = re.compile(r"content (?:policy|filter)", re.I)   # short canned refusals
@@ -173,7 +173,8 @@ def call(c: dict, files: list[str], prompt: str, timeout: float) -> str:
     _, data = post(f"{root}/v1beta/models/{c['model']}:generateContent",
                    {"Authorization": f"Bearer {c['api_key']}", "x-goog-api-key": c["api_key"]},
                    {"contents": [{"role": "user", "parts": parts + [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 32768}}, timeout, opener, _gate)
+                     "generationConfig": {"maxOutputTokens": 32768,
+                                          "thinkingConfig": {"thinkingLevel": "high"}}}, timeout, opener, _gate)
     texts, thoughts = [], []
     for cand in data.get("candidates") or []:
         for part in (cand.get("content") or {}).get("parts") or []:

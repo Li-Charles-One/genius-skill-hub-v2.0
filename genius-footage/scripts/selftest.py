@@ -14,6 +14,7 @@ editing any script here.
 from __future__ import annotations
 
 import collections
+import io
 import json
 import re
 import subprocess
@@ -21,6 +22,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from unittest.mock import patch
 
 import asr
 import client
@@ -136,6 +138,35 @@ def test_timecode_and_overlays() -> None:
     check("overlay inside a shot", (t["enter"], t["leave"]), ("切点 f50 后 10 帧出现", "在镜头内消失（这个镜头到 f99）"))
 
 
+def test_client_request(tmp: Path) -> None:
+    requests = []
+
+    class Opener:
+        def open(self, req, timeout):
+            requests.append((req.full_url, json.loads(req.data)))
+            resp = io.BytesIO(json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}).encode())
+            resp.headers = {}
+            return resp
+
+    image, video = tmp / "image.jpg", tmp / "video.mp4"
+    for path in (image, video):
+        path.write_bytes(b"test")
+    with patch.object(client.urllib.request, "build_opener", return_value=Opener()):
+        for model in ("gemini-3.8-flash-tiered", "gemini-3.8-flash-high", "gemini-3.8-flash"):
+            for files in ([], [str(image)], [str(video)]):
+                c = {"model": model, "base_url": "https://example.invalid/v1", "api_key": "test"}
+                check("call: response", client.call(c, files, "test", 30), "ok")
+                url, body = requests[-1]
+                check("call: model route", url, f"https://example.invalid/v1beta/models/{model}:generateContent")
+                check("call: explicit high thinking", body["generationConfig"],
+                      {"maxOutputTokens": 32768, "thinkingConfig": {"thinkingLevel": "high"}})
+                parts = body["contents"][0]["parts"]
+                check("call: file count", len(parts), len(files) + 1)
+                if files:
+                    check("call: media MIME", parts[0]["inline_data"]["mime_type"],
+                          "image/jpeg" if files[0].endswith(".jpg") else "video/mp4")
+
+
 def test_client(tmp: Path) -> None:
     script = {"A": [client.FootageError("TIMEOUT", "slow"), '[{"id": "X01", "v": 1}]'],          # fails, then answers
               "B": ['[{"id": "X02", "v": 1}]', '[{"id": "X02", "v": 2}, {"id": "X03", "v": 2}]'],  # short, then whole
@@ -209,6 +240,7 @@ def main() -> int:
         test_lines()
         test_talking_head()
         test_timecode_and_overlays()
+        test_client_request(Path(d))
         test_client(Path(d))
         test_run(Path(d))
     print(f"FAILED: {', '.join(failures)}" if failures else "ok")

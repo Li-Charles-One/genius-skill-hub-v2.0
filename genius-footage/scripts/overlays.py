@@ -594,7 +594,7 @@ def main() -> None:
     parser.add_argument("file", help="Local video file")
     parser.add_argument("--fps", type=float, default=FIND_FPS,
                         help=f"Samples per second for finding overlays (default {FIND_FPS}; 2 for overlays under ~1 s)")
-    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
+    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-3.8-flash-tiered)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     parser.add_argument("--look", nargs=2, metavar=("ID", "FIRST-LAST[:STEP]"),
                         help="Agent check: frames cropped to overlay ID ('full' = whole frame), labelled with frame numbers")
