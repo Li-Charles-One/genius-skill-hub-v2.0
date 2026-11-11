@@ -79,9 +79,9 @@ Other errors exit 1; `--check` with missing tools exits 2.
 
 | Provider | API style | Default model | Base URL | Key env |
 |---|---|---|---|---|
-| **`cpa`（默认）** | `gemini` native | `gemini-3.8-flash-high` for every media kind | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
+| **`cpa`（默认）** | `gemini` native | `gemini-3.8-flash-tiered` for every media kind | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
 
-- CPA uses `gemini-3.8-flash-high` (`-high` = highest thinking level on CPA) for every media kind. In earlier tests `gemini-4-argon-high` filled timeline gaps and did not invent a soundtrack where 3.8 did on video / audio, at 40–60% more time per request; use `--model gemini-4-argon-high` when that matters. `--model`, `CPA_MODEL` or `VISION_MODEL` override both.
+- CPA uses `gemini-3.8-flash-tiered` for every media kind. The suffix identifies the upstream route, not a guaranteed thinking level. The suffix-free `gemini-3.8-flash` is an Artistic Genius gateway alias, not the direct CPA model ID. In earlier tests `gemini-4-argon-high` filled timeline gaps and did not invent a soundtrack where the then-used 3.8 High did on video / audio, at 40–60% more time per request; this comparison has not been rerun with the tiered route. `--model`, `CPA_MODEL` or `VISION_MODEL` override both defaults.
 - `gemini` → `POST {root}/v1beta/models/{model}:generateContent`; local media `inline_data`, YouTube / URLs `file_data.file_uri`, PDF `application/pdf`.
 - `openai` → `POST {base}/chat/completions`; `image_url` / `video_url` / `input_audio`.
 
