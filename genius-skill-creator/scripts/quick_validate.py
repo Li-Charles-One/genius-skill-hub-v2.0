@@ -263,7 +263,7 @@ def validate_skill(skill_path, hub_path=None):
     missing = missing_referenced_resources(skill_path, name, content)
     if missing:
         warnings.append(
-            "SKILL.md names path(s) not found in this skill (fine if they belong to the user's project): "
+            "SKILL.md names path(s) not found in this skill (fine if they belong to another skill or the user's project): "
             + ", ".join(missing)
         )
 

@@ -102,7 +102,7 @@ Every repair or optimization checks: a positive trigger, a negative trigger, the
 
 - `quick_validate.py` fails when a file under `references/`, `scripts/`, `assets/`, or `evals/` is not named by its relative path in `SKILL.md` or `agents/openai.yaml`. When thinning an entrypoint, drop repeated prose, not the last mention of a path.
 - `quick_validate.py` and `security_scan.py` skip git-ignored files, so a local `.env` or `.DS_Store` passes. A zipped copy of the folder still includes them; exclude them before sharing outside git.
-- `quick_validate.py` warns when `SKILL.md` names a resource path that is not in the skill. It cannot tell a deleted script from a path in the user's own project, so check each one: fix or drop a stale mention, leave a project path.
+- `quick_validate.py` warns when `SKILL.md` names a resource path that is not in the skill. It cannot tell a deleted script from a path in another skill or the user's own project, so check each one: fix or drop a stale mention, leave the rest.
 - Security scan LOW findings (undeclared URLs) do not fail the scan; HIGH and MED do.
 
 ## Output Standard
