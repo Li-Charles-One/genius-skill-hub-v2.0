@@ -2,7 +2,7 @@
 """
 Genius Footage — AG_FOOTAGE/1.1 brief for one clip (`<clip>.footage.md` + `.footage.json` + `.footage/`).
 
-    python3 footage.py <clip> [--talking-head] [--script FILE] [--model M] [--output text|json]
+    python3 footage.py <clip|url> [<clip|url> …] [--talking-head | --breakdown] [--jobs 6] [--script FILE]
     python3 footage.py --check
 
 Steps: measure.py (cuts frame by frame) → storyboard check of doubtful cuts → per-shot description from
@@ -10,6 +10,9 @@ storyboards → asr.py, Doubao ASR with speakers (words → frames, cut points) 
 the model answers with IDs only (S001, U001, P1, G01) → IDs converted to frames and timecode → validate.
 --talking-head (口播): doubtful cuts are not checked; pauses, fillers and restarts come from word times; the
 whole-clip request also returns keep[] (line ID + verbatim first / last words), converted here to frames.
+--breakdown (拉片): a reference film; the whole-clip request answers how it is built (structure, editing,
+picture and sound, packaging, takeaways) and rhythm figures are computed from the measured shots; several
+films also get one comparison (拉片汇总). Several clips run --jobs at a time; model requests share one cap.
 Speech via asr.py (DOUBAO_API_KEY); models via client.py.
 Protocol: ArtisticCut/AG_FOOTAGE.md.
 """
@@ -17,13 +20,16 @@ Protocol: ArtisticCut/AG_FOOTAGE.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
+import threading
 from bisect import bisect_left, bisect_right
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -45,6 +51,31 @@ TH_MERGE = 20                      # consecutive kept pieces closer than this (f
 FILLERS = set("嗯呃额啊哦唔")         # a filler only at a line start or right after punctuation
 STUTTER = set("我你他她这那就是在跟")   # one-character words that, said twice in a row, are a stutter
 TH_HINT = (50, 0.6)                # default mode: ≤2 measured shots, >50 suspects, speech >60% → suggest --talking-head
+JOBS = 6                           # clips at once; their model requests share client.MAX_REQUESTS
+_procs = None                      # several clips: cut measurement (pure Python, holds the GIL) runs in processes
+_ctx = threading.local()           # .tag = short clip name, prefixed to log lines when several clips run
+
+
+def _tagged(fn):
+    """fn run in a worker thread keeps the calling clip's log tag."""
+    tag = getattr(_ctx, "tag", None)
+
+    def call(*a, **k):
+        _ctx.tag = tag
+        return fn(*a, **k)
+    return call
+
+
+class _TagStream:
+    def __init__(self, stream):
+        self._s = stream
+
+    def write(self, text):
+        tag = getattr(_ctx, "tag", None)
+        return self._s.write(text.replace("[genius-footage]", f"[genius-footage {tag}]") if tag else text)
+
+    def __getattr__(self, name):
+        return getattr(self._s, name)
 
 
 def audio_info(src: str) -> dict:
@@ -266,7 +297,8 @@ def build(r: dict, utts: list, ov: dict, asr_note: str | None, tools: dict, fing
         if sp:
             ids = [s["id"] for s in r["shots"] if s["first"] <= sp[1] and s["last"] >= sp[0]]
             segments.append({"id": g.get("id"), **({"us": us} if us else {}), "shots": ids, "first": sp[0], "last": sp[1],
-                             **{k: g.get(k, "") for k in ("content", "emotion", "use")}})
+                             **{k: g.get(k, "") for k in ("content", "emotion", "use")},
+                             **({"function": g["function"]} if g.get("function") else {})})
     uncertain = list(ov.get("uncertain") or [])
     keep, edit, keep_bad = keep_frames(ov.get("keep"), utts, r["frames"]) if marks is not None else ([], [], [])
     uncertain += keep_bad
@@ -315,27 +347,16 @@ def render_md(doc: dict, md_dir: Path) -> str:
     if doc["footage"]:
         L += [f"画面类型：{doc['footage']}", ""]
 
-    L += ["## 2. 人物", "", "| 人物 | 外观 | 身份 | 说话人 | 出场镜头 |", "|---|---|---|---|---|"]
-    for p in doc["people"]:
-        L.append(f"| {p.get('id')} | {_cell(p.get('appearance'))} | {_cell(p.get('identity'))} | "
-                 f"{', '.join('S' + str(s).lstrip('Ss') for s in p.get('speakers') or []) or '—'} | "
-                 f"{_short_ids(id_range(p.get('shots', ''), 'S'))} |")
+    L += ["## 2. 人物", ""] + _people_table(doc)
 
-    by_line = "mode" in doc
+    by_line = doc.get("mode") == "talking-head"
     L += ["", "## 3. 分段", "", f"| 分段 | {'台词' if by_line else '镜头'} | 帧 | 时间码 | 内容 | 情绪 | 适合用作 |",
           "|---|---|---|---|---|---|---|"]
     for g in doc["segments"]:
         L.append(f"| {g['id']} | {_short_ids(g.get('us') or g['shots'])} | f{g['first']}–f{g['last']} | {tc(g['first'])}–{tc(g['last'])} | "
                  f"{_cell(g['content'])} | {_cell(g['emotion'])} | {_cell(g['use'])} |")
 
-    L += ["", "## 4. 镜头", "", "| 镜头 | 帧 | 时间码 入–出 | 时长 | 切入 | 用途 | 景别 | 角度 | 运镜 | 人物 | 场景 | 画面 | 表演 | 标记 |",
-          "|" + "---|" * 14]
-    for s in doc["shots"]:
-        d = s.get("desc", {})
-        via = s["via"] + (f" (f{s['transition'][0]}–f{s['transition'][1]})" if "transition" in s else "")
-        L.append(f"| {s['id']} | f{s['first']}–f{s['last']} | {s['tc_in']}–{s['tc_out']} | {s['end'] - s['start']:.2f}s | {via} | "
-                 + " | ".join(_cell(d.get(k)) for k in ("roll", "shot_size", "angle", "movement", "people", "scene", "action",
-                                                        "performance", "flags")) + " |")
+    L += ["", "## 4. 镜头", ""] + _shot_table(doc)
 
     L += ["", "## 5. 台词", "", "| 台词 | 帧 | 时间码 | 说话人 | 镜头 | 文本 | 可下刀 |", "|---|---|---|---|---|---|---|"]
     for u in doc["utterances"]:
@@ -366,6 +387,27 @@ def render_md(doc: dict, md_dir: Path) -> str:
     if doc["storyboards"]:
         L += ["", "故事板：" + "、".join(f"[{Path(p).name}]({rel(p)})" for p in doc["storyboards"])]
     return "\n".join(L) + "\n"
+
+
+def _people_table(doc: dict) -> list[str]:
+    L = ["| 人物 | 外观 | 身份 | 说话人 | 出场镜头 |", "|---|---|---|---|---|"]
+    for p in doc["people"]:
+        L.append(f"| {p.get('id')} | {_cell(p.get('appearance'))} | {_cell(p.get('identity'))} | "
+                 f"{', '.join('S' + str(s).lstrip('Ss') for s in p.get('speakers') or []) or '—'} | "
+                 f"{_short_ids(id_range(p.get('shots', ''), 'S'))} |")
+    return L
+
+
+def _shot_table(doc: dict) -> list[str]:
+    L = ["| 镜头 | 帧 | 时间码 入–出 | 时长 | 切入 | 用途 | 景别 | 角度 | 运镜 | 人物 | 场景 | 画面 | 表演 | 标记 |",
+         "|" + "---|" * 14]
+    for s in doc["shots"]:
+        d = s.get("desc", {})
+        via = s["via"] + (f" (f{s['transition'][0]}–f{s['transition'][1]})" if "transition" in s else "")
+        L.append(f"| {s['id']} | f{s['first']}–f{s['last']} | {s['tc_in']}–{s['tc_out']} | {s['end'] - s['start']:.2f}s | {via} | "
+                 + " | ".join(_cell(d.get(k)) for k in ("roll", "shot_size", "angle", "movement", "people", "scene", "action",
+                                                        "performance", "flags")) + " |")
+    return L
 
 
 def _render_talking_head(doc: dict, tc) -> list[str]:
@@ -520,7 +562,7 @@ def _json(text: str, open_ch: str, close_ch: str):
 def _ask(c: dict, jobs: list[tuple[Path, str]], workers: int) -> list:
     """One storyboard request per (sheet, prompt), up to `workers` at once; answers in input order."""
     with ThreadPoolExecutor(max(1, workers)) as ex:
-        return list(ex.map(lambda j: _json(client.call(c, [str(j[0])], j[1], 300), "[", "]"), jobs))
+        return list(ex.map(_tagged(lambda j: _json(client.call(c, [str(j[0])], j[1], 300), "[", "]")), jobs))
 
 
 def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path, workers: int) -> None:
@@ -574,7 +616,7 @@ def shots(src: str, c: dict, out_dir: Path, seek: list, workers: int, talking_he
     """Frame-accurate shot list measured locally; the model only judges suspects and describes shots
     from labelled storyboard sheets, never times or counts them."""
     try:
-        r = measure.measure(src)
+        r = _procs.submit(measure.measure, src).result() if _procs else measure.measure(src)
     except measure.MeasureError as e:
         raise FootageError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
     print(f"[genius-footage] measured: {r['frames']} frames @ {r['fps']} fps, {r['shot_count']} shots, "
@@ -673,7 +715,196 @@ def _marks_text(marks: dict, fps: float) -> str:
     return "\n".join(p + f + r) or "(none)"
 
 
-def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: dict | None = None) -> dict:
+# ── Breakdown (拉片): how a reference film is built ──────────────────────
+
+BREAKDOWN_PROMPT = (
+    "You are breaking down a finished reference film for a director and an editor who want to learn how it "
+    "was made (拉片). Watch the whole film. Below are its shot list and transcript, measured frame by frame "
+    "(IDs: S### shots, U### utterances; ASR speakers are 1, 2, …), and rhythm figures computed from the "
+    "measured shots.{script}\n\nSHOTS\n{shots}\n\nTRANSCRIPT\n{utts}\n\nRHYTHM (measured)\n{rhythm}\n\n"
+    "Return ONLY one JSON object with these keys. Refer to shots and lines ONLY by their IDs (ranges like "
+    "S001–S004 are fine), never by time; use only IDs listed above. Structure and storytelling matter most: "
+    "be specific and concrete there, tie every claim to shots.\n"
+    '{"summary": "2–3 sentences: what the film is, for whom, its one core message",\n'
+    ' "genre": "类型与平台感：广告片 / 品牌短片 / 产品展示 / 剧情短片 / vlog / 口播 / 混剪 …，以及时长定位",\n'
+    ' "footage": "picture type: 实拍 / CG / AI 生成 / 动态图形 / 定格动画 / 混合",\n'
+    ' "people": [{"id": "P1", "appearance": "", "identity": "role in the story", "speakers": ["1"], "shots": "S001–S012"}],\n'
+    ' "segments": [{"id": "G01", "shots": "S001–S006", "function": "叙事功能：钩子 / 建立 / 铺垫 / 冲突 / 转折 / '
+    '高潮 / 产品露出 / 证明 / 行动号召 / 收尾 …", "content": "这一段讲了什么、给出了什么信息", "emotion": "", '
+    '"use": "这一段用了什么拍法和剪法达到它的作用"}],\n'
+    ' "structure": {"hook": {"shots": "S001–S003", "how": "前几秒靠什么抓住人，为什么有效"}, '
+    '"arc": "整体叙事结构（如 问题→方案→证明→号召 / 三幕 / 反转 / 并列排比），信息按什么顺序递进、为什么这样排", '
+    '"emotion_curve": "情绪怎么起伏，在哪些分段到顶、在哪里回落", '
+    '"ending": {"shots": "S040–S042", "how": "结尾怎么收：落点、口号、行动号召、余味"}, '
+    '"selling_points": [{"point": "卖点或核心信息", "shots": "S010–S014", "how": "怎么呈现出来的"}]},\n'
+    ' "editing": {"pace": "节奏总评与变化，引用上面的节奏数据", '
+    '"transitions": [{"shots": "S010–S011", "type": "硬切 / 匹配剪辑 / 遮挡转场 / 叠化 / 声音先入 …", "why": "效果"}], '
+    '"music_sync": "剪辑点和音乐节拍、重音、台词的卡点关系", '
+    '"techniques": [{"shots": "S020–S026", "what": "跳切 / 平行剪辑 / 重复 / 变速 / 蒙太奇 / 前后呼应 …，具体怎么用的"}]},\n'
+    ' "language": {"shots_style": "景别、角度、运镜的组合规律（如 大远景建立后连续特写）", '
+    '"light_color": "光线与调色", "sound": "配乐风格与变化、音效、环境声、人声处理、声音转场", '
+    '"signature": [{"shots": "S015", "what": "最有记忆点的镜头及其拍法"}]},\n'
+    ' "packaging": {"captions": "花字：字体、颜色、动效、位置、出现频率；没有写 无", "subtitles": "台词字幕样式；没有写 无", '
+    '"graphics": "图形包装、logo、片头片尾卡；没有写 无"},\n'
+    ' "takeaways": [{"what": "可以直接借鉴的一个做法", "shots": "S001–S003", "how": "怎么用到我们自己的片子里"}],\n'
+    ' "highlights": {"quotes": [{"u": "U014", "person": "P2", "why": "为什么是金句"}]},\n'
+    ' "suspect_words": [{"u": "U003", "heard": "as transcribed", "likely": "correct form", "evidence": "on-screen text in S004 / context"}],\n'
+    ' "uncertain": ["anything you are unsure of; mark estimates with ~"]}\n'
+    "Rules: segments are runs of consecutive shots that cover all shots in order without overlap. Give 5–10 "
+    "takeaways, most useful first. Music and sung lyrics are not dialogue; say so in sound. Empty lists are fine."
+)
+RHYTHM_FIELDS = (("shot_size", "景别"), ("angle", "角度"), ("movement", "运镜"))
+
+
+def rhythm(shots: list, fps: float, frames: int, segments: list, utts: list) -> dict:
+    """Pace figures from the measured shots only (no model)."""
+    lens = sorted(s["end"] - s["start"] for s in shots)
+    n, duration = len(lens), shots[-1]["end"] if shots else 0
+    step = 5 if duration <= 90 else 10 if duration <= 300 else 30
+    curve = [{"from": a, "to": round(min(duration, a + step), 1),
+              "cuts": sum(a <= s["start"] < a + step for s in shots[1:])}
+             for a in range(0, int(duration) + 1, step) if a < duration]
+    seg = [{"id": g["id"], "shots": len(g["shots"]), "seconds": round((g["last"] - g["first"] + 1) / fps, 2),
+            "asl": round((g["last"] - g["first"] + 1) / fps / max(1, len(g["shots"])), 2)} for g in segments]
+    dist = {}
+    for key, _ in RHYTHM_FIELDS:
+        count = {}
+        for s in shots:
+            for v in re.split(r"[、,，/]+", s.get("desc", {}).get(key, "") or "无法判断"):
+                if v.strip():
+                    count[v.strip()] = count.get(v.strip(), 0) + 1
+        dist[key] = sorted(count.items(), key=lambda kv: -kv[1])
+    by_len = sorted(shots, key=lambda s: s["end"] - s["start"])
+    return {"shots": n, "seconds": round(duration, 2), "asl": round(duration / max(1, n), 2),
+            "median": round((lens[(n - 1) // 2] + lens[n // 2]) / 2, 2) if n else 0,
+            "shortest": [by_len[0]["id"], round(lens[0], 2)] if n else None,
+            "longest": [by_len[-1]["id"], round(lens[-1], 2)] if n else None,
+            "cuts_per_min": round((n - 1) / max(duration, 1e-6) * 60, 1),
+            "speech": round(sum(u["last"] - u["first"] + 1 for u in utts) / max(1, frames), 2),
+            "step": step, "curve": curve, "segments": seg, "dist": dist}
+
+
+def _rhythm_text(m: dict) -> str:
+    return (f"{m['shots']} shots in {m['seconds']}s; mean shot {m['asl']}s, median {m['median']}s, "
+            f"shortest {m['shortest']}, longest {m['longest']}; {m['cuts_per_min']} cuts per minute; "
+            f"speech covers {m['speech']:.0%} of the film.\ncuts per {m['step']}s: "
+            + ", ".join(f"{b['from']}–{b['to']}s {b['cuts']}" for b in m["curve"]))
+
+
+def _where(spec, shots: dict, tc) -> str:
+    sp = span(id_range(spec or "", "S"), shots)
+    return f"{spec}（{tc(sp[0])}–{tc(sp[1])}）" if sp else str(spec or "—")
+
+
+def breakdown_refs(b: dict) -> list[str]:
+    """Shot IDs the breakdown points at, for validation."""
+    st, ed, lg = b.get("structure") or {}, b.get("editing") or {}, b.get("language") or {}
+    specs = [(st.get("hook") or {}).get("shots"), (st.get("ending") or {}).get("shots")]
+    specs += [x.get("shots") for x in (st.get("selling_points") or []) + (ed.get("transitions") or [])
+              + (ed.get("techniques") or []) + (lg.get("signature") or []) + (b.get("takeaways") or []) if isinstance(x, dict)]
+    return [i for sp in specs if sp for i in id_range(sp, "S")]
+
+
+def render_breakdown_md(doc: dict, md_dir: Path) -> str:
+    tc, b, m = _tc(doc), doc["breakdown"], doc["rhythm"]
+    shots = {s["id"]: s for s in doc["shots"]}
+    w = lambda spec: _where(spec, shots, tc)
+    st, ed, lg, pk = (b.get(k) or {} for k in ("structure", "editing", "language", "packaging"))
+    head = {k: doc[k] for k in ("protocol", "mode", "file", "fingerprint", "generated", "tools", "video", "counts",
+                                "review", "status") if k in doc}
+    L = ["---"] + [f"{k}: {json.dumps(val, ensure_ascii=False)}" for k, val in head.items()] + ["---", ""]
+    L += [f"# {doc['file']} · 拉片", "", "## 1. 概览", "", doc["summary"] or "（全片分析未完成）", ""]
+    L += [f"- 类型：{b.get('genre') or '—'}", f"- 画面类型：{doc['footage'] or '—'}",
+          f"- 时长 {m['seconds']}s · {m['shots']} 个镜头 · 平均镜头 {m['asl']}s · 台词占 {m['speech']:.0%}", ""]
+
+    hook, end = st.get("hook") or {}, st.get("ending") or {}
+    L += ["## 2. 结构与叙事", "", f"- **开头钩子** {w(hook.get('shots'))}：{_cell(hook.get('how')) or '—'}",
+          f"- **叙事结构**：{_cell(st.get('arc')) or '—'}", f"- **情绪曲线**：{_cell(st.get('emotion_curve')) or '—'}",
+          f"- **结尾** {w(end.get('shots'))}：{_cell(end.get('how')) or '—'}"]
+    L += [f"- **卖点** {_cell(x.get('point'))} · {w(x.get('shots'))}：{_cell(x.get('how'))}"
+          for x in st.get("selling_points") or [] if isinstance(x, dict)]
+    segm = {x["id"]: x for x in m["segments"]}
+    L += ["", "| 分段 | 镜头 | 时间码 | 时长 | 平均镜头 | 叙事功能 | 内容 | 情绪 | 拍法与剪法 |", "|" + "---|" * 9]
+    for g in doc["segments"]:
+        x = segm.get(g["id"], {})
+        L.append(f"| {g['id']} | {_short_ids(g['shots'])} | {tc(g['first'])}–{tc(g['last'])} | {x.get('seconds', '')}s | "
+                 f"{x.get('asl', '')}s | {_cell(g.get('function'))} | {_cell(g['content'])} | {_cell(g['emotion'])} | {_cell(g['use'])} |")
+
+    L += ["", "## 3. 节奏与剪辑", "", "镜头数据（逐帧测得）：",
+          f"- {m['shots']} 个镜头，平均 {m['asl']}s，中位 {m['median']}s，每分钟 {m['cuts_per_min']} 刀",
+          f"- 最短 {m['shortest'][0]} {m['shortest'][1]}s，最长 {m['longest'][0]} {m['longest'][1]}s" if m["shots"] else "- 无镜头",
+          "", f"| 时间 | 每 {m['step']}s 切数 | |", "|---|---|---|"]
+    top = max([x["cuts"] for x in m["curve"]] or [1]) or 1
+    L += [f"| {x['from']}–{x['to']}s | {x['cuts']} | {'█' * round(x['cuts'] * 20 / top)} |" for x in m["curve"]]
+    L += ["", f"- **节奏**：{_cell(ed.get('pace')) or '—'}", f"- **卡点**：{_cell(ed.get('music_sync')) or '—'}"]
+    L += [f"- **转场** {w(x.get('shots'))}：{_cell(x.get('type'))}——{_cell(x.get('why'))}"
+          for x in ed.get("transitions") or [] if isinstance(x, dict)]
+    L += [f"- **剪辑手法** {w(x.get('shots'))}：{_cell(x.get('what'))}" for x in ed.get("techniques") or [] if isinstance(x, dict)]
+
+    L += ["", "## 4. 视听语言", ""]
+    for key, name in RHYTHM_FIELDS:
+        L.append(f"- {name}分布：" + "、".join(f"{v} {k}（{k / max(1, m['shots']):.0%}）" for v, k in m["dist"][key][:8]))
+    L += [f"- **镜头组合**：{_cell(lg.get('shots_style')) or '—'}", f"- **光色**：{_cell(lg.get('light_color')) or '—'}",
+          f"- **声音**：{_cell(lg.get('sound')) or '—'}"]
+    L += [f"- **标志镜头** {w(x.get('shots'))}：{_cell(x.get('what'))}" for x in lg.get("signature") or [] if isinstance(x, dict)]
+
+    L += ["", "## 5. 包装", "", f"- 花字：{_cell(pk.get('captions')) or '—'}", f"- 字幕：{_cell(pk.get('subtitles')) or '—'}",
+          f"- 图形：{_cell(pk.get('graphics')) or '—'}"]
+    L += ["", "## 6. 可借鉴手法", ""]
+    L += [f"{k}. **{_cell(x.get('what'))}** {w(x.get('shots'))}：{_cell(x.get('how'))}"
+          for k, x in enumerate([x for x in b.get("takeaways") or [] if isinstance(x, dict)], 1)] or ["- 无"]
+    L += [f"- 金句：{q.get('u')}——{_cell(q.get('why'))}" for q in (doc["highlights"].get("quotes") or [])]
+
+    L += ["", "## 7. 人物", ""] + _people_table(doc)
+    L += ["", "## 8. 镜头", ""] + _shot_table(doc)
+    L += ["", "## 9. 台词", "", "| 台词 | 时间码 | 说话人 | 镜头 | 文本 |", "|---|---|---|---|---|"]
+    for u in doc["utterances"]:
+        who = u.get("person") or (f"S{u['speaker']}" if u.get("speaker") else "—")
+        L.append(f"| {u['id']} | {tc(u['first'])}–{tc(u['last'])} | {who} | {_short_ids(u['shots'])} | {_cell(u['text'])} |")
+    L += ["", "## 10. 待确认", ""] + ([f"- {x}" for x in doc["uncertain"]] or ["- 无"])
+    L += [f"- 校验未通过：{x}" for x in doc["validation"]]
+    if doc["storyboards"]:
+        L += ["", "故事板：" + "、".join(f"[{Path(p).name}]({os.path.relpath(p, md_dir)})" for p in doc["storyboards"])]
+    return "\n".join(L) + "\n"
+
+
+COMPARE_PROMPT = (
+    "Below are breakdowns (拉片) of {n} reference films, labelled A, B, C … Each gives measured rhythm "
+    "figures and a structured analysis; shot IDs are per film (write them as A:S003).\n\n{films}\n\n"
+    "Write a comparison for a director planning a new film in this style, in Markdown, with exactly these "
+    "headings: ## 共同套路 (structure and storytelling first: hooks, arcs, ending, how selling points land; "
+    "then editing, picture, sound, packaging), ## 各自特色 (one short paragraph per film), ## 节奏对比 "
+    "(read the measured figures; do not invent numbers), ## 可复用的结构模板 (a beat-by-beat template with "
+    "rough share of running time per beat, citing which film each beat comes from), ## 拍摄与剪辑清单 "
+    "(concrete, checkable items). Cite films and shots for every claim. No preamble." + LANGUAGE_RULE
+)
+
+
+def compare(c: dict, docs: list[tuple[str, dict]], out_dir: Path) -> str:
+    """One text-only request over several breakdowns → 拉片汇总-<time>.md next to the first film."""
+    labels = [chr(65 + k) for k in range(len(docs))]
+    films = "\n\n".join(
+        f"=== {lab}: {d['file']} ===\nRHYTHM {_rhythm_text(d['rhythm'])}\nSEGMENTS "
+        + json.dumps([{k: g.get(k) for k in ("id", "function", "content", "emotion", "use")} | {"shots": _short_ids(g["shots"])}
+                      for g in d["segments"]], ensure_ascii=False)
+        + "\nANALYSIS " + json.dumps({"summary": d["summary"], **{k: d["breakdown"].get(k) for k in
+                                      ("genre", "structure", "editing", "language", "packaging", "takeaways")}}, ensure_ascii=False)
+        for lab, (_, d) in zip(labels, docs))
+    print(f"[genius-footage] comparing {len(docs)} films…", file=sys.stderr)
+    text = client.call(c, [], COMPARE_PROMPT.replace("{n}", str(len(docs))).replace("{films}", films), 600)
+    m = [d["rhythm"] for _, d in docs]
+    L = ["# 拉片汇总", "", "| 片子 | 文件 | 时长 | 镜头 | 平均镜头 | 中位 | 每分钟刀数 | 台词占比 | 主要景别 |", "|" + "---|" * 9]
+    for lab, (path, d), r in zip(labels, docs, m):
+        L.append(f"| {lab} | [{d['file']}](<{os.path.relpath(Path(path).resolve(), out_dir)}>) | {r['seconds']}s | {r['shots']} | {r['asl']}s | "
+                 f"{r['median']}s | {r['cuts_per_min']} | {r['speech']:.0%} | "
+                 + "、".join(v for v, _ in r["dist"]["shot_size"][:3]) + " |")
+    out = out_dir / f"拉片汇总-{datetime.now():%Y%m%d-%H%M}.md"
+    out.write_text("\n".join(L) + "\n\n（表中数字为逐帧测量，下文为模型对比分析）\n\n" + text.strip() + "\n", encoding="utf-8")
+    return str(out)
+
+
+def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: dict | None = None,
+              breakdown: bool = False) -> dict:
     if proxy is None:
         r["warnings"].append(f"clip longer than {client.MAX_VIDEO_SEC // 60} min: whole-clip overview skipped")
         return {}
@@ -683,6 +914,8 @@ def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: di
     utt_lines = "\n".join(f"{u['id']} [{u.get('speaker') or '?'}] {u['shots'][0] if u['shots'] else ''} | {u['text']}"
                           for u in utts) or "(no transcript)"
     base = OVERVIEW_PROMPT if marks is None else OVERVIEW_PROMPT_TH + TH_RULES.replace("{marks}", _marks_text(marks, r["fps"]))
+    if breakdown:
+        base = BREAKDOWN_PROMPT.replace("{rhythm}", _rhythm_text(rhythm(r["shots"], r["fps"], r["frames"], [], utts)))
     prompt = (base.replace("{script}", f"\n\nSCRIPT / KEYWORDS (correct spellings)\n{script}" if script else "")
               .replace("{shots}", shot_lines).replace("{utts}", utt_lines)) + LANGUAGE_RULE
     upload = proxy.result()
@@ -694,8 +927,10 @@ def _overview(c: dict, r: dict, utts: list, script: str | None, proxy, marks: di
     return ov
 
 
-def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, talking_head: bool = False) -> dict:
-    """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip.
+def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, talking_head: bool = False,
+        breakdown: bool = False) -> dict:
+    """Write <stem>.footage.md, <stem>.footage.json and <stem>.footage/ next to the clip
+    (--breakdown: <stem>.breakdown.md / .breakdown.json, storyboards still in <stem>.footage/).
     Speech and the whole-clip proxy need no shot list, so they run alongside the storyboard steps."""
     clip = Path(src)
     base = clip.with_suffix("")
@@ -704,9 +939,9 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, ta
     seek = measure.frame_times(src, for_seek=True)
     bg = ThreadPoolExecutor(2)
     print("[genius-footage] transcribing (Doubao ASR) in the background…", file=sys.stderr)
-    speech_job = bg.submit(asr.transcribe, src)
+    speech_job = bg.submit(_tagged(asr.transcribe), src)
     duration = asr.probe_duration(src)
-    proxy = bg.submit(client.video_proxy, src, duration) if duration <= client.MAX_VIDEO_SEC else None
+    proxy = bg.submit(_tagged(client.video_proxy), src, duration) if duration <= client.MAX_VIDEO_SEC else None
     r = shots(src, c, Path(f"{base}.footage"), seek, workers, talking_head)
 
     asr_note, utts, asr_model = None, [], None
@@ -721,20 +956,30 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, ta
 
     marks = speech_marks(utts, r["fps"]) if talking_head else None
     spoken = sum(u["last"] - u["first"] + 1 for u in utts) / max(1, r["frames"])
-    if not talking_head and r["measured_shots"] <= 2 and len(r["suspects"]) > TH_HINT[0] and spoken > TH_HINT[1]:
+    if not talking_head and not breakdown and r["measured_shots"] <= 2 and len(r["suspects"]) > TH_HINT[0] and spoken > TH_HINT[1]:
         r["warnings"].append(f"像是口播（测得 {r['measured_shots']} 个镜头、{len(r['suspects'])} 处疑似切点、"
                              f"台词占 {spoken:.0%}）：下次可加 --talking-head，更快，并给出精剪建议")
-    ov = _overview(c, r, utts, script, proxy, marks)
+    ov = _overview(c, r, utts, script, proxy, marks, breakdown)
     bg.shutdown()
     doc = build(r, utts, ov, asr_note,
                 {"measure": "genius-footage measure.py", "asr": asr_model, "storyboard": c["model"],
                  "overview": c["model"] if ov else None},
                 client.fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
                 audio_info(src), marks)
-    md_path, json_path = Path(f"{base}.footage.md"), Path(f"{base}.footage.json")
-    md_path.write_text(render_md(doc, md_path.parent), encoding="utf-8")
+    kind = "breakdown" if breakdown else "footage"
+    if breakdown:
+        doc.update(mode="breakdown", breakdown={k: ov.get(k) for k in ("genre", "structure", "editing", "language",
+                                                                      "packaging", "takeaways")},
+                   rhythm=rhythm(r["shots"], r["fps"], r["frames"], doc["segments"], utts))
+        known = {s["id"] for s in r["shots"]}
+        bad = sorted({i for i in breakdown_refs(doc["breakdown"]) if i not in known})
+        if bad:
+            doc["validation"].append(f"拉片引用了不存在的镜头 {', '.join(bad)}")
+            doc["status"] = "needs_review"
+    md_path, json_path = Path(f"{base}.{kind}.md"), Path(f"{base}.{kind}.json")
+    md_path.write_text((render_breakdown_md if breakdown else render_md)(doc, md_path.parent), encoding="utf-8")
     json_path.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
-    res = {"footage_md": str(md_path), "footage_json": str(json_path), "status": doc["status"],
+    res = {"mode": kind, "footage_md": str(md_path), "footage_json": str(json_path), "status": doc["status"],
            "counts": doc["counts"], "review": doc["review"], "validation": doc["validation"],
            "warnings": doc["warnings"]}
     if talking_head:
@@ -746,7 +991,7 @@ def run(src: str, c: dict, script: str | None = None, workers: int = WORKERS, ta
 def render_result(res: dict) -> str:
     c, rv = res["counts"], res["review"]
     lines = [f"状态：**{res['status']}** · {c['shots']} 镜头 · {c['utterances']} 句台词 · {c['people']} 人 · {c['segments']} 段",
-             f"说明书：`{res['footage_md']}`", f"数据：`{res['footage_json']}`"]
+             f"{'拉片' if res.get('mode') == 'breakdown' else '说明书'}：`{res['footage_md']}`", f"数据：`{res['footage_json']}`"]
     if "edit" in res:
         e = res["edit"]
         lines.append(f"精剪建议：{e['pieces']} 段，约 {e['seconds']}s（原 {e['source_seconds']}s）")
@@ -763,46 +1008,238 @@ def render_result(res: dict) -> str:
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mxf"}
 
 
+BROWSER_SITES = r"https?://([\w-]+\.)?(douyin\.com|iesdouyin\.com|xiaohongshu\.com|xhslink\.com)/"
+# Runs in ego-browser's Node.js: open the page, find the real video URL, save it from the page (its cookies go along).
+BROWSER_JS = r"""
+const task = await taskSpace(__NAME__);
+const page = task.page("p1");
+let res = {};
+try {
+  let url = __URL__, vid = __VID__;
+  if (/douyin\.com/.test(url)) {
+    // A fresh tab opening /video/<id> gets sent to another video; the 精选 player opens the right one.
+    // Its <video> plays a blob:, so take the file URL the player requests, tagged __vid=<id>.
+    if (!vid) {
+      await page.goto(url, { timeout: 45000 });
+      const u = await page.url();
+      vid = (u.match(/\/video\/(\d+)/) || u.match(/modal_id=(\d+)/) || [])[1];
+      if (!vid) throw new Error("找不到视频 ID：" + u);
+    }
+    await page.cdp("Network.enable", {});
+    await page.events();
+    await page.goto("https://www.douyin.com/jingxuan?modal_id=" + vid, { timeout: 45000 });
+    let src = null;
+    for (let k = 0; k < 30 && !src; k++) {
+      await page.waitForTimeout(1000);
+      src = (await page.events()).filter((e) => e.method === "Network.requestWillBeSent").map((e) => e.params.request.url)
+        .find((u) => /douyinvod\.com|\/aweme\/v1\/play/.test(u) && u.includes("__vid=" + vid));
+    }
+    const wall = await page.evaluate(() => !!document.querySelector("[class*=login-container], [class*=verify], #captcha_container"));
+    if (!src) res = { error: wall ? "wall" : "no-video", url: await page.url() };
+    else {
+      const r = await page.fetch(src, { saveAs: __PART__, timeout: 300000 });
+      const title = await page.evaluate(() => document.title);
+      res = r.ok ? { title, url: "https://www.douyin.com/video/" + vid } : { error: "HTTP " + r.status };
+    }
+  } else {
+    // 小红书: the note data in the page has the file (its <video> plays a blob:)
+    await page.goto(url, { timeout: 45000 });
+    await page.waitForFunction(() => Object.keys(window.__INITIAL_STATE__?.note?.noteDetailMap || {}).length, undefined,
+      { timeout: 25000 }).catch(() => {});
+    const info = await page.evaluate(() => {
+      const m = window.__INITIAL_STATE__?.note?.noteDetailMap || {};
+      const note = Object.values(m).map((x) => x?.note).find((n) => n?.video) || {};
+      const all = Object.values(note.video?.media?.stream || {}).flat().filter((x) => x?.masterUrl);
+      return { src: all.sort((a, b) => (b.height || 0) - (a.height || 0))[0]?.masterUrl, title: note.title || document.title,
+               url: location.href, wall: !!document.querySelector("[class*=login-container], [class*=verify]") };
+    });
+    if (!info.src) res = { error: info.wall ? "wall" : "no-video", url: info.url };
+    else {
+      const r = await page.fetch(info.src, { saveAs: __PART__, timeout: 300000 });
+      res = r.ok ? { title: info.title, url: info.url } : { error: "HTTP " + r.status, url: info.url };
+    }
+  }
+} catch (e) { res = { error: String(e?.message || e).slice(0, 300) }; }
+await task.finish({ keep: [] });
+console.log("@@RESULT " + JSON.stringify(res));
+"""
+
+
+def _safe(title: str, limit: int = 60) -> str:
+    t = re.sub(r'[\\/:*?"<>|\n\r\t]+', " ", re.sub(r"\s*[-|]\s*(抖音|小红书|小紅書)\s*$", "", title)).strip() or "video"
+    while len(t.encode("utf-8")) > limit:
+        t = t[:-1]
+    return t
+
+
+def _video_id(url: str) -> str | None:
+    m = re.search(r"/(?:video|note|explore|discovery/item|search_result)/([0-9a-f]{24}|\d{15,})", url)
+    return m.group(1) if m else None
+
+
+def fetch_browser(url: str, out_dir: Path) -> str:
+    """抖音 / 小红书: the logged-in ego browser opens the page and saves the video it plays."""
+    exe = shutil.which("ego-browser")
+    if not exe:
+        raise FootageError("DEPENDENCY_MISSING", "抖音、小红书要用 ego 浏览器下载：先装 ego lite（ego-browser 技能）")
+    vid = _video_id(url)
+    old = list(out_dir.glob(f"* [{vid}].mp4")) if vid else []
+    if old:
+        return str(old[0])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tag = hashlib.sha1(f"{url}{os.getpid()}{threading.get_ident()}".encode()).hexdigest()[:8]
+    part = out_dir / f".part-{tag}.mp4"
+    js = (BROWSER_JS.replace("__NAME__", json.dumps(f"genius-footage download {tag}"))
+          .replace("__URL__", json.dumps(url)).replace("__VID__", json.dumps(vid))
+          .replace("__PART__", json.dumps(str(part.resolve()))))
+    print(f"[genius-footage] downloading {url} in the ego browser…", file=sys.stderr)
+    try:
+        p = subprocess.run([exe, "nodejs"], input=js, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired as e:
+        part.unlink(missing_ok=True)
+        raise FootageError("TIMEOUT", f"浏览器下载超过 10 分钟：{url}") from e
+    line = next((x for x in reversed((p.stdout + "\n" + p.stderr).splitlines()) if "@@RESULT " in x), None)
+    res = json.loads(line.split("@@RESULT ", 1)[1]) if line else {"error": (p.stderr or p.stdout).strip()[-300:]}
+    landed = _video_id(res.get("url") or "") or (re.search(r"modal_id=(\d+)", res.get("url") or "") or [None, None])[1]
+    if vid and landed and landed != vid:  # the site sent us to another video: this one is gone or private
+        res = {"error": f"视频打不开（被删、不公开或需要权限），网站跳到了 {res.get('url')}"}
+    if res.get("error") or not part.is_file() or not part.stat().st_size:
+        part.unlink(missing_ok=True)
+        err = res.get("error", "no file")
+        hint = "：在 ego 浏览器里登录这个网站（或过验证）后重跑" if err == "wall" else ""
+        raise FootageError("PROVIDER_ERROR", f"浏览器下载失败 {url}：{err}{hint}")
+    out = out_dir / f"{_safe(res.get('title') or '')} [{_video_id(res.get('url') or '') or vid or tag}].mp4"
+    part.replace(out)
+    print(f"[genius-footage] downloaded → {out}", file=sys.stderr)
+    return str(out)
+
+
+def fetch(url: str, out_dir: Path, cookies: str | None = None) -> str:
+    """A link → a local mp4, kept in out_dir: yt-dlp (≤1080p); 抖音 always, and 小红书 when yt-dlp cannot,
+    through the logged-in ego browser (yt-dlp cannot sign 抖音's API; 小红书 needs xsec_token)."""
+    browser = re.match(BROWSER_SITES, url)
+    if re.match(r"https?://(www\.)?xiaohongshu\.com/", url) and "xsec_token=" not in url:
+        raise FootageError("UNSUPPORTED_FORMAT", f"小红书链接要带 xsec_token（从搜索结果或分享里复制完整链接），"
+                                                 f"不带时网站不给看这条笔记：{url}")
+    if browser and "xiaohongshu.com/" not in url:  # 抖音 (and xhslink short links) go straight to the browser
+        return fetch_browser(url, out_dir)
+    exe = shutil.which("yt-dlp")
+    if not exe:
+        raise FootageError("DEPENDENCY_MISSING", "链接需要 yt-dlp：brew install yt-dlp")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [exe, "--no-playlist", "--no-progress", "-f", "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
+           "--merge-output-format", "mp4", "-o", str(out_dir / "%(title).60B [%(id)s].%(ext)s"),
+           "--print", "after_move:filepath"] + (["--cookies-from-browser", cookies] if cookies else [])
+    print(f"[genius-footage] downloading {url}…", file=sys.stderr)
+    try:
+        p = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as e:
+        raise FootageError("TIMEOUT", f"下载超过 30 分钟：{url}") from e
+    path = (p.stdout.strip().splitlines() or [""])[-1]
+    if p.returncode or not Path(path).is_file():
+        if browser:
+            print(f"[genius-footage] yt-dlp failed, trying the ego browser…", file=sys.stderr)
+            return fetch_browser(url, out_dir)
+        raise FootageError("PROVIDER_ERROR", f"下载失败 {url}：{p.stderr.strip()[-300:]}")
+    print(f"[genius-footage] downloaded → {path}", file=sys.stderr)
+    return path
+
+
+def _one(item: str, c: dict, args, script: str | None, tag: str | None) -> tuple[str, dict | None, FootageError | None]:
+    _ctx.tag = tag
+    try:
+        if re.match(r"https?://", item):
+            item = fetch(item, Path(args.download_dir).expanduser(), args.cookies_from_browser)
+        if not Path(item).is_file():
+            raise FootageError("INPUT_NOT_FOUND", f"File not found: {item}")
+        if Path(item).suffix.lower() not in VIDEO_EXTENSIONS:
+            raise FootageError("UNSUPPORTED_FORMAT", f"footage needs a local video file: {item}")
+        if args.download_only:
+            return item, {"mode": "download", "path": item}, None
+        return item, run(item, c, script, args.workers, args.talking_head, args.breakdown), None
+    except FootageError as e:
+        return item, None, e
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return item, None, FootageError("ERROR", f"{type(e).__name__}: {e}")
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.1 footage brief for one clip")
-    parser.add_argument("file", nargs="?", help="Local video file")
+    parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.1 footage brief (or 拉片 breakdown) for one or more clips")
+    parser.add_argument("files", nargs="*", help="Local video files, or links (downloaded with yt-dlp)")
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-argon-high)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
-    parser.add_argument("--workers", type=int, default=WORKERS, help=f"Storyboard requests at once (default {WORKERS})")
-    parser.add_argument("--talking-head", action="store_true",
-                        help="口播 / one take: skip the doubtful-cut check, add pauses, fillers, restarts and a keep[] edit")
+    parser.add_argument("--workers", type=int, default=WORKERS, help=f"Storyboard requests at once per clip (default {WORKERS})")
+    parser.add_argument("--jobs", "-j", type=int, default=JOBS, help=f"Clips at once (default {JOBS})")
+    parser.add_argument("--max-requests", type=int, default=None,
+                        help=f"Model requests in flight across all clips (default FOOTAGE_MAX_REQUESTS or {client.MAX_REQUESTS})")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--talking-head", action="store_true",
+                      help="口播 / one take: skip the doubtful-cut check, add pauses, fillers, restarts and a keep[] edit")
+    mode.add_argument("--breakdown", action="store_true",
+                      help="拉片: how a reference film is built; several films also get one comparison (拉片汇总)")
+    mode.add_argument("--download-only", action="store_true", help="视频下载: only download the links, no analysis")
+    parser.add_argument("--no-compare", action="store_true", help="--breakdown with several films: skip the comparison")
+    parser.add_argument("--download-dir", default="~/Downloads/genius-footage", help="Where links are downloaded")
+    parser.add_argument("--cookies-from-browser", default=None, help="yt-dlp cookies for links that need a login (chrome, safari…)")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and the ASR key")
     args = parser.parse_args()
     c = client.conf(args.model)
-    try:
-        if args.check:
-            ff, asr_key = shutil.which("ffmpeg") and shutil.which("ffprobe"), asr.find_key()
-            print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
-                  f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
-                  f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}")
-            ok = bool(ff and c["api_key"] and asr_key)
-            print("ok" if ok else "NOT READY")
-            sys.exit(0 if ok else 2)
-        if not args.file:
-            parser.error("file is required (unless --check)")
-        if not Path(args.file).is_file():
-            raise FootageError("INPUT_NOT_FOUND", f"File not found: {args.file}")
-        if Path(args.file).suffix.lower() not in VIDEO_EXTENSIONS:
-            raise FootageError("UNSUPPORTED_FORMAT", "footage needs a local video file")
-        if not c["api_key"]:
-            raise FootageError("PROVIDER_ERROR", "API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env")
-        res = run(args.file, c, Path(args.script).read_text(encoding="utf-8") if args.script else None, args.workers,
-                  args.talking_head)
-        print(json.dumps(res, ensure_ascii=False, indent=2) if args.output == "json"
-              else f"## Footage\n\n{render_result(res)}")
-    except FootageError as e:
-        print(f"Error [{e.code}]: {e}", file=sys.stderr)
-        sys.exit(client.EXIT_CODES.get(e.code, 1))
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    if args.max_requests:
+        client.set_limit(args.max_requests)
+    if args.check:
+        ff, asr_key = shutil.which("ffmpeg") and shutil.which("ffprobe"), asr.find_key()
+        print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
+              f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
+              f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}\n"
+              f"yt-dlp:       {shutil.which('yt-dlp') or 'not installed (links unsupported)'}")
+        ok = bool(ff and c["api_key"] and asr_key)
+        print("ok" if ok else "NOT READY")
+        sys.exit(0 if ok else 2)
+    if not args.files:
+        parser.error("at least one file or link is required (unless --check)")
+    if not c["api_key"] and not args.download_only:
+        print("Error [PROVIDER_ERROR]: API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env", file=sys.stderr)
+        sys.exit(client.EXIT_CODES["PROVIDER_ERROR"])
+    script = Path(args.script).read_text(encoding="utf-8") if args.script else None
+    many = len(args.files) > 1
+    if many:
+        global _procs
+        _procs = ProcessPoolExecutor(max(1, min(args.jobs, len(args.files), os.cpu_count() or 1)))
+        sys.stderr = _TagStream(sys.stderr)
+        print(f"[genius-footage] {len(args.files)} clips, {min(args.jobs, len(args.files))} at a time", file=sys.stderr)
+    tags = [f"{k}/{len(args.files)} {re.sub(r'^https?://', '', f) if re.match(r'https?://', f) else Path(f).stem}"[:28]
+            for k, f in enumerate(args.files, 1)] if many else [None]
+    with ThreadPoolExecutor(max(1, min(args.jobs, len(args.files)))) as ex:
+        results = list(ex.map(lambda ft: _one(ft[0], c, args, script, ft[1]), zip(args.files, tags)))
 
+    summary = None
+    done = [(f, r) for f, r, _ in results if r]
+    if args.breakdown and len(done) > 1 and not args.no_compare:
+        try:
+            docs = [(f, json.loads(Path(r["footage_json"]).read_text(encoding="utf-8"))) for f, r in done]
+            summary = compare(c, docs, Path(docs[0][0]).resolve().parent)
+        except FootageError as e:
+            summary = None
+            print(f"[genius-footage] 拉片汇总失败 [{e.code}]: {e}", file=sys.stderr)
+
+    if args.output == "json":
+        out = [{"file": f, **(r or {}), **({"error": {"code": e.code, "message": str(e)}} if e else {})} for f, r, e in results]
+        print(json.dumps(out[0] if not many else {"clips": out, "compare_md": summary}, ensure_ascii=False, indent=2))
+    else:
+        show = lambda r: f"已下载：`{r['path']}`" if r.get("mode") == "download" else render_result(r)
+        blocks = [f"## {f if args.download_only else Path(f).name if many else 'Footage'}\n\n" + (show(r) if r else f"Error [{e.code}]: {e}")
+                  for f, r, e in results]
+        if summary:
+            blocks.append(f"## 拉片汇总\n\n`{summary}`")
+        print("\n\n".join(blocks))
+    errs = [e for _, _, e in results if e]
+    for e in errs:
+        print(f"Error [{e.code}]: {e}", file=sys.stderr)
+    if errs:
+        sys.exit(client.EXIT_CODES.get(errs[0].code, 1))
 
 if __name__ == "__main__":
     main()

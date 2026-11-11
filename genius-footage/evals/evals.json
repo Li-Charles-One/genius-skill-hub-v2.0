@@ -180,6 +180,51 @@
           "value": "footage.py"
         }
       ]
+    },
+    {
+      "id": "breakdown-several",
+      "prompt": "帮我拉一下这三条参考片 a.mp4 b.mp4 c.mp4，看看人家怎么讲结构、怎么剪的",
+      "trigger_expected": true,
+      "expected_output": "Runs footage.py --breakdown with all three files in one command; reports each .breakdown.md and the 拉片汇总 path.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "--breakdown"
+        }
+      ]
+    },
+    {
+      "id": "batch-briefs",
+      "prompt": "这个文件夹里 6 条素材一起跑说明书，别一条一条来",
+      "trigger_expected": true,
+      "expected_output": "Runs one footage.py command with all six clips (parallel by default, --jobs 6), not six separate commands.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "footage.py"
+        }
+      ]
+    },
+    {
+      "id": "download-links",
+      "prompt": "把这几个抖音和小红书链接的视频下下来，先不用分析",
+      "trigger_expected": true,
+      "expected_output": "Runs footage.py --download-only with all links in one command; 抖音 goes through the ego browser automatically; reports the saved paths.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "--download-only"
+        }
+      ]
     }
   ]
 }

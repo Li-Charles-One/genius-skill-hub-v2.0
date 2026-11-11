@@ -5,6 +5,7 @@ plus the compressed whole-clip proxy. Config comes from the environment or scrip
     FOOTAGE_API_KEY (or CPA_API_KEY)   required
     FOOTAGE_BASE_URL                   default https://cpa-jp.charles-ai.space/v1
     FOOTAGE_MODEL                      default gemini-4-argon-high
+    FOOTAGE_MAX_REQUESTS               model requests in flight across all clips of one run (default 8)
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -35,6 +37,7 @@ PROXY_DIR = Path(tempfile.gettempdir()) / "genius-footage-proxy"
 PROXY_FPS, PROXY_SCALE, AUDIO_KBPS = 2, 1280, 64
 BUDGET_BYTES = 30 * 1024 * 1024        # one inline request
 MAX_VIDEO_SEC = 1800                   # longer clips skip the whole-clip step
+MAX_REQUESTS = 8                       # all clips of one run share this cap (more makes the CPA gateway 502)
 EXIT_CODES = {"INPUT_NOT_FOUND": 3, "UNSUPPORTED_FORMAT": 4, "DEPENDENCY_MISSING": 5,
               "PROVIDER_ERROR": 6, "TIMEOUT": 7}
 
@@ -65,10 +68,19 @@ def _env(name: str) -> str:
     return (os.environ.get(name) or _dotenv().get(name) or "").strip()
 
 
+def set_limit(n: int) -> None:
+    """Model requests in flight for the whole process, however many clips run at once."""
+    global _gate
+    _gate = threading.BoundedSemaphore(max(1, n))
+
+
 def conf(model: str | None = None) -> dict:
     return {"base_url": (_env("FOOTAGE_BASE_URL") or DEFAULT_BASE_URL).rstrip("/"),
             "model": model or _env("FOOTAGE_MODEL") or DEFAULT_MODEL,
             "api_key": _env("FOOTAGE_API_KEY") or _env("CPA_API_KEY")}
+
+
+_gate = threading.BoundedSemaphore(max(1, int(_env("FOOTAGE_MAX_REQUESTS") or MAX_REQUESTS)))
 
 
 def fingerprint(path: str) -> str:
@@ -92,7 +104,7 @@ def _post(url: str, key: str, body: dict, timeout: float) -> dict:
         req = urllib.request.Request(url, data=data, method="POST", headers={
             "Content-Type": "application/json", "Authorization": f"Bearer {key}", "x-goog-api-key": key})
         try:
-            with opener.open(req, timeout=timeout) as resp:
+            with _gate, opener.open(req, timeout=timeout) as resp:  # the slot is free again while retrying
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             msg = e.read().decode("utf-8", errors="replace")[:300]
