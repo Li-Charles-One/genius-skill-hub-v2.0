@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import urllib.request
 from bisect import bisect_left, bisect_right
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
@@ -1114,10 +1115,62 @@ def fetch_browser(url: str, out_dir: Path) -> str:
     return str(out)
 
 
-def fetch(url: str, out_dir: Path, cookies: str | None = None) -> str:
-    """A link → a local mp4, kept in out_dir: yt-dlp (≤1080p); 抖音 always, and 小红书 when yt-dlp cannot,
-    through the logged-in ego browser (yt-dlp cannot sign 抖音's API; 小红书 needs xsec_token)."""
+REDFOX = "https://redfox.hk/story/api/parseWork/videoDownload/"
+
+
+def fetch_redfox(text: str, url: str, out_dir: Path) -> str | None:
+    """抖音 / 小红书 via the RedFox API (REDFOX_API_KEY, about ¥0.03 a call): it returns the video file URL.
+    text may be a whole share message; it is sent as-is. None when no key or on failure (a fallback follows)."""
+    key = client._env("REDFOX_API_KEY")
+    if not key:
+        return None
+    vid = _video_id(url)
+    old = list(out_dir.glob(f"* [{vid}].mp4")) if vid else []
+    if old:
+        return str(old[0])
+    site = "douyin" if re.search(r"douyin\.com/", url) else "xhs"
+    print(f"[genius-footage] downloading {url} via RedFox…", file=sys.stderr)
+    req = urllib.request.Request(REDFOX + site, data=json.dumps({"url": text}).encode("utf-8"), method="POST",
+                                 headers={"REDFOX_API_KEY": key, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            res = json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        print(f"[genius-footage] RedFox failed ({e}), falling back…", file=sys.stderr)
+        return None
+    data = res.get("data") or {}
+    src = data.get("videoUrl") or next((x.get("downloadUrl") for x in data.get("resources") or []
+                                        if x.get("type") == "video" and x.get("downloadUrl")), None)
+    if res.get("code") != 2000 or not src:
+        print(f"[genius-footage] RedFox: code {res.get('code')} {res.get('msg') or res.get('message') or ''}"
+              f"{'' if src else '（没有视频）'}, falling back…", file=sys.stderr)
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tag = vid or hashlib.sha1(text.encode()).hexdigest()[:10]
+    part = out_dir / f".part-{tag}.mp4"
+    try:
+        dl = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0", "Referer": f"https://www.{'douyin' if site == 'douyin' else 'xiaohongshu'}.com/"})
+        with urllib.request.urlopen(dl, timeout=600) as r, open(part, "wb") as f:
+            shutil.copyfileobj(r, f, 1 << 20)
+    except Exception as e:
+        part.unlink(missing_ok=True)
+        print(f"[genius-footage] RedFox file download failed ({e}), falling back…", file=sys.stderr)
+        return None
+    out = out_dir / f"{_safe(data.get('title') or (data.get('desc') or '').split(chr(10))[0])} [{tag}].mp4"
+    part.replace(out)
+    print(f"[genius-footage] downloaded → {out}", file=sys.stderr)
+    return str(out)
+
+
+def fetch(text: str, out_dir: Path, cookies: str | None = None) -> str:
+    """A link (or a share message with one) → a local mp4, kept in out_dir. 抖音 / 小红书: RedFox first, then
+    the logged-in ego browser (抖音) or yt-dlp and the browser (小红书, needs xsec_token); other sites yt-dlp."""
+    url = re.search(r"https?://[^\s，。！]+", text).group(0)
     browser = re.match(BROWSER_SITES, url)
+    if browser:
+        got = fetch_redfox(text, url, out_dir)
+        if got:
+            return got
     if re.match(r"https?://(www\.)?xiaohongshu\.com/", url) and "xsec_token=" not in url:
         raise FootageError("UNSUPPORTED_FORMAT", f"小红书链接要带 xsec_token（从搜索结果或分享里复制完整链接），"
                                                  f"不带时网站不给看这条笔记：{url}")
@@ -1148,7 +1201,7 @@ def fetch(url: str, out_dir: Path, cookies: str | None = None) -> str:
 def _one(item: str, c: dict, args, script: str | None, tag: str | None) -> tuple[str, dict | None, FootageError | None]:
     _ctx.tag = tag
     try:
-        if re.match(r"https?://", item):
+        if not Path(item).is_file() and re.search(r"https?://", item):
             item = fetch(item, Path(args.download_dir).expanduser(), args.cookies_from_browser)
         if not Path(item).is_file():
             raise FootageError("INPUT_NOT_FOUND", f"File not found: {item}")
@@ -1194,7 +1247,9 @@ def main() -> None:
         print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
               f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
               f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}\n"
-              f"yt-dlp:       {shutil.which('yt-dlp') or 'not installed (links unsupported)'}")
+              f"yt-dlp:       {shutil.which('yt-dlp') or 'not installed (links unsupported)'}\n"
+              f"redfox:       key={'yes' if client._env('REDFOX_API_KEY') else 'no (抖音 / 小红书 via the ego browser)'}\n"
+              f"ego-browser:  {shutil.which('ego-browser') or 'not installed'}")
         ok = bool(ff and c["api_key"] and asr_key)
         print("ok" if ok else "NOT READY")
         sys.exit(0 if ok else 2)
@@ -1210,7 +1265,8 @@ def main() -> None:
         _procs = ProcessPoolExecutor(max(1, min(args.jobs, len(args.files), os.cpu_count() or 1)))
         sys.stderr = _TagStream(sys.stderr)
         print(f"[genius-footage] {len(args.files)} clips, {min(args.jobs, len(args.files))} at a time", file=sys.stderr)
-    tags = [f"{k}/{len(args.files)} {re.sub(r'^https?://', '', f) if re.match(r'https?://', f) else Path(f).stem}"[:28]
+    link = lambda f: re.search(r"https?://(\S+)", f) if not Path(f).is_file() else None
+    tags = [f"{k}/{len(args.files)} {link(f).group(1) if link(f) else Path(f).stem}"[:28]
             for k, f in enumerate(args.files, 1)] if many else [None]
     with ThreadPoolExecutor(max(1, min(args.jobs, len(args.files)))) as ex:
         results = list(ex.map(lambda ft: _one(ft[0], c, args, script, ft[1]), zip(args.files, tags)))
