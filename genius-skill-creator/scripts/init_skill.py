@@ -27,7 +27,7 @@ ALLOWED_RESOURCES = {"scripts", "references", "assets", "evals"}
 
 SKILL_TEMPLATE = """---
 name: {skill_name}
-description: "Use whenever the user needs {skill_name} work. Trigger on create, repair, or run requests for {skill_name}. Do not use for unrelated coding or documentation."
+description: "(fill: what this skill does, the user phrases that should trigger it, and the near-miss requests it must not handle)"
 ---
 
 # {skill_title}

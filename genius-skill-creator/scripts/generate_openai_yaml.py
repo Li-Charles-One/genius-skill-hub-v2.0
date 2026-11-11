@@ -3,7 +3,7 @@
 OpenAI YAML Generator - Creates agents/openai.yaml for a skill folder.
 
 Usage:
-    generate_openai_yaml.py <skill_dir> [--name <skill_name>] [--interface key=value]
+    generate_openai_yaml.py <skill_dir> [--name <skill_name>] [--interface key=value] [--force]
 """
 
 import argparse
@@ -153,7 +153,12 @@ def parse_interface_overrides(raw_overrides):
     return overrides, optional_order
 
 
-def write_openai_yaml(skill_dir, skill_name, raw_overrides):
+def write_openai_yaml(skill_dir, skill_name, raw_overrides, force=False):
+    output_path = Path(skill_dir) / "agents" / "openai.yaml"
+    if output_path.exists() and not force:
+        print("[ERROR] agents/openai.yaml already exists. Edit it by hand, or pass --force to replace it (icons and edited text are lost).")
+        return None
+
     overrides, optional_order = parse_interface_overrides(raw_overrides)
     if overrides is None:
         return None
@@ -181,9 +186,7 @@ def write_openai_yaml(skill_dir, skill_name, raw_overrides):
         if value is not None:
             interface_lines.append(f"  {key}: {yaml_quote(value)}")
 
-    agents_dir = Path(skill_dir) / "agents"
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    output_path = agents_dir / "openai.yaml"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(interface_lines) + "\n", encoding="utf-8")
     print(f"[OK] Created agents/openai.yaml")
     return output_path
@@ -204,6 +207,11 @@ def main():
         default=[],
         help="Interface override in key=value format (repeatable)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing agents/openai.yaml",
+    )
     args = parser.parse_args()
 
     skill_dir = Path(args.skill_dir).resolve()
@@ -218,7 +226,7 @@ def main():
     if not skill_name:
         sys.exit(1)
 
-    result = write_openai_yaml(skill_dir, skill_name, args.interface)
+    result = write_openai_yaml(skill_dir, skill_name, args.interface, force=args.force)
     if result:
         sys.exit(0)
     sys.exit(1)

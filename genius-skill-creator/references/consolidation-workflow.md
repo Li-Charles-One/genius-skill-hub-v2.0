@@ -32,7 +32,7 @@ Common roots:
 
 - OpenCode: `~/.config/opencode/skills` or a hub checkout
 - Claude Code: `~/.claude/skills` or project `.claude/skills`
-- Codex: project `.agents/skills`
+- Codex: `~/.agents/skills` or project `.agents/skills`
 
 Read each candidate skill. For each, note:
 

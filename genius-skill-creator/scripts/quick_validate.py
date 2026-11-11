@@ -20,7 +20,10 @@ PLACEHOLDER_PATTERNS = (
     "Complete and informative explanation",
     "Replace with actual",
 )
+# A scaffold marker still carrying its own text; "(fill: ...)" is how docs name the marker.
+FILL_MARKER = re.compile(r"\(fill: (?!\.\.\.\))")
 NONGOAL_CUES = (re.compile(r"do not", re.I), re.compile(r"not for", re.I), re.compile(r"不要"))
+RESOURCE_PATH = re.compile(r"([^\s`'\"()]*?)\b((?:references|scripts|assets|evals|agents)/[A-Za-z0-9_.\-/]+\.[A-Za-z0-9]+)")
 
 
 def parse_skill_frontmatter(skill_md):
@@ -106,8 +109,23 @@ def validate_resources_are_discoverable(skill_path, content):
     return True, None
 
 
+def missing_referenced_resources(skill_path, name, content):
+    """Resource paths SKILL.md names under this skill's own root that are not on disk."""
+    missing = []
+    for prefix, rel in RESOURCE_PATH.findall(content):
+        # A prefix is this skill's own root (./, <skill_dir>/, {dir}/, $DIR/, <name>/) or some other tree.
+        own_root = not prefix or re.search(r"(^|/)\./$|[>}]/$|\$\w+/$", prefix) or prefix.endswith(f"{name}/")
+        if not own_root or Path(rel).name.startswith(".env"):
+            continue
+        if not (skill_path / rel).exists() and rel not in missing:
+            missing.append(rel)
+    return missing
+
+
 def validate_no_unfinished_placeholders(content):
     found = [pattern for pattern in PLACEHOLDER_PATTERNS if pattern in content]
+    if FILL_MARKER.search(content):
+        found.append("(fill: ...) scaffold marker")
     if found:
         return False, "Unfinished placeholder text found in SKILL.md: " + ", ".join(found)
     return True, None
@@ -240,6 +258,14 @@ def validate_skill(skill_path, hub_path=None):
         )
     if not has_nongoal_cue(description):
         warnings.append("description has no non-goal cue (Do not / not for / 不要)")
+    if not re.search(r"^#{1,6}\s.*gotchas", content, re.I | re.M):
+        warnings.append('SKILL.md has no Gotchas section ("None known" is a valid body)')
+    missing = missing_referenced_resources(skill_path, name, content)
+    if missing:
+        warnings.append(
+            "SKILL.md names path(s) not found in this skill (fine if they belong to the user's project): "
+            + ", ".join(missing)
+        )
 
     junk = find_junk_paths(skill_path)
     if junk:

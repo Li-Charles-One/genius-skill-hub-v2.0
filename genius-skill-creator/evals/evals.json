@@ -251,6 +251,17 @@
       ]
     },
     {
+      "id": "non-skill-edit-claude-md",
+      "prompt": "把「提交前先跑测试」这条规则加到 CLAUDE.md 里。",
+      "trigger_expected": false,
+      "expected_output": "Should not trigger genius-skill-creator because editing an agent instruction file is not a skill package task.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "quick_validate.py"},
+        {"type": "not_contains", "value": "init_skill.py"}
+      ]
+    },
+    {
       "id": "non-skill-explain-concept",
       "prompt": "skill 这个词在 AI agent 里是什么意思？",
       "trigger_expected": false,

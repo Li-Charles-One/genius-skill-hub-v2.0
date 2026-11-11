@@ -1,8 +1,8 @@
 ---
 name: genius-skill-creator
-description: "创建、修复、审计、评测与优化 SKILL.md 技能包及多平台适配器：支持工作流脚手架生成、规范审计与安全扫描。不要用于普通业务代码编写、应用排错或通用文本翻译。"
+description: "创建、修复、审计、评测、优化、移植与合并 SKILL.md 技能包。用户说「做成一个 skill」「新建一个 skill」「这个 skill 校验不过」「审一下这个 skill」「安装前看看这个 skill 安不安全」「给这个 skill 瘦身」「让它更容易触发」「让 Codex 也能用」「把这两个 skill 合并」时使用。不要用于只是安装或调用现成的 skill、翻译 SKILL.md、解释 skill 是什么，也不要用于修改 CLAUDE.md、AGENTS.md、hooks 或设置。"
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # Genius Skill Creator
@@ -102,6 +102,7 @@ Every repair or optimization checks: a positive trigger, a negative trigger, the
 
 - `quick_validate.py` fails when a file under `references/`, `scripts/`, `assets/`, or `evals/` is not named by its relative path in `SKILL.md` or `agents/openai.yaml`. When thinning an entrypoint, drop repeated prose, not the last mention of a path.
 - `quick_validate.py` and `security_scan.py` skip git-ignored files, so a local `.env` or `.DS_Store` passes. A zipped copy of the folder still includes them; exclude them before sharing outside git.
+- `quick_validate.py` warns when `SKILL.md` names a resource path that is not in the skill. It cannot tell a deleted script from a path in the user's own project, so check each one: fix or drop a stale mention, leave a project path.
 - Security scan LOW findings (undeclared URLs) do not fail the scan; HIGH and MED do.
 
 ## Output Standard
@@ -119,9 +120,9 @@ Report:
 ## Resource Map
 
 - `scripts/init_skill.py`: scaffold `SKILL.md`, `agents/openai.yaml`, and requested resource folders.
-- `scripts/quick_validate.py`: structural checks; warns on fat entrypoints and missing non-goals; fails on junk files.
+- `scripts/quick_validate.py`: structural checks; fails on junk files and unfilled scaffold markers; warns on fat entrypoints, missing non-goals, a missing Gotchas section and resource paths that do not exist.
 - `scripts/security_scan.py`: secrets, injection-like instructions, undeclared script URLs.
-- `scripts/generate_openai_yaml.py`: Codex/UI `agents/openai.yaml`.
+- `scripts/generate_openai_yaml.py`: Codex/UI `agents/openai.yaml`; refuses to replace an existing file without `--force`.
 - `scripts/validate_evals.py`: eval definition and optional result assertions.
 - `references/skill-optimization-template.md`: package template.
 - `references/runtime-mapping.md`: runtime fingerprints, install paths, action mapping.
