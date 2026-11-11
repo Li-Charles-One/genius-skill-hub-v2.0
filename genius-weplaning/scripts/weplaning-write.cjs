@@ -15,12 +15,16 @@ const {
   checkMemory,
   emitResult,
   formatSectionItems,
+  isNoTask,
   isTrivialNote,
+  isUnknown,
+  ITEM_MAX,
   parseArgs,
   parseCurrentMd,
   readMemory,
   replaceField,
   required,
+  resolveRoot,
   runCheck,
   SCHEMA_VERSION,
   section,
@@ -37,9 +41,10 @@ const {
 
 const help = `
 Usage:
-  node weplaning-write.cjs <project-root> --agent <name> [note] [options]
+  node weplaning-write.cjs <project-root> --agent <name> --changed <text> [options]
 
-Patch accepted project state. One command replaces note + closeout.
+Append the ledger and patch accepted project state. One event, one command.
+<project-root> may be any directory inside the project (default: current directory).
 
 Options:
   --agent <name>         Required. Your runtime: claude-code, codex, opencode, grok, cursor, zcode or hermes
@@ -48,7 +53,7 @@ Options:
   --with <new>           Replacement for the matching --replace (repeat in order)
   --drop <text>          Remove the single CURRENT.md line containing this text
   --add-state <text>     Append Current State bullet(s) (";;")
-  --state <text>         Replace Current State (";;" bullets)
+  --add-next <text>      Append Accepted Next Steps item(s) (";;")
   --next-step <text>     Replace Accepted Next Steps
   --blockers <text>      Replace Open Blockers
   --goal <text>          Replace Active Goal
@@ -65,7 +70,7 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const valueFlags = ["agent", "changed", "replace", "with", "drop", "add-state", "state", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "supersedes", "file", "files", "verification", "note", "time"];
+const valueFlags = ["agent", "changed", "replace", "with", "drop", "add-state", "add-next", "next-step", "blockers", "goal", "understanding", "decision", "rationale", "supersedes", "file", "files", "verification", "note", "time"];
 // Only these may span lines; every other value becomes one Markdown line or list item.
 const multiLineFlags = ["goal", "understanding", "replace", "with"];
 const HEADING = /^[ \t]{0,3}#{1,6}([ \t]|$)/m;
@@ -86,20 +91,17 @@ for (const [key, value] of Object.entries(args)) {
     usage(value === true, `--${key} does not take a value`, help);
   }
 }
-usage(args._.length <= 2, "Unexpected positional arguments", help);
+usage(args._.length <= 1, "Unexpected positional arguments: pass what happened with --changed", help);
 
-const root = path.resolve(args._[0] || process.cwd());
-const positional = args._[1] ? String(args._[1]).trim() : "";
-usage(!/[\r\n]/.test(positional) && !HEADING.test(positional), "Note must be one line without Markdown headings", help);
+const root = resolveRoot(args._[0]);
 const changed = toList(args.changed);
-if (positional && changed.length === 0) changed.push(positional);
 
 const replaces = [].concat(args.replace ?? []);
 const withs = [].concat(args.with ?? []);
 const drops = [].concat(args.drop ?? []);
 usage(replaces.length === withs.length, "Each --replace needs exactly one --with", help);
 
-const hasPatch = Boolean(args.state || args["next-step"] || args.blockers || args.goal || args.understanding || args["add-state"] || replaces.length || drops.length);
+const hasPatch = Boolean(args["next-step"] || args.blockers || args.goal || args.understanding || args["add-state"] || args["add-next"] || replaces.length || drops.length);
 const hasDecision = Boolean(args.decision && args.decision !== true);
 const supersedes = [].concat(args.supersedes ?? []);
 usage(!supersedes.length || hasDecision, "--supersedes needs --decision", help);
@@ -120,7 +122,7 @@ const currentPath = path.join(root, ".agent-memory", "CURRENT.md");
 const changesPath = path.join(root, ".agent-memory", "CHANGES.md");
 
 if (!fs.existsSync(currentPath) || !fs.existsSync(changesPath)) {
-  console.error("Missing .agent-memory/CURRENT.md or CHANGES.md — run init-memory.cjs first.");
+  console.error(`No project memory at or above ${root} (.agent-memory/CURRENT.md or CHANGES.md missing). Create one with init-memory.cjs only when the user asks.`);
   process.exit(1);
 }
 
@@ -134,6 +136,7 @@ if (!hasPatch && !hasDecision && trivialOnly) {
 }
 
 const patched = [];
+let original = "";
 const changeId = `${now} change ${uniqueStamp()}`;
 let decisionRecorded = false;
 
@@ -142,9 +145,23 @@ function listField(label, items) {
   return items.length ? `- ${label}:\n${items.map((item) => `  - ${item}`).join("\n")}\n` : "";
 }
 
+// Appending to a section that only holds a placeholder (none / unknown) replaces the placeholder.
+function appendItems(text, heading, added) {
+  const kept = section(text, heading).split("\n").filter((line) => {
+    const item = line.replace(/^\s*(\d+\.|[-*])\s+/, "").trim();
+    return !isNoTask(item) && !isUnknown(item);
+  });
+  return setSection(text, heading, [...kept, added].join("\n"));
+}
+
 withMemoryLock(root, () => {
   runCheck(root);
-  const original = readMemory(root, "CURRENT.md").replace(/\r\n/g, "\n");
+  original = readMemory(root, "CURRENT.md").replace(/\r\n/g, "\n");
+  // Only text this write adds is held to the limit; an old long item may be resent unchanged.
+  for (const flag of ["add-state", "add-next", "next-step", "blockers"]) {
+    const long = toList(args[flag]).find((item) => item.length > ITEM_MAX && !original.includes(item));
+    usage(!long, `--${flag} item is ${long?.length} characters (limit ${ITEM_MAX}): one fact per item; say what happened in --changed and keep detail in the doc that owns it.`, help);
+  }
   const basedOn = section(original, "Based On");
   // Based On is regenerated below, so exact edits must not match its copied summary.
   let currentText = setSection(original, "Based On", "");
@@ -171,7 +188,6 @@ withMemoryLock(root, () => {
   const fields = {
     goal: ["activeGoal", "Active Goal"],
     understanding: ["currentUnderstanding", "Current Understanding"],
-    state: ["currentState", "Current State"],
     "next-step": ["acceptedNextSteps", "Accepted Next Steps"],
     blockers: ["openBlockers", "Open Blockers"],
   };
@@ -185,10 +201,15 @@ withMemoryLock(root, () => {
     patched.push(flag);
   }
   if (args["add-state"] !== undefined) {
-    const added = formatSectionItems(args["add-state"]);
-    currentText = setSection(currentText, "Current State", `${section(currentText, "Current State")}\n${added}`);
+    currentText = appendItems(currentText, "Current State", formatSectionItems(args["add-state"]));
     patched.push("add-state");
   }
+  if (args["add-next"] !== undefined) {
+    currentText = appendItems(currentText, "Accepted Next Steps", formatSectionItems(args["add-next"], { numbered: true }));
+    patched.push("add-next");
+  }
+  // Dropping the last step leaves nothing pending, which is recorded, not left empty.
+  if (!section(currentText, "Accepted Next Steps").trim()) currentText = setSection(currentText, "Accepted Next Steps", "1. none");
   const steps = section(currentText, "Accepted Next Steps");
   if (steps !== section(original, "Accepted Next Steps")) {
     let number = 0;
@@ -256,8 +277,8 @@ ${superseded.length ? `- Supersedes: ${superseded.join("; ")}\n` : ""}`;
   runCheck(root);
 });
 
-// Warn at the moment CURRENT grows; warnings never block the write.
-for (const warning of checkMemory(root, { audit: true }).warnings) console.error(`[audit] ${warning}`);
+// Warn about what this write added; warnings never block the write.
+for (const warning of checkMemory(root, { audit: true, before: original }).warnings) console.error(`[audit] ${warning}`);
 
 emitResult(args, changeId, {
   persisted: true,

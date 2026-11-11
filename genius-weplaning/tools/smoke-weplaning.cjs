@@ -73,7 +73,7 @@ function testInitShape() {
   assert(line === "initialized", `init stdout was ${line}`);
   assert(fs.existsSync(path.join(root, ".agent-memory", "CURRENT.md")), "CURRENT.md missing");
   assert(fs.existsSync(path.join(root, ".agent-memory", "CHANGES.md")), "CHANGES.md missing");
-  assert(fs.existsSync(path.join(root, ".agent-memory", "DECISIONS.md")), "DECISIONS.md missing");
+  assert(!fs.existsSync(path.join(root, ".agent-memory", "DECISIONS.md")), "init created DECISIONS.md before any decision");
   assert(!fs.existsSync(path.join(root, ".agent-memory", "THREADS.md")), "init must not create THREADS.md");
   assert(!fs.existsSync(path.join(root, ".agent-memory", "sessions")), "init must not create sessions/");
   assert(!fs.existsSync(path.join(root, ".agent-memory", "WePlaning.md")), "init should not create WePlaning.md");
@@ -88,13 +88,13 @@ function testWritePatchesAndLedger() {
   init(root);
   writeCmd(root, [
     "--changed", "shipped A",
-    "--state", "A done;;B next",
+    "--add-state", "A done;;B next",
     "--next-step", "Ship B",
     "--file", "a.ts",
     "--verification", "smoke",
   ]);
   const current = read(root, "CURRENT.md");
-  assert(current.includes("A done"), "write --state did not write Current State");
+  assert(current.includes("A done"), "write --add-state did not write Current State");
   assert(current.includes("Ship B"), "write --next-step did not write next steps");
   assert(read(root, "CHANGES.md").includes("shipped A"), "ledger missed --changed");
   run([script("check-memory.cjs"), root]);
@@ -103,7 +103,7 @@ function testWritePatchesAndLedger() {
 function testWriteDoesNotClobberState() {
   const root = tempRoot("noclobber");
   init(root);
-  writeCmd(root, ["--changed", "seed", "--state", "Fact A;;Fact B;;Fact C"]);
+  writeCmd(root, ["--changed", "seed", "--add-state", "Fact A;;Fact B;;Fact C"]);
   writeCmd(root, ["--changed", "later work"]);
   const after = read(root, "CURRENT.md");
   assert(after.includes("Fact A") && after.includes("Fact C"), "ledger-only write clobbered Current State");
@@ -115,18 +115,42 @@ function testTrivialNoteNoop() {
   init(root);
   const beforeChanges = read(root, "CHANGES.md");
   const beforeCurrent = read(root, "CURRENT.md");
-  const result = writeCmd(root, ["完成了"]);
+  const result = writeCmd(root, ["--changed", "完成了"]);
   assert(result.stdout.includes("nothing-to-persist"), "trivial note should no-op");
   assert(read(root, "CHANGES.md") === beforeChanges, "trivial note mutated CHANGES.md");
   assert(read(root, "CURRENT.md") === beforeCurrent, "trivial note mutated CURRENT.md");
 }
 
-function testDurableNote() {
+function testPositionalNoteIsRejected() {
   const root = tempRoot("note");
   init(root);
-  writeCmd(root, ["us-one Hy2 recovered"]);
-  assert(read(root, "CHANGES.md").includes("us-one Hy2 recovered"), "positional note did not append ledger");
-  assert(!fs.existsSync(path.join(root, ".agent-memory", "THREADS.md")), "note created a session tree");
+  const before = memorySnapshot(root);
+  const refused = run([script("weplaning-write.cjs"), root, "us-one Hy2 recovered", "--agent", "codex"], { expectFail: true });
+  assert(refused.stderr.includes("--changed"), "positional note was not pointed at --changed");
+  // A note in the root position must not be mistaken for a project directory.
+  run([script("weplaning-write.cjs"), "us-one Hy2 recovered", "--agent", "codex"], { expectFail: true, cwd: root });
+  assert(memorySnapshot(root) === before, "positional note mutated memory");
+  writeCmd(root, ["--changed", "us-one Hy2 recovered"]);
+  assert(read(root, "CHANGES.md").includes("us-one Hy2 recovered"), "--changed did not append ledger");
+}
+
+function testRootDiscovery() {
+  const root = tempRoot("discover");
+  init(root);
+  const deep = path.join(root, "src", "deep");
+  fs.mkdirSync(deep, { recursive: true });
+  const fromArg = run([script("weplaning-read.cjs"), deep]);
+  assert(fromArg.stdout.includes("Validate WePlaning 3.0") && fromArg.stderr.includes("Using project memory at"), "read did not find memory above the given directory");
+  assert(run([script("weplaning-read.cjs"), "--brief"], { cwd: deep }).stdout.includes("Validate WePlaning 3.0"), "read did not find memory above cwd");
+  writeCmd(deep, ["--changed", "WRITTEN_FROM_SUBDIR"]);
+  assert(read(root, "CHANGES.md").includes("WRITTEN_FROM_SUBDIR"), "write from a subdirectory missed the project ledger");
+  assert(!fs.existsSync(path.join(deep, ".agent-memory")) && !fs.existsSync(path.join(root, "src", ".agent-memory")), "write created a second memory in a subdirectory");
+  run([script("check-memory.cjs"), deep]);
+  const none = tempRoot("discover-none");
+  const missing = run([script("weplaning-read.cjs"), none], { expectFail: true });
+  assert(missing.stderr.includes("only when the user asks"), "read without memory did not say when to initialize");
+  run([script("weplaning-write.cjs"), none, "--agent", "codex", "--changed", "x"], { expectFail: true });
+  assert(!fs.existsSync(path.join(none, ".agent-memory")), "a failed read or write created memory");
 }
 
 function testLegacyWePlaningIgnored() {
@@ -202,9 +226,10 @@ function testReadHandoffAndJson() {
   const root = tempRoot("read");
   init(root);
   writeCmd(root, ["--changed", "alpha", "--next-step", "Do the thing;;Then stop"]);
-  const briefing = run([script("weplaning-read.cjs"), root, "--handoff"]).stdout;
-  assert(briefing.includes("Focus Next Step #1"), "handoff missing focus");
-  assert(briefing.includes("Do the thing"), "handoff missing next step text");
+  const briefing = run([script("weplaning-read.cjs"), root]).stdout;
+  assert(briefing.includes("Focus Next Step #1"), "read missing focus");
+  assert(briefing.includes("Do the thing"), "read missing next step text");
+  assert(run([script("weplaning-read.cjs"), root, "--handoff"]).stdout.includes("Focus Next Step #1"), "the old --handoff flag stopped working");
   const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout.trim());
   assert(payload.goal.includes("Validate WePlaning 3.0"), "read json lost goal");
   assert(payload.nextSteps[0] === "Do the thing", "read json lost next steps");
@@ -216,17 +241,17 @@ function testReadTruncatesLedger() {
   const root = tempRoot("truncate");
   init(root);
   const longNote = `Durable note ${"x".repeat(200)} UNIQUE_TAIL_SHOULD_NOT_LEAK`;
-  writeCmd(root, [longNote]);
+  writeCmd(root, ["--changed", longNote]);
   assert(read(root, "CHANGES.md").includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "ledger lost the full note");
   assert(!read(root, "CURRENT.md").includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "Based On copied the full ledger line");
   const briefing = run([script("weplaning-read.cjs"), root]).stdout;
   assert(!briefing.includes("UNIQUE_TAIL_SHOULD_NOT_LEAK"), "read briefing dumped the full ledger line");
 }
 
-function testProjectConfigAndDecisions() {
+function testDecisionCreatesFile() {
   const root = tempRoot("config");
   init(root);
-  assert(read(root, "CURRENT.md").includes("Type:"), "Project Config missing");
+  assert(!read(root, "CURRENT.md").includes("Project Config"), "init still writes Project Config");
   writeCmd(root, ["--changed", "chose sqlite", "--decision", "Use sqlite", "--rationale", "ops-doc"]);
   assert(read(root, "DECISIONS.md").includes("Use sqlite"), "decision not recorded");
 }
@@ -315,7 +340,7 @@ function testFindSearchesArchivedHistory() {
 function testInitForceOnlyFillsGaps() {
   const root = tempRoot("initforce");
   init(root);
-  writeCmd(root, ["--changed", "CHANGE WORTH KEEPING"]);
+  writeCmd(root, ["--changed", "CHANGE WORTH KEEPING", "--decision", "DECISION_BEFORE_REINIT"]);
   run([script("init-memory.cjs"), root, "--project", "P", "--goal", "g", "--agent", "codex"], { expectFail: true });
   run([script("init-memory.cjs"), root, "--project", "P", "--goal", "g", "--agent", "codex", "--force"]);
   assert(read(root, "CHANGES.md").includes("CHANGE WORTH KEEPING"), "--force destroyed the change ledger");
@@ -328,6 +353,7 @@ function testInitForceOnlyFillsGaps() {
   ]);
   assert(destroyed.stderr.includes("discards"), "--reinit did not warn about what it destroys");
   assert(!read(root, "CHANGES.md").includes("CHANGE WORTH KEEPING"), "--reinit should start from scratch");
+  assert(!read(root, "DECISIONS.md").includes("DECISION_BEFORE_REINIT"), "--reinit kept an old decision");
   run([script("init-memory.cjs"), root, "--project", "P", "--goal", "g", "--force", "--reinit"], { expectFail: true });
 }
 
@@ -343,23 +369,11 @@ function testSyncPackageRefusesSameDirectory() {
   );
 }
 
-function testCheckDirtyMtimeFallback() {
-  const root = tempRoot("dirty");
-  init(root);
-  const clean = JSON.parse(run([script("check-dirty.cjs"), root, "--json"]).stdout.trim());
-  assert(clean.ok === true, "check-dirty json not ok");
-  assert(clean.mode === "mtime", `expected the mtime fallback for a non-git project, got ${clean.mode}`);
-  fs.writeFileSync(path.join(root, "notes.txt"), "edited after the last memory update\n", "utf8");
-  const dirty = JSON.parse(run([script("check-dirty.cjs"), root, "--json"]).stdout.trim());
-  assert(dirty.dirty.includes("notes.txt"), "mtime fallback missed a changed file");
-  assert(!dirty.dirty.some((item) => item.startsWith(".agent-memory")), "memory paths must be excluded");
-  run([script("check-dirty.cjs"), root, "--strict"], { expectFail: true });
-}
-
 function testExactEdits() {
   const root = tempRoot("exact");
   init(root);
-  writeCmd(root, ["--changed", "seed", "--state", "xtc uses jp.yaml;;Fact B", "--next-step", "Do X;;Do Y;;Do Z"]);
+  writeCmd(root, ["--changed", "seed", "--add-state", "xtc uses jp.yaml;;Fact B", "--next-step", "Do X;;Do Y;;Do Z"]);
+  assert(!read(root, "CURRENT.md").includes("- unknown"), "add-state kept the unknown placeholder beside real facts");
   const edited = JSON.parse(writeCmd(root, ["--changed", "SWITCHED_EXIT", "--replace", "jp.yaml", "--with", "us-good.yaml", "--json"]).stdout);
   assert(edited.persisted && edited.patched.includes("replace"), "replace was not persisted");
   let current = read(root, "CURRENT.md");
@@ -377,6 +391,12 @@ function testExactEdits() {
   current = read(root, "CURRENT.md");
   assert(current.includes("## Accepted Next Steps\n1. Do Y\n2. Do Z\n"), "drop did not renumber next steps");
   assert(current.includes("- Fact B\n- Fact C\n"), "add-state did not append to Current State");
+  writeCmd(root, ["--changed", "c", "--add-next", "Do W"]);
+  assert(read(root, "CURRENT.md").includes("## Accepted Next Steps\n1. Do Y\n2. Do Z\n3. Do W\n"), "add-next did not append a numbered step");
+  writeCmd(root, ["--changed", "c", "--drop", "Do Y", "--drop", "Do Z", "--drop", "Do W"]);
+  assert(read(root, "CURRENT.md").includes("## Accepted Next Steps\n1. none\n"), "dropping the last step did not record none");
+  writeCmd(root, ["--changed", "c", "--add-next", "Do V"]);
+  assert(read(root, "CURRENT.md").includes("## Accepted Next Steps\n1. Do V\n"), "add-next kept the none placeholder");
   writeCmd(root, ["--changed", "c", "--next-step", "1. a;;1. b;;c"]);
   assert(read(root, "CURRENT.md").includes("1. a\n2. b\n3. c\n"), "numbered next steps were not renumbered");
   run([script("check-memory.cjs"), root]);
@@ -387,8 +407,8 @@ function testRejectsInjectedStructure() {
   init(root);
   const before = memorySnapshot(root);
   for (const extra of [
-    ["--changed", "line one\n## injected"], ["--changed", "two\nlines"], ["--changed", "c", "--state", "fact\n## Extra"],
-    ["--changed", "c", "--understanding", "ok\n## Evil"], ["--changed", "c", "--replace", "Required memory files exist.", "--with", "x\n# Evil"], ["single\nline note"],
+    ["--changed", "line one\n## injected"], ["--changed", "two\nlines"], ["--changed", "c", "--add-state", "fact\n## Extra"],
+    ["--changed", "c", "--understanding", "ok\n## Evil"], ["--changed", "c", "--replace", "Continue from the active goal.", "--with", "x\n# Evil"], ["--changed", "c", "--add-next", "step\n## Evil"],
   ]) {
     run([script("weplaning-write.cjs"), root, "--agent", "codex", ...extra], { expectFail: true });
     assert(memorySnapshot(root) === before, `injected structure mutated memory: ${JSON.stringify(extra)}`);
@@ -415,10 +435,21 @@ function testAuditOversizedCurrent() {
   // 3750 CJK characters are 11250 bytes: the budget counts characters.
   const cjk = writeCmd(root, ["--changed", "c", "--add-state", Array.from({ length: 25 }, (_, i) => `事实${i} ${"字".repeat(150)}`).join(";;")]);
   assert(!cjk.stderr.includes("[audit]"), "audit charged CJK text by bytes");
-  const grown = writeCmd(root, ["--changed", "c", "--add-state", `LONG_ITEM ${"x".repeat(300)}`]);
-  assert(grown.stderr.includes("[audit] CURRENT.md has 1 item(s) over 300 characters"), "write did not warn when CURRENT grew a long item");
+  const before = memorySnapshot(root);
+  for (const flag of ["--add-state", "--add-next", "--next-step", "--blockers"]) {
+    const refused = run([script("weplaning-write.cjs"), root, "--agent", "codex", "--changed", "c", flag, `LONG_ITEM ${"x".repeat(300)}`], { expectFail: true });
+    assert(refused.stderr.includes("limit 300") && memorySnapshot(root) === before, `${flag} accepted a new item over 300 characters`);
+  }
+  writeCmd(root, ["--changed", "c", "--next-step", "GROW_ME"]);
+  const grown = writeCmd(root, ["--changed", "c", "--replace", "GROW_ME", "--with", `GROW_ME ${"x".repeat(300)}`]);
+  assert(grown.stderr.includes("[audit] CURRENT.md has 1 item(s) over 300 characters"), "write did not warn when an edit grew a long item");
+  assert(!writeCmd(root, ["--changed", "later ledger-only write with a much longer summary than before"]).stderr.includes("[audit]"), "an old long item warned on an unrelated write");
+  // Resending an old long item unchanged in a whole-section replacement is not new text.
+  writeCmd(root, ["--changed", "c", "--next-step", `GROW_ME ${"x".repeat(300)};;NEXT_B`]);
   assert(audit().includes("1 item(s) over 300 characters") && !audit().includes("over 10000"), "audit missed a long item");
-  writeCmd(root, ["--changed", "c", "--add-state", Array.from({ length: 40 }, (_, i) => `FACT_${i} ${"y".repeat(200)}`).join(";;")]);
+  const crossed = writeCmd(root, ["--changed", "c", "--add-state", Array.from({ length: 40 }, (_, i) => `FACT_${i} ${"y".repeat(200)}`).join(";;")]);
+  assert(crossed.stderr.includes("characters (over 10000)"), "write did not warn when it pushed CURRENT over the budget");
+  assert(!writeCmd(root, ["--changed", "another ledger-only write, again with a longer summary line than the last"]).stderr.includes("[audit]"), "an oversized CURRENT warned on a write that did not grow it");
   assert(audit().includes("characters (over 10000)"), "audit missed an oversized CURRENT");
   run([script("check-memory.cjs"), root, "--audit", "--strict"], { expectFail: true });
   run([script("check-memory.cjs"), root]);
@@ -440,7 +471,7 @@ function memorySnapshot(root) {
 function testWritePreservesWhitespaceAndExtraContent() {
   const root = tempRoot("preserve");
   init(root);
-  writeCmd(root, ["--changed", "seed", "--state", "FACT_A;;FACT_B", "--understanding", "CHECK_PORT_FIRST"]);
+  writeCmd(root, ["--changed", "seed", "--add-state", "FACT_A;;FACT_B", "--understanding", "CHECK_PORT_FIRST"]);
   const original = read(root, "CURRENT.md")
     .replace("## Current State\n", "## Current State  \n")
     .replace("## Current Understanding\n", "##\tCurrent Understanding\t\n")
@@ -478,12 +509,12 @@ function testPatchNeedsChanged() {
   const root = tempRoot("patch-needs-changed");
   init(root);
   const before = memorySnapshot(root);
-  for (const extra of [["--state", "STATE_ONLY_FACT"], ["--add-state", "X"], ["--drop", "Required memory"], ["--replace", "Required", "--with", "X"], ["--state", "STATE_ONLY_FACT", "--changed", "done"]]) {
+  for (const extra of [["--next-step", "STEP_ONLY"], ["--add-state", "X"], ["--add-next", "X"], ["--drop", "Continue from"], ["--replace", "Continue", "--with", "X"], ["--add-state", "STATE_ONLY_FACT", "--changed", "done"]]) {
     const refused = run([script("weplaning-write.cjs"), root, "--agent", "codex", ...extra], { expectFail: true });
     assert(refused.stderr.includes("needs --changed"), `patch without a stated change was not refused: ${extra.join(" ")}`);
     assert(memorySnapshot(root) === before, `patch without a stated change mutated memory: ${extra.join(" ")}`);
   }
-  const result = JSON.parse(writeCmd(root, ["--changed", "STATED_CHANGE", "--state", "STATE_ONLY_FACT", "--verification", "ACTUAL_CHECK", "--json"]).stdout);
+  const result = JSON.parse(writeCmd(root, ["--changed", "STATED_CHANGE", "--add-state", "STATE_ONLY_FACT", "--verification", "ACTUAL_CHECK", "--json"]).stdout);
   const ledger = read(root, "CHANGES.md");
   assert(ledger.includes(result.changeId) && ledger.includes("STATED_CHANGE") && ledger.includes("ACTUAL_CHECK"), "patch write has no traceable ledger entry");
   const decision = JSON.parse(writeCmd(root, ["--decision", "DECISION_ONLY_FACT", "--json"]).stdout);
@@ -496,8 +527,10 @@ function testInvalidWriteArgumentsAreNoWrite() {
   writeCmd(root, ["--changed", "c", "--blockers", "REAL_BLOCKER"]);
   const before = memorySnapshot(root);
   const cases = [
-    ...["state", "next-step", "blockers", "goal", "understanding", "changed", "decision", "verification"].map((flag) => [`--${flag}`]),
-    ["--state", "  "], ["--state", ";;"], ["--state", "Fact", "--state"], ["--sttae", "typo"],
+    ...["add-state", "add-next", "next-step", "blockers", "goal", "understanding", "changed", "decision", "verification"].map((flag) => [`--${flag}`]),
+    ["--changed", "c", "--add-state", "  "], ["--changed", "c", "--add-state", ";;"], ["--changed", "c", "--add-state", "Fact", "--add-state"], ["--sttae", "typo"],
+    // Whole-section replacement of Current State was removed: it dropped facts the writer did not resend.
+    ["--changed", "c", "--state", "Fact"],
   ];
   for (const extra of cases) {
     run([script("weplaning-write.cjs"), root, "--agent", "codex", ...extra, "--json"], { expectFail: true });
@@ -511,12 +544,12 @@ function testWriteValidatesBeforeAnyMutation() {
   const conflict = "CURRENT.sync-conflict-20260913-100000-OTHER.md";
   write(root, conflict, read(root, "CURRENT.md"));
   let before = memorySnapshot(root);
-  run([script("weplaning-write.cjs"), root, "--agent", "codex", "--changed", "c", "--state", "NEW_FACT"], { expectFail: true });
+  run([script("weplaning-write.cjs"), root, "--agent", "codex", "--changed", "c", "--add-state", "NEW_FACT"], { expectFail: true });
   assert(memorySnapshot(root) === before, "write changed memory before rejecting existing sync conflicts");
   fs.rmSync(path.join(root, ".agent-memory", conflict));
   before = memorySnapshot(root);
   run([
-    script("weplaning-write.cjs"), root, "--agent", "codex", "--changed", "c", "--state", "NEW_FACT",
+    script("weplaning-write.cjs"), root, "--agent", "codex", "--changed", "c", "--add-state", "NEW_FACT",
     "--decision", "Invalid decision\n<<<<<<< HEAD\n=======\n>>>>>>> branch",
   ], { expectFail: true });
   assert(memorySnapshot(root) === before, "invalid proposed decision was rejected after mutating CURRENT/CHANGES");
@@ -590,8 +623,9 @@ function testReadIncludesContextTimeAndVerification() {
   assert(payload.lastUpdated === "2026-09-01T00:00:00Z", "JSON lost lastUpdated");
   assert(payload.recentChanges[0].verification[0].includes("curl returned 200"), "JSON lost verification");
   assert(payload.recentChanges[0].files[0] === "config.yaml", "JSON lost file reference");
-  const handoff = run([script("weplaning-read.cjs"), root, "--handoff"]).stdout;
-  assert(handoff.includes("Verification (recorded): curl returned 200"), "handoff omitted verification evidence");
+  assert(!plain.includes("Verification (recorded)"), "default read printed recorded verification");
+  const full = run([script("weplaning-read.cjs"), root, "--full"]).stdout;
+  assert(full.includes("Verification (recorded): curl returned 200") && full.includes("File: config.yaml"), "--full omitted verification evidence");
 }
 
 function testNextStepsNoneUnknownAndInvalidNumber() {
@@ -599,17 +633,17 @@ function testNextStepsNoneUnknownAndInvalidNumber() {
   init(root);
   writeCmd(root, ["--changed", "c", "--next-step", "TASK_A;;TASK_B"]);
   for (const n of ["0", "99", "-1", "1.9", "abc"]) {
-    run([script("weplaning-read.cjs"), root, "--next", n, "--handoff", "--json"], { expectFail: true });
+    run([script("weplaning-read.cjs"), root, "--next", n, "--json"], { expectFail: true });
   }
   run([script("weplaning-read.cjs"), root, "--next", "--json"], { expectFail: true });
   const focused = JSON.parse(run([script("weplaning-read.cjs"), root, "--next", "2", "--json"]).stdout);
   assert(focused.focusNextStep.text === "TASK_B", "valid explicit task selection changed");
   for (const value of ["none", "无待执行事项", "unknown"]) {
     writeCmd(root, ["--changed", "c", "--next-step", value, "--blockers", "unknown"]);
-    const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--handoff", "--json"]).stdout);
-    assert(payload.focusNextStep === null, `handoff focused ${value} as a task`);
+    const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
+    assert(payload.focusNextStep === null, `read focused ${value} as a task`);
     assert(payload.nextStepsStatus === (value === "unknown" ? "unknown" : "none"), "lost none/unknown distinction");
-    const plain = run([script("weplaning-read.cjs"), root, "--handoff"]).stdout;
+    const plain = run([script("weplaning-read.cjs"), root]).stdout;
     assert(plain.includes("Blockers:") && plain.includes("unknown"), "unknown blockers were hidden");
     run([script("weplaning-read.cjs"), root, "--next", "1", "--json"], { expectFail: true });
   }
@@ -618,7 +652,7 @@ function testNextStepsNoneUnknownAndInvalidNumber() {
 function testBriefShortensLongItems() {
   const root = tempRoot("brief");
   init(root);
-  writeCmd(root, ["--changed", "c", "--state", `SHORT_FACT stays whole;;HOST_LABEL：${"细节".repeat(60)} BRIEF_TAIL_SHOULD_NOT_SHOW`]);
+  writeCmd(root, ["--changed", "c", "--add-state", `SHORT_FACT stays whole;;HOST_LABEL：${"细节".repeat(60)} BRIEF_TAIL_SHOULD_NOT_SHOW`]);
   const brief = run([script("weplaning-read.cjs"), root, "--brief"]).stdout;
   assert(brief.includes("SHORT_FACT stays whole"), "--brief cut a short item");
   assert(brief.includes("- HOST_LABEL…") && !brief.includes("BRIEF_TAIL_SHOULD_NOT_SHOW"), "--brief did not cut a long item to its label");
@@ -656,27 +690,25 @@ function testSupersedeDecision() {
   assert(/^- Supersedes: \S+ decision$/m.test(newBlock) && !newBlock.includes("Superseded by"), "new decision does not point at the old one");
   assert(read(root, "CHANGES.md").includes("Superseded decision: OLD_CHOICE use port 1"), "ledger missed the superseded decision");
   run([script("weplaning-write.cjs"), root, "--agent", "codex", "--decision", "y", "--supersedes", "OLD_CHOICE"], { expectFail: true });
-  fs.mkdirSync(path.join(root, ".agent-memory", "archive"), { recursive: true });
-  write(root, path.join("archive", "DECISIONS-old.md"), "# Archived Decisions\nSchema version: 3.0\nBlocks: 2\n");
   const full = run([script("weplaning-read.cjs"), root, "--full"]).stdout;
   const shownDecisions = full.split("⚖ Decisions")[1].split("\n\n")[0];
   assert(shownDecisions.includes("NEW_CHOICE use port 2") && !shownDecisions.includes("OLD_CHOICE"), "--full did not show only active decisions");
-  assert(full.includes("1 superseded hidden") && full.includes("archive/DECISIONS-old.md  (2 decision blocks)"), "--full missed the superseded count or the decision archive");
+  assert(full.includes("1 superseded hidden"), "--full missed the superseded count");
   assert(!run([script("weplaning-read.cjs"), root]).stdout.includes("⚖ Decisions"), "default read printed the decisions section");
   const payload = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
   assert(payload.supersededDecisions === 1 && payload.decisions.some((item) => item.decision.includes("NEW_CHOICE")), "JSON lost decisions");
 }
 
-function testHandoffSkipsUserOwnedSteps() {
+function testFocusSkipsUserOwnedSteps() {
   const root = tempRoot("user-steps");
   init(root);
   writeCmd(root, ["--changed", "c", "--next-step", "【待用户处理】USER_TASK;;AGENT_TASK"]);
-  const mixed = JSON.parse(run([script("weplaning-read.cjs"), root, "--handoff", "--json"]).stdout);
-  assert(mixed.focusNextStep.index === 2 && mixed.focusNextStep.text === "AGENT_TASK" && mixed.nextStepsStatus === "ready", "handoff focused a user-owned step");
+  const mixed = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
+  assert(mixed.focusNextStep.index === 2 && mixed.focusNextStep.text === "AGENT_TASK" && mixed.nextStepsStatus === "ready", "read focused a user-owned step");
   writeCmd(root, ["--changed", "c", "--next-step", "【待用户处理】USER_TASK;;[user] OTHER_USER_TASK"]);
-  const waiting = JSON.parse(run([script("weplaning-read.cjs"), root, "--handoff", "--json"]).stdout);
-  assert(waiting.focusNextStep === null && waiting.nextStepsStatus === "waiting-user", "handoff invented a task when every step waits on the user");
-  assert(run([script("weplaning-read.cjs"), root, "--handoff"]).stdout.includes("Every next step waits on the user"), "handoff hid that every step waits on the user");
+  const waiting = JSON.parse(run([script("weplaning-read.cjs"), root, "--json"]).stdout);
+  assert(waiting.focusNextStep === null && waiting.nextStepsStatus === "waiting-user", "read invented a task when every step waits on the user");
+  assert(run([script("weplaning-read.cjs"), root]).stdout.includes("Every next step waits on the user"), "read hid that every step waits on the user");
   const chosen = JSON.parse(run([script("weplaning-read.cjs"), root, "--next", "1", "--json"]).stdout);
   assert(chosen.focusNextStep.text.includes("USER_TASK"), "explicit --next could not select a user-owned step");
 }
@@ -707,20 +739,10 @@ function testAgentMustBeKnownRuntime() {
 function testSearchPrioritizesCurrentTruth() {
   const root = tempRoot("search-priority");
   init(root);
-  writeCmd(root, ["--changed", "c", "--state", "NEEDLE_CURRENT_TRUTH"]);
+  writeCmd(root, ["--changed", "c", "--add-state", "NEEDLE_CURRENT_TRUTH"]);
   write(root, "CHANGES.md", "# Changes\nSchema version: 3.0\n\n" + Array.from({ length: 45 }, (_, i) => `## historical ${i}\n- Changed:\n  - NEEDLE_OLD_${i}\n`).join("\n"));
   const result = JSON.parse(run([script("weplaning-find.cjs"), root, "NEEDLE", "--json"]).stdout);
   assert(result.truncated && result.matches[0].scope === "current", "old history crowded current truth out of search results");
-}
-
-function testDirtyGitErrorIsNotClean() {
-  const root = tempRoot("git-error");
-  init(root);
-  fs.mkdirSync(path.join(root, ".git"));
-  const result = run([script("check-dirty.cjs"), root, "--json", "--strict"], { expectFail: true });
-  const payload = JSON.parse(result.stdout);
-  assert(payload.ok === false && payload.mode === "git-error", "git failure reported success");
-  assert(!payload.message.includes("Workspace clean"), "git failure reported a clean workspace");
 }
 
 for (const test of [
@@ -728,7 +750,8 @@ for (const test of [
   testWritePatchesAndLedger,
   testWriteDoesNotClobberState,
   testTrivialNoteNoop,
-  testDurableNote,
+  testPositionalNoteIsRejected,
+  testRootDiscovery,
   testLegacyWePlaningIgnored,
   testOldSchemaIsRejected,
   testMissingCurrentFails,
@@ -738,7 +761,7 @@ for (const test of [
   testJsonOutput,
   testReadHandoffAndJson,
   testReadTruncatesLedger,
-  testProjectConfigAndDecisions,
+  testDecisionCreatesFile,
   testArchiveChanges,
   testBackupCap,
   testBackupsNeverNest,
@@ -746,7 +769,6 @@ for (const test of [
   testFindSearchesArchivedHistory,
   testInitForceOnlyFillsGaps,
   testSyncPackageRefusesSameDirectory,
-  testCheckDirtyMtimeFallback,
   testExactEdits,
   testRejectsInjectedStructure,
   testAuditMixedBlockers,
@@ -764,11 +786,10 @@ for (const test of [
   testBriefShortensLongItems,
   testLedgerOmitsEmptyFields,
   testSupersedeDecision,
-  testHandoffSkipsUserOwnedSteps,
+  testFocusSkipsUserOwnedSteps,
   testAgentTagIsLowercaseWithDevice,
   testAgentMustBeKnownRuntime,
   testSearchPrioritizesCurrentTruth,
-  testDirtyGitErrorIsNotClean,
 ]) {
   test();
   console.log(`[ok] ${test.name}`);

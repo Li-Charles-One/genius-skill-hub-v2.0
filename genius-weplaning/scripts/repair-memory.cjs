@@ -7,6 +7,7 @@ const {
   findMemoryConflicts,
   hasSupportedSchema,
   parseArgs,
+  resolveRoot,
   runCheck,
   SCHEMA_VERSION,
   usage,
@@ -32,7 +33,7 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const root = path.resolve(args._[0] || process.cwd());
+const root = resolveRoot(args._[0]);
 const now = args.time || utcNow();
 const memoryDir = path.join(root, ".agent-memory");
 const repairs = [];

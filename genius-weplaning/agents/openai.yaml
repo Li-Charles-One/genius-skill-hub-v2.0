@@ -1,4 +1,4 @@
 interface:
   display_name: "Genius-WePlaning"
   short_description: "Maintain lightweight 3.0 project memory (CURRENT.md + ledger)."
-  default_prompt: "Use $genius-weplaning only when project memory in .agent-memory needs initialization, a durable CURRENT.md patch, repair, or verification. Do not log skill self-upgrades into a business project."
+  default_prompt: "Use $genius-weplaning to read project memory in .agent-memory, record a durable project fact or decision, or check and repair it; initialize only when the user asks. Do not log personal notes (those go to flomo), agent preferences or skill self-upgrades."

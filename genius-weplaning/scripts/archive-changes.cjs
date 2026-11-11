@@ -6,6 +6,7 @@ const {
   emitResult,
   parseArgs,
   readMemory,
+  resolveRoot,
   runCheck,
   uniqueStamp,
   usage,
@@ -32,7 +33,7 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const root = path.resolve(args._[0] || process.cwd());
+const root = resolveRoot(args._[0]);
 const keep = Math.max(1, Number(args.keep || 30) || 30);
 const now = utcNow();
 

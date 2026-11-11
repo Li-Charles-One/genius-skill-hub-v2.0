@@ -4,7 +4,6 @@ const fs = require("fs");
 const path = require("path");
 const {
   agentTag,
-  detectProjectConfig,
   emitResult,
   parseArgs,
   renderCurrentMd,
@@ -22,9 +21,6 @@ Usage:
 
 Options:
   --agent <name>       Required. Your runtime: claude-code, codex, opencode, grok, cursor, zcode or hermes
-  --type <code|ops-doc> Project type (default: auto-detect)
-  --code-vcs <text>    Code versioning tool (default: auto-detect)
-  --sync <text>        Sync strategy note (default: auto-detect)
   --force              Create only the files that are missing; never touch existing ones
   --reinit             Discard CURRENT/CHANGES/DECISIONS and bootstrap from scratch
   --json               Print machine-readable JSON result on stdout
@@ -67,12 +63,6 @@ if (args.reinit && memoryExists) {
 
 fs.mkdirSync(memoryDir, { recursive: true });
 
-const projectConfig = detectProjectConfig(root, {
-  type: args.type,
-  "code-vcs": args["code-vcs"],
-  sync: args.sync,
-});
-
 const created = [];
 const kept = [];
 
@@ -91,24 +81,11 @@ put(
     lastUpdated: now,
     activeGoal: goal,
     currentUnderstanding: `${project} memory has been initialized. Accepted project facts live here.`,
-    currentState: `- WePlaning ${SCHEMA_VERSION} memory is active.\n- Required memory files exist.`,
+    currentState: "- unknown",
     acceptedNextSteps: "1. Continue from the active goal.",
     openBlockers: "none",
-    projectConfig: projectConfig.text,
     basedOn: `- Last change: ${now} init`,
   }),
-);
-
-put(
-  "DECISIONS.md",
-  `# Decisions
-Schema version: ${SCHEMA_VERSION}
-
-## ${now} bootstrap
-- Agent: ${agent}
-- Decision: Use WePlaning ${SCHEMA_VERSION} project memory
-- Rationale: Durable accepted state for ${project}
-`,
 );
 
 put(
@@ -123,13 +100,17 @@ Schema version: ${SCHEMA_VERSION}
 - Files touched:
   - .agent-memory/CURRENT.md
   - .agent-memory/CHANGES.md
-  - .agent-memory/DECISIONS.md
 - Verification:
   - Required memory files created
 - Notes:
   - Project: ${project}
 `,
 );
+
+// DECISIONS.md is created by the first --decision; a reinit only empties an existing one.
+if (args.reinit && fs.existsSync(path.join(memoryDir, "DECISIONS.md"))) {
+  put("DECISIONS.md", `# Decisions\nSchema version: ${SCHEMA_VERSION}\n`);
+}
 
 if (kept.length) {
   console.error(`Left ${kept.length} existing file(s) untouched: ${kept.join(", ")}`);
@@ -142,5 +123,4 @@ emitResult(args, "initialized", {
   kept,
   schema: SCHEMA_VERSION,
   mode: args.reinit ? "reinit" : memoryExists ? "fill-gaps" : "init",
-  projectConfig: { type: projectConfig.type, codeVcs: projectConfig.codeVcs, sync: projectConfig.sync },
 });

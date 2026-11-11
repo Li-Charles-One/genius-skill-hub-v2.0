@@ -25,10 +25,11 @@
       "id": "handoff",
       "prompt": "读取记忆接力",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-read.cjs --handoff. Reports Focus Next Step #1 when actionable, plus key understanding and recorded verification/file references. None/unknown next steps do not become tasks.",
+      "expected_output": "Runs the default weplaning-read.cjs (no --handoff flag). Reports the focus next step when one is actionable, plus key understanding. None/unknown next steps do not become tasks.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
-        {"type": "contains", "value": "--handoff"}
+        {"type": "contains", "value": "weplaning-read"},
+        {"type": "not_contains", "value": "--handoff"}
       ]
     },
     {
@@ -44,9 +45,9 @@
     {
       "id": "done-is-noop",
       "prompt": "完成了",
-      "trigger_expected": true,
-      "expected_output": "Oral 完成了/done/搞定 with no new fact does not invoke a write. Reports that nothing was persisted. Does not create a session.",
-      "files": ["scripts/weplaning-write.cjs"],
+      "trigger_expected": false,
+      "expected_output": "Oral 完成了/done/搞定 with no new fact does not invoke WePlaning. If memory comes up, says nothing was persisted.",
+      "files": [],
       "assertions": [
         {"type": "not_contains", "value": "weplaning-write"}
       ]
@@ -55,7 +56,7 @@
       "id": "submit-mainline",
       "prompt": "提交主线",
       "trigger_expected": true,
-      "expected_output": "Runs weplaning-write.cjs with --changed. Pass --state only if Current State should change.",
+      "expected_output": "Runs weplaning-write.cjs with --changed. Patches CURRENT in place (--replace/--with, --add-state, --add-next, --drop) only if accepted state should change.",
       "files": ["scripts/weplaning-write.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-write"}
@@ -106,10 +107,10 @@
       "id": "handoff-all-user-owned",
       "prompt": "读取记忆接力。CURRENT 的下一步两条都以【待用户处理】开头。",
       "trigger_expected": true,
-      "expected_output": "Reads --handoff, reports that every next step waits on the user, and stops. Does not start a user-owned step or invent a task.",
+      "expected_output": "Runs the default read, reports that every next step waits on the user, and stops. Does not start a user-owned step or invent a task.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
-        {"type": "contains", "value": "--handoff"},
+        {"type": "contains", "value": "weplaning-read"},
         {"type": "not_contains", "value": "weplaning-write"}
       ]
     },
@@ -147,10 +148,10 @@
       "id": "read-no-pending-handoff",
       "prompt": "读取记忆接力。CURRENT 的下一步只有一条：无待执行事项。",
       "trigger_expected": true,
-      "expected_output": "Reads --handoff, reports no pending tasks, and stops. Does not turn maintaining stability into an invented task.",
+      "expected_output": "Runs the default read, reports no pending tasks, and stops. Does not turn maintaining stability into an invented task.",
       "files": ["scripts/weplaning-read.cjs"],
       "assertions": [
-        {"type": "contains", "value": "--handoff"},
+        {"type": "contains", "value": "weplaning-read"},
         {"type": "not_contains", "value": "weplaning-write"}
       ]
     },
@@ -169,7 +170,7 @@
       "id": "preserve-other-facts",
       "prompt": "记一笔：Docker 自启已恢复并验证，更新当前状态。原有代理、网卡和内存限制等事实仍然有效。",
       "trigger_expected": true,
-      "expected_output": "Changes only Docker's fact in place with --replace/--with (or re-reads CURRENT before a complete section replacement), retains other valid facts, includes verification evidence and a change ledger entry, then checks memory.",
+      "expected_output": "Changes only Docker's fact in place with --replace/--with, retains other valid facts, includes verification evidence and a change ledger entry, then checks memory.",
       "files": ["scripts/weplaning-write.cjs", "scripts/check-memory.cjs"],
       "assertions": [
         {"type": "contains", "value": "weplaning-write"},
@@ -196,6 +197,49 @@
       "assertions": [
         {"type": "contains", "value": "check-memory"},
         {"type": "not_contains", "value": "--reinit"}
+      ]
+    },
+    {
+      "id": "read-from-subdirectory",
+      "prompt": "查看项目记忆。当前目录是项目里的 src/components 子目录。",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs from the current subdirectory; the script finds the project's .agent-memory above it. Does not hunt for the root by hand, cat the memory files or initialize a new memory in the subdirectory.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-read"},
+        {"type": "not_contains", "value": "init-memory"}
+      ]
+    },
+    {
+      "id": "no-memory-no-auto-init",
+      "prompt": "查看项目记忆。这个项目里还没有 .agent-memory。",
+      "trigger_expected": true,
+      "expected_output": "Runs weplaning-read.cjs, reports that this project has no memory, and stops. Does not initialize memory unless the user asks for it.",
+      "files": ["scripts/weplaning-read.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "weplaning-read"},
+        {"type": "not_contains", "value": "init-memory"}
+      ]
+    },
+    {
+      "id": "personal-note-goes-to-flomo",
+      "prompt": "这件事记下来：我发现自己下午三点以后写东西效率最高。",
+      "trigger_expected": false,
+      "expected_output": "Does not write project memory. A personal note or idea is not a project fact; it belongs in flomo.",
+      "files": [],
+      "assertions": [
+        {"type": "not_contains", "value": "weplaning-write"}
+      ]
+    },
+    {
+      "id": "event-goes-to-ledger-only",
+      "prompt": "记一笔：刚跑了一遍压测，P95 是 180ms，配置没有改动。",
+      "trigger_expected": true,
+      "expected_output": "One weplaning-write.cjs command with --changed (and --verification for the measurement). A measurement only says what happened, so Current State is not patched: no --add-state, --replace or section replacement.",
+      "files": ["scripts/weplaning-write.cjs"],
+      "assertions": [
+        {"type": "contains", "value": "--changed"},
+        {"type": "not_contains", "value": "--add-state"}
       ]
     },
     {

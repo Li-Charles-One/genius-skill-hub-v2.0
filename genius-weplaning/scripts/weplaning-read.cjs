@@ -8,9 +8,12 @@
 const fs = require("fs");
 const path = require("path");
 const {
+  isNoTask,
+  isUnknown,
   parseArgs,
   parseCurrentMd,
   readMemory,
+  resolveRoot,
   runCheck,
   truncateSummary,
   usage,
@@ -21,10 +24,12 @@ const help = `
 Usage:
   node weplaning-read.cjs <project-root> [options]
 
+Prints accepted state, the first next step an agent can start and the latest ledger entries.
+<project-root> may be any directory inside the project (default: current directory).
+
 Options:
-  --handoff     Highlight the first next step an agent can start
   --brief       Goal, next steps and blockers; long context/state items cut to their label (no ledger)
-  --full        Also show active decisions and list archive files
+  --full        Also show recorded verification and files, active decisions and archive files
   --json        Machine-readable JSON on stdout
   --next <N>    Focus Accepted Next Steps item N (1-based)
   --limit <K>   Number of recent change blocks (default: 3)
@@ -34,7 +39,7 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const root = path.resolve(args._[0] || process.cwd());
+const root = resolveRoot(args._[0]);
 const memDir = path.join(root, ".agent-memory");
 const limit = Math.max(1, Number(args.limit || 3) || 3);
 const nextN = args.next === undefined ? null : Number(args.next);
@@ -104,13 +109,13 @@ const archiveDir = path.join(memDir, "archive");
 const archives = (args.full || args.json) && fs.existsSync(archiveDir)
   ? fs
       .readdirSync(archiveDir)
-      .filter((name) => /^(CHANGES|DECISIONS)-.*\.md$/.test(name))
+      .filter((name) => /^CHANGES-.*\.md$/.test(name))
       .sort()
       .reverse()
       .map((name) => {
         const text = fs.readFileSync(path.join(archiveDir, name), "utf8");
         const count = Number((text.match(/^Blocks:\s*(\d+)$/m) || [])[1] || 0);
-        return { file: `archive/${name}`, kind: name.startsWith("CHANGES") ? "changes" : "decisions", count };
+        return { file: `archive/${name}`, count };
       })
   : [];
 
@@ -132,8 +137,6 @@ const activeDecisions = decisions.filter((item) => !item.superseded);
 // A step only the user can do is never a handoff focus.
 const isUserOwned = (text) => /^(【待用户|\[user\])/i.test(text);
 
-const isNoTask = (text) => /^(none|no (?:pending )?tasks?|no (?:accepted )?next steps?|无|无待办|无待执行事项|暂无待办|暂无待执行事项)[。.]?$/i.test(text);
-const isUnknown = (text) => /^(unknown|unavailable|未知|待确认|未确定)[。.]?$/i.test(text);
 const rawSteps = parseNextSteps(current.acceptedNextSteps);
 const nextStepsStatus = rawSteps.every(isNoTask) ? "none" : rawSteps.every(isUnknown) ? "unknown" : rawSteps.every(isUserOwned) ? "waiting-user" : "ready";
 const nextSteps = nextStepsStatus === "none" ? [] : rawSteps;
@@ -142,18 +145,16 @@ if (nextN !== null) {
   usage(!isNoTask(nextSteps[nextN - 1]) && !isUnknown(nextSteps[nextN - 1]), `Next step #${nextN} is not an actionable task`, help);
 }
 const agentStep = nextSteps.findIndex((step) => !isNoTask(step) && !isUnknown(step) && !isUserOwned(step));
-const focusIndex = nextN ?? (args.handoff && agentStep !== -1 ? agentStep + 1 : null);
+const focusIndex = nextN ?? (agentStep !== -1 ? agentStep + 1 : null);
 
 const payload = {
   ok: true,
   generatedAt: utcNow(),
   lastUpdated: current.lastUpdated,
   schema: current.schemaVersion,
-  handoff: Boolean(args.handoff),
   goal: current.activeGoal,
   currentState: current.currentState,
   understanding: current.currentUnderstanding,
-  projectConfig: current.projectConfig || "",
   nextSteps,
   nextStepsStatus,
   focusNextStep: focusIndex === null ? null : { index: focusIndex, text: nextSteps[focusIndex - 1] },
@@ -173,7 +174,7 @@ const payload = {
 };
 
 if (args.json) {
-  console.log(JSON.stringify(payload, null, args.handoff ? 2 : 0));
+  console.log(JSON.stringify(payload));
   process.exit(0);
 }
 
@@ -193,17 +194,12 @@ function shown(text) {
     .join("\n");
 }
 
-const D = "─".repeat(52);
-let out =`\n${D}\n WePlaning · Read at: ${payload.generatedAt}${args.handoff ? " · HANDOFF" : ""}\n${D}\n`;
-out += `\nMemory last updated: ${payload.lastUpdated}\nRecorded state; not a live verification.\n`;
+let out = `WePlaning memory: ${root}\nRead at: ${payload.generatedAt}\nMemory last updated: ${payload.lastUpdated}\nRecorded state; not a live verification.\n`;
 for (const warning of warnings) {
   out += `\n⚠ ${warning}\n  Below is this device's live copy; writes stay blocked until the copies are resolved.\n`;
 }
 
 out += `\n📌 Goal:\n${payload.goal}\n`;
-if (payload.projectConfig) {
-  out += `\n⚙ Project Config:\n${payload.projectConfig}\n`;
-}
 if (payload.understanding && !isUnknown(payload.understanding)) {
   out += `\n🧭 Current Understanding:\n${shown(payload.understanding)}\n`;
 }
@@ -213,7 +209,7 @@ if (payload.focusNextStep) {
   out += `\n🎯 Focus Next Step #${payload.focusNextStep.index}:\n${payload.focusNextStep.text}\n`;
 }
 
-out += `\n✅ Accepted Next Steps:\n${nextStepsStatus === "none" ? "No pending tasks." : current.acceptedNextSteps}\n`;
+out += `\n✅ Accepted Next Steps:\n${nextStepsStatus === "none" ? "No pending tasks; nothing to continue." : current.acceptedNextSteps}\n`;
 if (nextStepsStatus === "unknown") out += "Next steps are unknown; clarify before continuing.\n";
 if (nextStepsStatus === "waiting-user") out += "Every next step waits on the user; nothing for an agent to start.\n";
 
@@ -228,7 +224,6 @@ if (hasBlockers) {
 
 if (args.brief) {
   if (shortened) out += `\n${shortened} long item(s) shortened to their label; run a full read before acting on them.\n`;
-  out += `\n${D}\n`;
   process.stdout.write(out);
   process.exit(0);
 }
@@ -244,7 +239,7 @@ if (recentChanges.length === 0) {
     } else {
       out += `${truncateSummary(change.body)}\n`;
     }
-    if (args.handoff) {
+    if (args.full) {
       for (const item of change.verification.filter((value) => !/^(none|无)[。.]?$/i.test(value))) {
         out += `  Verification (recorded): ${item}\n`;
       }
@@ -262,9 +257,8 @@ if (args.full && decisions.length > 0) {
 if (args.full && archives.length > 0) {
   out += `\n🗄 Archive:\n`;
   for (const item of archives) {
-    out += `  · ${item.file}${item.count ? `  (${item.count} ${item.kind === "changes" ? "change" : "decision"} blocks)` : ""}\n`;
+    out += `  · ${item.file}${item.count ? `  (${item.count} change blocks)` : ""}\n`;
   }
 }
 
-out += `\n${D}\n`;
 process.stdout.write(out);

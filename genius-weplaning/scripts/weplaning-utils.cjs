@@ -106,6 +106,22 @@ function memoryDir(root) {
   return path.join(root, ".agent-memory");
 }
 
+/** Project root: the nearest directory at or above `given` (default cwd) that holds .agent-memory. */
+function resolveRoot(given) {
+  const start = path.resolve(given || process.cwd());
+  if (!fs.existsSync(start) || !fs.statSync(start).isDirectory()) {
+    console.error(`Project root is not a directory: ${start}`);
+    process.exit(1);
+  }
+  for (let dir = start; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(memoryDir(dir))) {
+      if (dir !== start) console.error(`Using project memory at ${dir}`);
+      return dir;
+    }
+    if (path.dirname(dir) === dir) return start;
+  }
+}
+
 function readMemory(root, relativePath) {
   return fs.readFileSync(path.join(memoryDir(root), relativePath), "utf8");
 }
@@ -205,14 +221,25 @@ function findMemoryConflicts(root) {
 }
 
 const NO_BLOCKER = "none|no blockers?|unblocked|无阻塞|没有阻塞|暂无阻塞";
+const ITEM_MAX = 300;
 
-/** Structural consistency gate shared by check-memory.cjs and every write. */
-function checkMemory(root, { audit = false, conflictsAsWarnings = false } = {}) {
+const isNoTask = (text) => /^(none|no (?:pending )?tasks?|no (?:accepted )?next steps?|无|无待办|无待执行事项|暂无待办|暂无待执行事项)[。.]?$/i.test(text);
+const isUnknown = (text) => /^(unknown|unavailable|未知|待确认|未确定)[。.]?$/i.test(text);
+
+/**
+ * Structural consistency gate shared by check-memory.cjs and every write.
+ * `audit` adds size warnings; with `before` (CURRENT.md text ahead of a write) they
+ * cover only what that write added, so old oversized items do not warn on every write.
+ */
+function checkMemory(root, { audit = false, before = null, conflictsAsWarnings = false } = {}) {
   const dir = memoryDir(root);
   const errors = [];
   const warnings = [];
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-    errors.push("Missing required directory: .agent-memory");
+    return {
+      errors: [`No .agent-memory at or above ${root}. Create one with init-memory.cjs only when the user asks for project memory here.`],
+      warnings,
+    };
   } else {
     const conflicts = findMemoryConflicts(root);
     if (conflicts.length > 0) {
@@ -237,14 +264,22 @@ function checkMemory(root, { audit = false, conflictsAsWarnings = false } = {}) 
     errors.push(...markdownErrors("DECISIONS.md", readMemory(root, "DECISIONS.md")));
   }
   if (audit && errors.length === 0) {
-    const lines = section(current, "Open Blockers").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const blockers = section(current, "Open Blockers");
+    const lines = blockers.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const hasReal = lines.some((line) => !new RegExp(`^-?\\s*(${NO_BLOCKER}|unknown|unavailable)\\s*[。.]?$`, "i").test(line));
     const hasNone = lines.some((line) => new RegExp(`^-\\s*(${NO_BLOCKER})\\s*[。.]?$`, "i").test(line));
-    if (hasReal && hasNone) warnings.push("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
-    const longItems = current.split(/\r?\n/).filter((line) => /^\s*([-*]|\d+\.)\s/.test(line) && line.length > 300).length;
-    if (longItems) warnings.push(`CURRENT.md has ${longItems} item(s) over 300 characters; keep one fact per item.`);
+    if (hasReal && hasNone && (before === null || section(before, "Open Blockers") !== blockers)) {
+      warnings.push("CURRENT.md Open Blockers mixes a real blocker with a no-blocker bullet.");
+    }
+    const old = new Set(before === null ? [] : normalizeNewlines(before).split("\n"));
+    const longItems = current.split(/\r?\n/).filter((line) => /^\s*([-*]|\d+\.)\s/.test(line) && line.length > ITEM_MAX && !old.has(line)).length;
+    if (longItems) warnings.push(`CURRENT.md has ${longItems} item(s) over ${ITEM_MAX} characters; keep one fact per item.`);
     // Characters, not bytes: a byte budget charges CJK text three times over.
-    if (current.length > 10000) warnings.push(`CURRENT.md is ${current.length} characters (over 10000); move history and snapshots to the ledger.`);
+    // Based On is rewritten by every write, so it does not count as growth.
+    const size = (text) => setSection(text, "Based On", "").length;
+    if (current.length > 10000 && (before === null || size(current) > size(before))) {
+      warnings.push(`CURRENT.md is ${current.length} characters (over 10000); move history and snapshots to the ledger.`);
+    }
   }
   return { errors, warnings };
 }
@@ -319,49 +354,6 @@ ${projectConfigBlock}
 ## Based On
 ${state.basedOn}
 `;
-}
-
-function detectProjectConfig(root, overrides = {}) {
-  const codeExt = new Set([".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".rs", ".java", ".kt", ".cs", ".cpp", ".c", ".rb", ".php"]);
-  const skip = new Set(["node_modules", ".git", ".agent-memory", "dist", "build", ".next", "vendor", "__pycache__"]);
-  let hasCode = false;
-  function walk(dir, depth) {
-    if (hasCode || depth > 3) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith(".") && entry.name !== ".") continue;
-      if (skip.has(entry.name)) continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full, depth + 1);
-      else if (codeExt.has(path.extname(entry.name).toLowerCase())) {
-        hasCode = true;
-        return;
-      }
-    }
-  }
-  walk(root, 0);
-  const hasGit = fs.existsSync(path.join(root, ".git"));
-  const type = overrides.type || (hasCode ? "code" : "ops-doc");
-  const codeVcs =
-    overrides["code-vcs"] ||
-    overrides.codeVcs ||
-    (type === "code" ? (hasGit ? "git" : "none (recommend git)") : "n/a");
-  const sync =
-    overrides.sync ||
-    (type === "code"
-      ? "git for code; WePlaning owns .agent-memory state only"
-      : "external sync optional (e.g. Syncthing); WePlaning standalone");
-  return {
-    type,
-    codeVcs,
-    sync,
-    text: `- Type: ${type}\n- Code VCS: ${codeVcs}\n- Sync: ${sync}`,
-  };
 }
 
 function validateKnownMarkdown(relativePath, text) {
@@ -492,18 +484,21 @@ function emitResult(args, primaryLine, payload = {}) {
 module.exports = {
   agentTag,
   checkMemory,
-  detectProjectConfig,
   emitResult,
   findMemoryConflicts,
   formatSectionItems,
   hasSupportedSchema,
+  isNoTask,
   isTrivialNote,
+  isUnknown,
+  ITEM_MAX,
   parseArgs,
   parseCurrentMd,
   readMemory,
   renderCurrentMd,
   replaceField,
   required,
+  resolveRoot,
   runCheck,
   SCHEMA_VERSION,
   section,

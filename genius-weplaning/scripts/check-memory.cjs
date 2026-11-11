@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-const path = require("path");
-const { checkMemory, parseArgs, usage } = require("./weplaning-utils.cjs");
+const { checkMemory, parseArgs, resolveRoot, usage } = require("./weplaning-utils.cjs");
 
 const help = `
 Usage:
@@ -15,7 +14,7 @@ Checks WePlaning 3.0 structural consistency.
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const root = args._[0] ? path.resolve(args._[0]) : process.cwd();
+const root = resolveRoot(args._[0]);
 const { errors, warnings } = checkMemory(root, { audit: Boolean(args.audit) });
 
 if (errors.length > 0) {

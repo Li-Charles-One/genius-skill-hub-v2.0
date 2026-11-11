@@ -10,7 +10,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { parseArgs, usage } = require("./weplaning-utils.cjs");
+const { parseArgs, resolveRoot, usage } = require("./weplaning-utils.cjs");
 
 const help = `
 Usage:
@@ -30,7 +30,7 @@ Options:
 const args = parseArgs(process.argv.slice(2));
 usage(!args.help, "", help);
 
-const root = path.resolve(args._[0] || process.cwd());
+const root = resolveRoot(args._[0]);
 const query = args._[1];
 usage(query !== undefined && query !== "", "Missing required positional argument: <query>", help);
 
