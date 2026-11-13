@@ -9,7 +9,7 @@ metadata:
 
 This skill exists to **analyze images**, **analyze video/audio**, and **OCR**. Nothing else.
 
-Default: CPA via native Gemini `generateContent`. Alternative: any multimodal endpoint configured as a custom provider. CPA uses `gemini-3.8-flash-tiered` for images, PDF, video and audio; `--check` shows both.
+Default: CPA via native Gemini `generateContent`. Alternative: any multimodal endpoint configured as a custom provider. CPA uses `gemini-4-hydrogen-xhigh` for images, PDF, video and audio; `--check` shows both.
 
 Config, providers, proxy and verification: `references/usage.md`. Trigger checks: `evals/evals.json`.
 
