@@ -5,7 +5,7 @@ by default), the HTTP retry loop, storyboard questions asked side by side (ask),
 
     FOOTAGE_API_KEY (or CPA_API_KEY)   required
     FOOTAGE_BASE_URL                   default https://cpa-jp.charles-ai.space/v1
-    FOOTAGE_MODEL                      default gemini-3.8-flash-tiered
+    FOOTAGE_MODEL                      default gemini-4-hydrogen-xhigh
     FOOTAGE_MAX_REQUESTS               model requests in flight across all clips of one run (default 8)
 """
 
@@ -32,7 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 
 DEFAULT_BASE_URL = "https://cpa-jp.charles-ai.space/v1"
-DEFAULT_MODEL = "gemini-3.8-flash-tiered"
+DEFAULT_MODEL = "gemini-4-hydrogen-xhigh"
 RETRY_HTTP = {429, 500, 502, 503, 504}
 RETRY_DELAYS = (5, 15, 30)
 REFUSAL_RE = re.compile(r"content (?:policy|filter)", re.I)   # short canned refusals

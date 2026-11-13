@@ -1035,7 +1035,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.1 footage brief (or 拉片 breakdown) for one or more clips")
     parser.add_argument("files", nargs="*", help="Local video files, or links (downloaded with yt-dlp)")
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
-    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-3.8-flash-tiered)")
+    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-hydrogen-xhigh)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     parser.add_argument("--jobs", "-j", type=int, default=JOBS, help=f"Clips at once (default {JOBS})")
     parser.add_argument("--max-requests", type=int, default=None,
