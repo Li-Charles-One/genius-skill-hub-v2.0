@@ -11,7 +11,7 @@ winget install Gyan.FFmpeg        # PDF page mode: install poppler and put pdfto
 sudo apt install ffmpeg poppler-utils
 ```
 
-Verify with `python3 scripts/vision.py --check`. `pdftoppm` (poppler) is only needed for page-mode PDF. The script uses only the Python standard library (3.9+).
+Verify with `python3 scripts/vision.py --check`. `pdftoppm` (poppler) is needed for PDF on the default `mimo` provider, which reads PDFs page by page. The script uses only the Python standard library (3.9+).
 
 ## Usage
 
@@ -28,7 +28,7 @@ python3 "<skill_dir>/scripts/vision.py" before.png compare --compare-with after.
 # Video / YouTube (long local media is split by the computed plan)
 python3 "<skill_dir>/scripts/vision.py" meeting.mp4 video-summary
 python3 "<skill_dir>/scripts/vision.py" lecture-2h.mp4 video-summary --no-long-video
-python3 "<skill_dir>/scripts/vision.py" "https://www.youtube.com/watch?v=..." video-summary
+python3 "<skill_dir>/scripts/vision.py" "https://www.youtube.com/watch?v=..." video-summary --provider cpa   # YouTube: Gemini style only
 
 # Audio
 python3 "<skill_dir>/scripts/vision.py" clip.mp3 describe          # → audio-summary
@@ -49,7 +49,11 @@ python3 "<skill_dir>/scripts/vision.py" --list-providers
 ## Setup (`scripts/.env`)
 
 ```bash
-VISION_PROVIDER=cpa
+VISION_PROVIDER=mimo
+# MIMO_API_KEY / MIMO_BASE_URL: read from genius-voice's scripts/.env when not set here
+# MIMO_API_KEY=sk-your-mimo-key
+# MIMO_BASE_URL=https://api.xiaomimimo.com/v1
+# only for --provider cpa (YouTube links):
 CPA_API_KEY=sk-your-cpa-key
 # optional overrides (CPA_MODEL replaces both defaults, for every media kind):
 # CPA_MODEL=gemini-4-argon-high
@@ -79,7 +83,10 @@ Other errors exit 1; `--check` with missing tools exits 2.
 
 | Provider | API style | Default model | Base URL | Key env |
 |---|---|---|---|---|
-| **`cpa`（默认）** | `gemini` native | `gemini-4-hydrogen-xhigh` for every media kind | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
+| **`mimo`（默认）** | `openai` | `mimo-v2.6-pro` | `MIMO_BASE_URL` (default `https://api.xiaomimimo.com/v1`) | `MIMO_API_KEY` (falls back to genius-voice's `scripts/.env`) |
+| `cpa` | `gemini` native | `gemini-4-hydrogen-xhigh` for every media kind | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
+
+- `mimo` (Xiaomi MiMo) takes images, video with its audio track (2 frames per second) and audio (`mp3` / `wav` / `flac` / `m4a` / `ogg`), all inline as base64; it thinks before every answer, and the thinking counts against `VISION_MAX_TOKENS`. It does not read YouTube links (the script stops with `UNSUPPORTED_FORMAT`) or whole PDFs (pages are rendered with `pdftoppm` and read one by one). Use `--provider cpa` for YouTube.
 
 - CPA uses `gemini-4-hydrogen-xhigh` for every media kind; the previous default `gemini-3.8-flash-tiered` is still available as an override. `--model`, `CPA_MODEL` or `VISION_MODEL` override both defaults.
 - `gemini` → `POST {root}/v1beta/models/{model}:generateContent`; local media `inline_data`, YouTube / URLs `file_data.file_uri`, PDF `application/pdf`.
@@ -111,7 +118,7 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 
 | Env | Default | Meaning |
 |---|---|---|
-| `VISION_PROVIDER` | `cpa` | active provider |
+| `VISION_PROVIDER` | `mimo` | active provider |
 | `VISION_MODEL` / `VISION_BASE_URL` / `VISION_API_STYLE` | — | override the **active** provider only |
 | `VISION_MAX_TOKENS` | `32768` | output limit |
 | `VISION_SHOW_THINKING` | off | `1` prints thinking before the answer |

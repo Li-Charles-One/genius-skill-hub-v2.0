@@ -3,7 +3,9 @@
 Genius Omni (视听) — Image / video / audio / PDF analysis.
 
 Built-in providers:
-  cpa     (default) — Gemini native generateContent via CPA
+  mimo    (default) — Xiaomi MiMo (mimo-v2.6-pro) OpenAI-compatible chat.completions;
+                      MIMO_API_KEY / MIMO_BASE_URL are shared with genius-voice's scripts/.env
+  cpa               — Gemini native generateContent via CPA (YouTube links)
 
 Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
   and optional {NAME}_API_STYLE=gemini|openai
@@ -11,8 +13,8 @@ Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
 Usage:
     python3 vision.py --list-providers
     python3 vision.py --check
-    python3 vision.py <file_or_url> <mode> [--provider cpa|custom]
-    python3 vision.py https://www.youtube.com/watch?v=... video-summary
+    python3 vision.py <file_or_url> <mode> [--provider mimo|cpa|custom]
+    python3 vision.py https://www.youtube.com/watch?v=... video-summary --provider cpa
     python3 vision.py report.pdf ocr
     python3 vision.py long.mp4 video-summary   # auto segment when long
 
@@ -344,7 +346,7 @@ def check_system() -> dict:
     return {
         "ffmpeg": ff or "MISSING",
         "ffprobe": fp or "MISSING",
-        "pdftoppm": shutil.which("pdftoppm") or "MISSING (only needed for page-mode PDF)",
+        "pdftoppm": shutil.which("pdftoppm") or "MISSING (needed for PDF on the default mimo provider and other OpenAI-style providers)",
         "active_provider": _active_provider(),
         "providers": providers,
         "video_encoder": _first_listed_encoder(),
@@ -744,6 +746,13 @@ def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
 #   openai  → /chat/completions (image_url / video_url / input_audio)
 
 BUILTIN_PROVIDERS = {
+    "mimo": {
+        "base_url": "https://api.xiaomimimo.com/v1",
+        "model": "mimo-v2.6-pro",
+        "api_style": "openai",
+        "key_envs": ("MIMO_API_KEY", "VISION_API_KEY"),
+        "note": "Xiaomi MiMo (OpenAI-compatible); key shared with genius-voice",
+    },
     "cpa": {
         "base_url": "https://cpa-jp.charles-ai.space/v1",
         "model": "gemini-4-hydrogen-xhigh",  # images / PDF
@@ -753,7 +762,7 @@ BUILTIN_PROVIDERS = {
         "note": "CPA Gemini relay (native generateContent)",
     },
 }
-DEFAULT_PROVIDER = "cpa"
+DEFAULT_PROVIDER = "mimo"
 
 
 @lru_cache(maxsize=None)
@@ -773,8 +782,25 @@ def _dotenv() -> dict:
     return {}
 
 
+@lru_cache(maxsize=None)
+def _voice_dotenv() -> dict:
+    """genius-voice's scripts/.env (next to this skill, or GENIUS_VOICE_DIR): the MiMo key lives there."""
+    for d in (os.environ.get("GENIUS_VOICE_DIR"), Path(__file__).parents[2] / "genius-voice",
+              Path(__file__).resolve().parents[2] / "genius-voice"):
+        env_path = Path(d) / "scripts" / ".env" if d else None
+        if env_path and env_path.exists():
+            out = {}
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    name, value = line.split("=", 1)
+                    out[name.strip()] = value.strip().strip('"').strip("'")
+            return out
+    return {}
+
+
 def _env(name: str) -> str:
-    return (os.environ.get(name) or _dotenv().get(name) or "").strip()
+    return (os.environ.get(name) or _dotenv().get(name) or _voice_dotenv().get(name) or "").strip()
 
 
 def _active_provider() -> str:
@@ -1245,7 +1271,7 @@ def analyze_media(
 
     Gemini style (CPA): native /v1beta/models/{model}:generateContent
       - local → inline_data base64; YouTube / URL → file_data.file_uri
-    OpenAI style (custom providers): /chat/completions
+    OpenAI style (mimo and custom providers): /chat/completions
     """
     for path in (media_input, compare_with):
         if path and not path.startswith(("http://", "https://")) and not Path(path).is_file():
@@ -1266,6 +1292,8 @@ def analyze_media(
             f"API key not found for provider '{conf['id']}'. "
             f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
         )
+    if is_youtube_url(media_input) and conf["api_style"] != "gemini":
+        raise OmniError("UNSUPPORTED_FORMAT", "YouTube links need a Gemini-style provider (--provider cpa).")
 
     # PDF: whole-document or page-by-page path (before generic image pipeline)
     if kind == "pdf" and is_local:
@@ -1379,7 +1407,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Genius Omni (视听) — multimodal analysis. "
-            "Built-in provider: cpa (default). "
+            "Built-in providers: mimo (default), cpa. "
             "Custom: set {NAME}_BASE_URL / _API_KEY / _MODEL."
         )
     )
@@ -1391,7 +1419,7 @@ def main():
         "--output", "-o", choices=["text", "json"], default="text", help="Output format (default: text)",
     )
     parser.add_argument(
-        "--provider", "-p", default=None, help="Provider id: cpa or custom name (default: cpa)",
+        "--provider", "-p", default=None, help="Provider id: mimo|cpa or custom name (default: mimo)",
     )
     parser.add_argument("--model", "-m", default=None, help="Model override")
     parser.add_argument("--base-url", default=None, help="API base URL override")

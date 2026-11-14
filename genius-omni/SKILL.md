@@ -2,14 +2,14 @@
 name: genius-omni
 description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结、制作点评与声景分析。不要用于语音转文字（含带时间轴/说话人的逐字转写）、朗读配音或声音克隆（用 genius-voice）；不要用于逐帧精确的镜头表或给剪辑做素材说明书 .footage.md（用 genius-footage）。"
 metadata:
-  version: "4.1.0"
+  version: "4.2.0"
 ---
 
 # Genius Omni（视听）
 
 This skill exists to **analyze images**, **analyze video/audio**, and **OCR**. Nothing else.
 
-Default: CPA via native Gemini `generateContent`. Alternative: any multimodal endpoint configured as a custom provider. CPA uses `gemini-4-hydrogen-xhigh` for images, PDF, video and audio; `--check` shows both.
+Default: Xiaomi MiMo `mimo-v2.6-pro` via OpenAI-style `chat/completions`; its key and base URL are shared with genius-voice (`MIMO_API_KEY` / `MIMO_BASE_URL`, read from genius-voice's `scripts/.env` when not set here). `--provider cpa` (native Gemini `generateContent`, `gemini-4-hydrogen-xhigh`) is only for YouTube links. Any other multimodal endpoint can be configured as a custom provider; `--check` shows what requests will use.
 
 Config, providers, proxy and verification: `references/usage.md`. Trigger checks: `evals/evals.json`.
 
@@ -35,7 +35,7 @@ PDF accepts `ocr` (default), `describe`, `chart-data`, `ui-review`. Generic mode
 ## Run
 
 ```bash
-python3 "<skill_dir>/scripts/vision.py" <file_or_url> <mode> [--output json|text] [--provider cpa|<custom>]
+python3 "<skill_dir>/scripts/vision.py" <file_or_url> <mode> [--output json|text] [--provider mimo|cpa|<custom>]
 python3 "<skill_dir>/scripts/vision.py" --check
 ```
 
@@ -43,8 +43,8 @@ python3 "<skill_dir>/scripts/vision.py" --check
 
 - Note the video length or PDF page count before running. A missing local file fails with `INPUT_NOT_FOUND`; URLs are not pre-checked.
 - Local audio/video of any size or codec needs no preparation: the script probes it, prints `plan: …` (as-is, one proxy, or N segments), encodes once and caches the proxy. Do not transcode or split it yourself.
-- PDF: CPA reads the whole document in one request; OpenAI-style providers (or `VISION_PDF_PAGES=1`) render pages and analyze them one by one.
-- Run one media analysis at a time; parallel runs make the CPA gateway return 502 (retried automatically, but slower).
+- PDF: the default `mimo` provider renders pages with `pdftoppm` and analyzes them one by one; `--provider cpa` reads the whole document in one request.
+- Run one media analysis at a time; parallel runs risk 429 / 5xx from the provider (retried automatically, but slower).
 - An exact shot list (frame ranges, timecode, shot count) or a footage brief for editing (`.footage.md`) is genius-footage; omni's video modes give model estimates of time.
 - Speech-to-text, with or without timestamps and speaker labels, is genius-voice (`voice.py asr <file> [--speakers]`). Audio `ocr` fails with `UNSUPPORTED_FORMAT` pointing there.
 
@@ -61,5 +61,6 @@ Failures print `Error [CODE]: …` with a non-zero exit. Report the code and mes
 
 ## Gotchas
 
-- YouTube works on Gemini-style providers (CPA), not on every OpenAI-compatible gateway.
+- YouTube works on `--provider cpa` only; the default `mimo` provider stops with `UNSUPPORTED_FORMAT`.
+- MiMo always thinks first and the thinking counts against `VISION_MAX_TOKENS`: an answer that comes back empty usually ran out of output budget.
 - Proxy, PDF page and segment index files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`) and are purged after 30 days.
