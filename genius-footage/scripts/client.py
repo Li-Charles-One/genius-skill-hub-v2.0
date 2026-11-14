@@ -163,24 +163,35 @@ def post(url: str, headers: dict, body: dict, timeout: float, opener=None, gate=
 
 
 def call(c: dict, files: list[str], prompt: str, timeout: float) -> str:
-    """One request: local files (inline) before the prompt. A canned refusal is a PROVIDER_ERROR."""
-    parts = [{"inline_data": {"mime_type": MIME.get(Path(f).suffix.lower(), "application/octet-stream"),
-                              "data": base64.b64encode(Path(f).read_bytes()).decode("ascii")}} for f in files]
-    root = re.sub(r"/(v1|v1beta/openai|openai)$", "", c["base_url"])
+    """One request: local files (inline) before the prompt. A canned refusal is a PROVIDER_ERROR.
+    mimo-* models go to Xiaomi's OpenAI-style chat completions (thinking enabled); others to Gemini generateContent."""
+    media = [(MIME.get(Path(f).suffix.lower(), "application/octet-stream"),
+              base64.b64encode(Path(f).read_bytes()).decode("ascii")) for f in files]
     proxy = next((os.environ[n] for n in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY",
                                           "all_proxy") if os.environ.get(n)), None)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {}))
-    _, data = post(f"{root}/v1beta/models/{c['model']}:generateContent",
-                   {"Authorization": f"Bearer {c['api_key']}", "x-goog-api-key": c["api_key"]},
-                   {"contents": [{"role": "user", "parts": parts + [{"text": prompt}]}],
-                     "generationConfig": {"maxOutputTokens": 32768,
-                                          "thinkingConfig": {"thinkingLevel": "high"}}}, timeout, opener, _gate)
-    texts, thoughts = [], []
-    for cand in data.get("candidates") or []:
-        for part in (cand.get("content") or {}).get("parts") or []:
-            if isinstance(part, dict) and part.get("text"):
-                (thoughts if part.get("thought") else texts).append(part["text"])
-    text = "\n".join(texts or thoughts).strip()
+    if c["model"].startswith("mimo-"):
+        content = [{"type": "video_url", "video_url": {"url": f"data:{m};base64,{d}"}, "fps": PROXY_FPS}
+                   if m.startswith("video/") else {"type": "image_url", "image_url": {"url": f"data:{m};base64,{d}"}}
+                   for m, d in media]
+        _, data = post(f"{c['base_url']}/chat/completions", {"Authorization": f"Bearer {c['api_key']}"},
+                       {"model": c["model"], "messages": [{"role": "user", "content": content + [{"type": "text", "text": prompt}]}],
+                        "max_completion_tokens": 32768, "thinking": {"type": "enabled"}}, timeout, opener, _gate)
+        text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    else:
+        root = re.sub(r"/(v1|v1beta/openai|openai)$", "", c["base_url"])
+        parts = [{"inline_data": {"mime_type": m, "data": d}} for m, d in media]
+        _, data = post(f"{root}/v1beta/models/{c['model']}:generateContent",
+                       {"Authorization": f"Bearer {c['api_key']}", "x-goog-api-key": c["api_key"]},
+                       {"contents": [{"role": "user", "parts": parts + [{"text": prompt}]}],
+                         "generationConfig": {"maxOutputTokens": 32768,
+                                              "thinkingConfig": {"thinkingLevel": "high"}}}, timeout, opener, _gate)
+        texts, thoughts = [], []
+        for cand in data.get("candidates") or []:
+            for part in (cand.get("content") or {}).get("parts") or []:
+                if isinstance(part, dict) and part.get("text"):
+                    (thoughts if part.get("thought") else texts).append(part["text"])
+        text = "\n".join(texts or thoughts).strip()
     if not text:
         err = data.get("error")
         raise FootageError("PROVIDER_ERROR", f"API error: {err.get('message') if isinstance(err, dict) else err}"

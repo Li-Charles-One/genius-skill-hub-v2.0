@@ -21,3 +21,7 @@ Dated measurements behind the rules in SKILL.md and the constants in the scripts
 - Storyboard grabs (IMG_7722, 60 fps HEVC): 130 frames in 10 runs of 13 took 21.8 s with one ffmpeg per frame and 2.5 s with one per run, pixel-identical. One process costs about 0.7 s (seek to the keyframe, decode up to the frame); each further frame in a run about 0.03 s, hence `RUN_GAP`.
 - Cuts and the whole-clip proxy from one decode: four 口播 clips at once took 140–169 s of decoding as two passes each and 81–90 s as one; the measured result is identical (IMG_7722, and `selftest.py`).
 - Not worth doing: the per-frame comparison in Python is about 4 s of `measure.py`'s 32 s on IMG_7722 (the rest is decoding), and hardware decoding (`-hwaccel videotoolbox`) was slower than software, 35 s against 27 s.
+
+## MiMo fallback
+
+- mimo-v2.6-pro (2026-11-14, Xiaomi token-plan endpoint, thinking enabled, no cache for cuts or transcript): default mode on emsmart.mp4 took 872 s against Gemini's 155 s, 84 shots (Gemini 83), 7 unsure suspects, every shot described. One suspect sheet came back with `finish_reason: length` and empty content: all 32768 output tokens went to reasoning; the re-ask answered. Talking head on IMG_7722 took 149 s, 11 pieces / 137 s against Gemini's 12 / 142 s with the same frames for the opening, "三种情况" and "改色备案" pieces; it lost one piece because its `from` words ("异地改色") did not match the ASR line ("地改色"), and ended on an unfinished "那么".
