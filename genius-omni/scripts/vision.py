@@ -5,7 +5,6 @@ Genius Omni (视听) — Image / video / audio / PDF analysis.
 Built-in providers:
   mimo    (default) — Xiaomi MiMo (mimo-v2.6-pro) OpenAI-compatible chat.completions;
                       MIMO_API_KEY / MIMO_BASE_URL are shared with genius-voice's scripts/.env
-  cpa               — Gemini native generateContent via CPA (YouTube links)
 
 Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
   and optional {NAME}_API_STYLE=gemini|openai
@@ -13,8 +12,7 @@ Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
 Usage:
     python3 vision.py --list-providers
     python3 vision.py --check
-    python3 vision.py <file_or_url> <mode> [--provider mimo|cpa|custom]
-    python3 vision.py https://www.youtube.com/watch?v=... video-summary --provider cpa
+    python3 vision.py <file_or_url> <mode> [--provider mimo|custom]
     python3 vision.py report.pdf ocr
     python3 vision.py long.mp4 video-summary   # auto segment when long
 
@@ -753,14 +751,6 @@ BUILTIN_PROVIDERS = {
         "key_envs": ("MIMO_API_KEY", "VISION_API_KEY"),
         "note": "Xiaomi MiMo (OpenAI-compatible); key shared with genius-voice",
     },
-    "cpa": {
-        "base_url": "https://cpa-jp.charles-ai.space/v1",
-        "model": "gemini-4-hydrogen-xhigh",  # images / PDF
-        "media_model": "gemini-4-hydrogen-xhigh",  # video / audio
-        "api_style": "gemini",
-        "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
-        "note": "CPA Gemini relay (native generateContent)",
-    },
 }
 DEFAULT_PROVIDER = "mimo"
 
@@ -1293,7 +1283,7 @@ def analyze_media(
             f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
         )
     if is_youtube_url(media_input) and conf["api_style"] != "gemini":
-        raise OmniError("UNSUPPORTED_FORMAT", "YouTube links need a Gemini-style provider (--provider cpa).")
+        raise OmniError("UNSUPPORTED_FORMAT", "YouTube links are not supported: MiMo cannot fetch them. Download the video and pass the local file.")
 
     # PDF: whole-document or page-by-page path (before generic image pipeline)
     if kind == "pdf" and is_local:
@@ -1407,7 +1397,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Genius Omni (视听) — multimodal analysis. "
-            "Built-in providers: mimo (default), cpa. "
+            "Built-in provider: mimo (default). "
             "Custom: set {NAME}_BASE_URL / _API_KEY / _MODEL."
         )
     )
@@ -1419,7 +1409,7 @@ def main():
         "--output", "-o", choices=["text", "json"], default="text", help="Output format (default: text)",
     )
     parser.add_argument(
-        "--provider", "-p", default=None, help="Provider id: mimo|cpa or custom name (default: mimo)",
+        "--provider", "-p", default=None, help="Provider id: mimo or custom name (default: mimo)",
     )
     parser.add_argument("--model", "-m", default=None, help="Model override")
     parser.add_argument("--base-url", default=None, help="API base URL override")
