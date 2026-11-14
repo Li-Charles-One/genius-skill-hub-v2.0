@@ -9,16 +9,14 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import subprocess
 import sys
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
-from client import FootageError, _dotenv, _env, post, tagged
+from client import FootageError, post, shared_env, tagged
 
 ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/"
 ASR_MODEL = "volc.seedasr.auc"
@@ -44,16 +42,8 @@ def log(msg: str) -> None:
 
 
 def find_key() -> str:
-    """The environment or this skill's scripts/.env, else the genius-voice skill's scripts/.env
-    (next to this skill, or GENIUS_VOICE_DIR), so one Doubao key serves both skills."""
-    key = _env("DOUBAO_API_KEY")
-    for d in (os.environ.get("GENIUS_VOICE_DIR"), Path(__file__).parents[2] / "genius-voice",
-              Path(__file__).resolve().parents[2] / "genius-voice"):
-        if key:
-            break
-        if d:
-            key = _dotenv(Path(d) / "scripts" / ".env").get("DOUBAO_API_KEY", "").strip()
-    return key
+    """The environment or this skill's scripts/.env, else genius-voice's (client.shared_env)."""
+    return shared_env("DOUBAO_API_KEY")
 
 
 def doubao_key() -> str:

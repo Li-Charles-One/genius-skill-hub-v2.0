@@ -594,7 +594,7 @@ def main() -> None:
     parser.add_argument("file", help="Local video file")
     parser.add_argument("--fps", type=float, default=FIND_FPS,
                         help=f"Samples per second for finding overlays (default {FIND_FPS}; 2 for overlays under ~1 s)")
-    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-hydrogen-xhigh)")
+    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or mimo-v2.6-pro)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     parser.add_argument("--look", nargs=2, metavar=("ID", "FIRST-LAST[:STEP]"),
                         help="Agent check: frames cropped to overlay ID ('full' = whole frame), labelled with frame numbers")
@@ -615,7 +615,7 @@ def main() -> None:
             print(f"花字表：`{res['overlays_md']}`\n" + ("\n".join(res["changes"]) or "已核对，没有改动"))
             return
         if not c["api_key"]:
-            raise FootageError("PROVIDER_ERROR", "API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env")
+            raise FootageError("PROVIDER_ERROR", "API key not found: set MIMO_API_KEY in scripts/.env or genius-voice's scripts/.env")
         res = run(args.file, c, args.fps)
         print(json.dumps(res, ensure_ascii=False, indent=2) if args.output == "json"
               else f"## Overlays\n\n{render_result(res)}")

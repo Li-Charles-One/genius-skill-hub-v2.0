@@ -22,6 +22,7 @@ Dated measurements behind the rules in SKILL.md and the constants in the scripts
 - Cuts and the whole-clip proxy from one decode: four 口播 clips at once took 140–169 s of decoding as two passes each and 81–90 s as one; the measured result is identical (IMG_7722, and `selftest.py`).
 - Not worth doing: the per-frame comparison in Python is about 4 s of `measure.py`'s 32 s on IMG_7722 (the rest is decoding), and hardware decoding (`-hwaccel videotoolbox`) was slower than software, 35 s against 27 s.
 
-## MiMo fallback
+## MiMo（default model since 2.10.0; Gemini 4 on the CPA relay before）
 
 - mimo-v2.6-pro (2026-11-14, Xiaomi token-plan endpoint, thinking enabled, no cache for cuts or transcript): default mode on emsmart.mp4 took 872 s against Gemini's 155 s, 84 shots (Gemini 83), 7 unsure suspects, every shot described. One suspect sheet came back with `finish_reason: length` and empty content: all 32768 output tokens went to reasoning; the re-ask answered. Talking head on IMG_7722 took 149 s, 11 pieces / 137 s against Gemini's 12 / 142 s with the same frames for the opening, "三种情况" and "改色备案" pieces; it lost one piece because its `from` words ("异地改色") did not match the ASR line ("地改色"), and ended on an unfinished "那么".
+- Same day, after the switch: a rerun of IMG_7722 kept only 7 pieces / 30 s, one line per topic, reading "tight edit" as a highlight reel. With TH_RULES saying it is a clean-up cut that keeps every point, two reruns kept 13 / 178 s and 12 / 130 s. That second run lost 3 pieces to quotes the exact match missed (劳改新 quoted as 老改新, "异地改色" for a line starting 地改色, a `to` from the next line, `to: "None"`); with the loose match all of them resolve (about 150 s) and every exactly matched piece keeps its frames.

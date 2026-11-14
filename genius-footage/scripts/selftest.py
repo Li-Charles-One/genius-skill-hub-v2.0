@@ -124,6 +124,12 @@ def test_talking_head() -> None:
     check("keep pieces", [(p["first"], p["last"], p["text"]) for p in pieces], [(30, 81, "我们今天讲这个"), (94, 121, "好")])
     check("keep merged", [(e["first"], e["last"], e["keep"]) for e in edit], [(30, 121, ["K01", "K02"])])
     check("keep unmatched", len(bad), 1)
+    loose = [{"u": "U001", "from": "他们今天讲", "to": "None"},   # one character off, "None" = line end
+             {"u": "U001", "from": "讲这个", "to": "好"}]         # 'to' in the next line
+    pieces, _, bad = footage.keep_frames(loose, utts, 200)
+    check("keep loose quotes", [(p["u"], p["first"], p["last"], p["text"]) for p in pieces],
+          [("U001", 30, 81, "我们今天讲这个"), ("U001–U002", 50, 121, "讲这个好")])
+    check("keep loose quotes all matched", bad, [])
 
 
 def test_timecode_and_overlays() -> None:
@@ -144,7 +150,7 @@ def test_client_request(tmp: Path) -> None:
     class Opener:
         def open(self, req, timeout):
             requests.append((req.full_url, json.loads(req.data)))
-            resp = io.BytesIO(json.dumps({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}).encode())
+            resp = io.BytesIO(json.dumps({"choices": [{"message": {"content": "ok", "reasoning_content": "x"}}]}).encode())
             resp.headers = {}
             return resp
 
@@ -152,19 +158,22 @@ def test_client_request(tmp: Path) -> None:
     for path in (image, video):
         path.write_bytes(b"test")
     with patch.object(client.urllib.request, "build_opener", return_value=Opener()):
-        for model in ("gemini-3.8-flash-tiered", "gemini-3.8-flash-high", "gemini-3.8-flash"):
-            for files in ([], [str(image)], [str(video)]):
-                c = {"model": model, "base_url": "https://example.invalid/v1", "api_key": "test"}
-                check("call: response", client.call(c, files, "test", 30), "ok")
-                url, body = requests[-1]
-                check("call: model route", url, f"https://example.invalid/v1beta/models/{model}:generateContent")
-                check("call: explicit high thinking", body["generationConfig"],
-                      {"maxOutputTokens": 32768, "thinkingConfig": {"thinkingLevel": "high"}})
-                parts = body["contents"][0]["parts"]
-                check("call: file count", len(parts), len(files) + 1)
-                if files:
-                    check("call: media MIME", parts[0]["inline_data"]["mime_type"],
-                          "image/jpeg" if files[0].endswith(".jpg") else "video/mp4")
+        for files in ([], [str(image)], [str(video)]):
+            c = {"model": "mimo-v2.6-pro", "base_url": "https://example.invalid/v1", "api_key": "test"}
+            check("call: response", client.call(c, files, "test", 30), "ok")
+            url, body = requests[-1]
+            check("call: route", url, "https://example.invalid/v1/chat/completions")
+            check("call: model", body["model"], "mimo-v2.6-pro")
+            check("call: thinking enabled", body["thinking"], {"type": "enabled"})
+            check("call: output budget", body["max_completion_tokens"], 32768)
+            content = body["messages"][0]["content"]
+            check("call: file count", len(content), len(files) + 1)
+            check("call: prompt last", content[-1], {"type": "text", "text": "test"})
+            if files and files[0].endswith(".jpg"):
+                check("call: image", content[0]["image_url"]["url"][:23], "data:image/jpeg;base64,")
+            elif files:
+                check("call: video", (content[0]["video_url"]["url"][:22], content[0]["fps"]),
+                      ("data:video/mp4;base64,", client.PROXY_FPS))
 
 
 def test_client(tmp: Path) -> None:

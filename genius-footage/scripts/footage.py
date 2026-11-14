@@ -47,6 +47,7 @@ PUNCT = set("，。！？；：、,.!?;:…—")
 TH_PAUSE_SEC = 0.8                 # dead air listed for the editor
 TH_PAD_IN, TH_PAD_OUT = 6, 12      # frames kept before the first / after the last word, never into a neighbour
 TH_MERGE = 20                      # consecutive kept pieces closer than this (frames) become one piece
+TH_TO_LINES = 3                    # a keep[] 'to' may close this many lines after its own (the model ran past the line)
 FILLERS = set("嗯呃额啊哦唔")         # a filler only at a line start or right after punctuation
 STUTTER = set("我你他她这那就是在跟")   # one-character words that, said twice in a row, are a stutter
 TH_HINT = (50, 0.6)                # default mode: ≤2 measured shots, >50 suspects, speech >60% → suggest --talking-head
@@ -155,6 +156,37 @@ def _chars(u: dict) -> tuple[str, list[int], list[int]]:
     return text, owner, off
 
 
+def _lev(a: str, b: str) -> int:
+    row = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        prev, row[0] = row[0], i
+        for j, y in enumerate(b, 1):
+            prev, row[j] = row[j], min(row[j] + 1, row[j - 1] + 1, prev + (x != y))
+    return row[-1]
+
+
+def _spans(text: str, pat: str) -> list[tuple[int, int]]:
+    """(start, end) of pat in text: every exact match, else (pat ≥4 chars) the closest within len // 4 edits,
+    for words the model quoted a little off (an ASR homophone it corrected, a character from the next line)."""
+    exact = [(k, k + len(pat)) for k in range(len(text)) if text.startswith(pat, k)]
+    if exact or len(pat) < 4:
+        return exact
+    tol = len(pat) // 4
+    best, out = tol + 1, []
+    for k in range(len(text)):
+        for n in range(len(pat) - tol, min(len(pat) + tol, len(text) - k) + 1):
+            d = _lev(pat, text[k:k + n])
+            if d < best:
+                best, out = d, [(k, k + n)]
+            elif d == best:
+                out.append((k, k + n))
+    return out
+
+
+def _quote(v) -> str:
+    return "" if v is None or str(v).strip().lower() in ("none", "null") else _norm(str(v))
+
+
 def speech_marks(utts: list, fps: float) -> dict:
     """Dead air (≥TH_PAUSE_SEC), fillers and restarts inside a line, all from word frames; hints, not cuts."""
     words = [(u, w) for u in utts for w in u["words"]]
@@ -189,35 +221,41 @@ def speech_marks(utts: list, fps: float) -> dict:
 
 
 def keep_frames(keep: list, utts: list, n: int) -> tuple[list, list, list[str]]:
-    """keep[] from the model (line ID + verbatim first / last words) → frame pieces and merged edit ranges.
-    A repeated 'from' resolves to its last occurrence that still has 'to' after it (retakes come later)."""
-    umap = {u["id"]: u for u in utts}
+    """keep[] from the model (line ID + first / last words copied from it) → frame pieces and merged edit ranges.
+    A repeated 'from' resolves to its last occurrence that still has 'to' after it (retakes come later). Words
+    quoted a little off match approximately (_spans); 'to' may fall in one of the next TH_TO_LINES lines;
+    "None" / "null" count as empty (line start / line end)."""
+    idx = {u["id"]: i for i, u in enumerate(utts)}
     allw = sorted((w for u in utts for w in u["words"]), key=lambda w: w["first"])
     pieces, bad = [], []
     for item in keep or []:
-        u = umap.get(str(item.get("u")))
-        if not u or not u["words"]:
+        i = idx.get(str(item.get("u")))
+        if i is None or not utts[i]["words"]:
             bad.append(f"精剪建议引用了不存在或无字级时间的台词 {item.get('u')}")
             continue
-        text, owner, off = _chars(u)
-        fr, to = _norm(str(item.get("from") or "")), _norm(str(item.get("to") or ""))
-        starts = [k for k in range(len(text)) if text.startswith(fr, k)][::-1] if fr else [0]
+        u, span = utts[i], [x for x in utts[i:i + 1 + TH_TO_LINES] if x["words"]]
+        words = [w for x in span for w in x["words"]]
+        line_of = [x["id"] for x in span for _ in x["words"]]
+        text, owner, off = _chars({"words": words})
+        own = len(_chars(u)[0])  # characters of line u itself, where 'from' must be
+        fr, to = _quote(item.get("from")), _quote(item.get("to"))
+        starts = sorted({k for k, _ in _spans(text[:own], fr)}, reverse=True) if fr else [0]
         a = b = None
         for k in starts:
-            e = text.find(to, off[owner[k]]) if to else len(text) - 1
-            if e != -1:
-                a, b = owner[k], owner[e + len(to) - 1] if to else len(u["words"]) - 1
+            ends = [e for s, e in _spans(text, to) if s >= off[owner[k]]] if to else [own]
+            if ends:
+                a, b = owner[k], owner[min(ends) - 1]
                 break
-        if a is None or b < a:
+        if a is None:
             bad.append(f"精剪建议 {u['id']} 对不上原文：从“{item.get('from')}”到“{item.get('to')}”")
             continue
-        w0, w1 = u["words"][a], u["words"][b]
+        w0, w1 = words[a], words[b]
         prev = max((w["last"] for w in allw if w["last"] < w0["first"]), default=-1)
         nxt = min((w["first"] for w in allw if w["first"] > w1["last"]), default=n)
-        pieces.append({"id": f"K{len(pieces) + 1:02d}", "u": u["id"], "from": item.get("from") or "",
-                       "to": item.get("to") or "", "why": item.get("why") or "",
+        pieces.append({"id": f"K{len(pieces) + 1:02d}", "u": u["id"] if line_of[b] == u["id"] else f"{u['id']}–{line_of[b]}",
+                       "from": item.get("from") or "", "to": item.get("to") or "", "why": item.get("why") or "",
                        "first": max(w0["first"] - TH_PAD_IN, prev + 1, 0), "last": min(w1["last"] + TH_PAD_OUT, nxt - 1, n - 1),
-                       "text": "".join(w["text"] for w in u["words"][a:b + 1])})
+                       "text": "".join(w["text"] for w in words[a:b + 1])})
     edit = []
     for p in pieces:
         e = edit[-1] if edit else None
@@ -692,7 +730,9 @@ _TH_SWAPS = [
 ]
 TH_RULES = (
     "\n\nTALKING HEAD: this is one person speaking to camera in one take. keep is the tight edit an editor "
-    "would cut, in playback order: one entry per kept piece; a line may give several pieces. Keep one take "
+    "would cut, in playback order: one entry per kept piece; a line may give several pieces. It is a clean-up "
+    "cut, not a highlight reel or a summary: every point, example, fact and step the speaker makes stays, "
+    "so the edit usually keeps well over half of the speech. Keep one take "
     "of each idea — the cleanest retake, usually the last complete one; drop abandoned starts, restarts inside "
     "a line, stutters, fillers, dead air, forgotten-line pauses and off-topic asides. Cut a line by giving "
     "from / to as words copied exactly from that line (at least 4 characters when the words repeat in the "
@@ -1035,7 +1075,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.1 footage brief (or 拉片 breakdown) for one or more clips")
     parser.add_argument("files", nargs="*", help="Local video files, or links (downloaded with yt-dlp)")
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
-    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-hydrogen-xhigh)")
+    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or mimo-v2.6-pro)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     parser.add_argument("--jobs", "-j", type=int, default=JOBS, help=f"Clips at once (default {JOBS})")
     parser.add_argument("--max-requests", type=int, default=None,
@@ -1069,7 +1109,7 @@ def main() -> None:
     if not args.files:
         parser.error("at least one file or link is required (unless --check)")
     if not c["api_key"] and not args.download_only:
-        print("Error [PROVIDER_ERROR]: API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env", file=sys.stderr)
+        print("Error [PROVIDER_ERROR]: API key not found: set MIMO_API_KEY in scripts/.env or genius-voice's scripts/.env", file=sys.stderr)
         sys.exit(client.EXIT_CODES["PROVIDER_ERROR"])
     script = Path(args.script).read_text(encoding="utf-8") if args.script else None
     many = len(args.files) > 1

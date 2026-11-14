@@ -1,11 +1,11 @@
 """
-Shared pieces of genius-footage: the model client (one Gemini-style generateContent request per call, CPA relay
-by default), the HTTP retry loop, storyboard questions asked side by side (ask), and the per-file cache
-(whole-clip proxy, measured cuts, transcript). Config comes from the environment or scripts/.env:
+Shared pieces of genius-footage: the model client (one Xiaomi MiMo chat/completions request per call), the HTTP
+retry loop, storyboard questions asked side by side (ask), and the per-file cache (whole-clip proxy, measured
+cuts, transcript). Config comes from the environment or scripts/.env, else genius-voice's scripts/.env:
 
-    FOOTAGE_API_KEY (or CPA_API_KEY)   required
-    FOOTAGE_BASE_URL                   default https://cpa-jp.charles-ai.space/v1
-    FOOTAGE_MODEL                      default gemini-4-hydrogen-xhigh
+    MIMO_API_KEY                       required
+    MIMO_BASE_URL                      default https://api.xiaomimimo.com/v1
+    FOOTAGE_MODEL                      default mimo-v2.6-pro
     FOOTAGE_MAX_REQUESTS               model requests in flight across all clips of one run (default 8)
 """
 
@@ -31,8 +31,8 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
 
-DEFAULT_BASE_URL = "https://cpa-jp.charles-ai.space/v1"
-DEFAULT_MODEL = "gemini-4-hydrogen-xhigh"
+DEFAULT_BASE_URL = "https://api.xiaomimimo.com/v1"
+DEFAULT_MODEL = "mimo-v2.6-pro"
 RETRY_HTTP = {429, 500, 502, 503, 504}
 RETRY_DELAYS = (5, 15, 30)
 REFUSAL_RE = re.compile(r"content (?:policy|filter)", re.I)   # short canned refusals
@@ -40,7 +40,7 @@ CACHE_DIR = Path(tempfile.gettempdir()) / "genius-footage-proxy"   # proxies, me
 PROXY_FPS, PROXY_SCALE, AUDIO_KBPS = 2, 1280, 64
 BUDGET_BYTES = 30 * 1024 * 1024        # one inline request
 MAX_VIDEO_SEC = 1800                   # longer clips skip the whole-clip step
-MAX_REQUESTS = 8                       # all clips of one run share this cap (more makes the CPA gateway 502)
+MAX_REQUESTS = 8                       # all clips of one run share this cap
 EXIT_CODES = {"INPUT_NOT_FOUND": 3, "UNSUPPORTED_FORMAT": 4, "DEPENDENCY_MISSING": 5,
               "PROVIDER_ERROR": 6, "TIMEOUT": 7}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mxf"}
@@ -83,6 +83,19 @@ def _env(name: str) -> str:
     return (os.environ.get(name) or _dotenv().get(name) or "").strip()
 
 
+def shared_env(name: str) -> str:
+    """The environment or this skill's scripts/.env, else the genius-voice skill's scripts/.env
+    (next to this skill, or GENIUS_VOICE_DIR), so one MiMo / Doubao key serves both skills."""
+    value = _env(name)
+    for d in (os.environ.get("GENIUS_VOICE_DIR"), Path(__file__).parents[2] / "genius-voice",
+              Path(__file__).resolve().parents[2] / "genius-voice"):
+        if value:
+            break
+        if d:
+            value = _dotenv(Path(d) / "scripts" / ".env").get(name, "").strip()
+    return value
+
+
 def set_limit(n: int) -> None:
     """Model requests in flight for the whole process, however many clips run at once."""
     global _gate, _limit
@@ -94,9 +107,9 @@ set_limit(int(_env("FOOTAGE_MAX_REQUESTS") or MAX_REQUESTS))
 
 
 def conf(model: str | None = None) -> dict:
-    return {"base_url": (_env("FOOTAGE_BASE_URL") or DEFAULT_BASE_URL).rstrip("/"),
+    return {"base_url": (shared_env("MIMO_BASE_URL") or DEFAULT_BASE_URL).rstrip("/"),
             "model": model or _env("FOOTAGE_MODEL") or DEFAULT_MODEL,
-            "api_key": _env("FOOTAGE_API_KEY") or _env("CPA_API_KEY")}
+            "api_key": shared_env("MIMO_API_KEY")}
 
 
 # ── Per-file cache ───────────────────────────────────────────────────────
@@ -163,35 +176,21 @@ def post(url: str, headers: dict, body: dict, timeout: float, opener=None, gate=
 
 
 def call(c: dict, files: list[str], prompt: str, timeout: float) -> str:
-    """One request: local files (inline) before the prompt. A canned refusal is a PROVIDER_ERROR.
-    mimo-* models go to Xiaomi's OpenAI-style chat completions (thinking enabled); others to Gemini generateContent."""
-    media = [(MIME.get(Path(f).suffix.lower(), "application/octet-stream"),
-              base64.b64encode(Path(f).read_bytes()).decode("ascii")) for f in files]
+    """One request: local files (inline, images as image_url, videos as video_url at PROXY_FPS) before the prompt,
+    thinking enabled. A canned refusal is a PROVIDER_ERROR."""
+    content = []
+    for f in files:
+        mime = MIME.get(Path(f).suffix.lower(), "application/octet-stream")
+        url = f"data:{mime};base64,{base64.b64encode(Path(f).read_bytes()).decode('ascii')}"
+        content.append({"type": "video_url", "video_url": {"url": url}, "fps": PROXY_FPS} if mime.startswith("video/")
+                       else {"type": "image_url", "image_url": {"url": url}})
     proxy = next((os.environ[n] for n in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY",
                                           "all_proxy") if os.environ.get(n)), None)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {}))
-    if c["model"].startswith("mimo-"):
-        content = [{"type": "video_url", "video_url": {"url": f"data:{m};base64,{d}"}, "fps": PROXY_FPS}
-                   if m.startswith("video/") else {"type": "image_url", "image_url": {"url": f"data:{m};base64,{d}"}}
-                   for m, d in media]
-        _, data = post(f"{c['base_url']}/chat/completions", {"Authorization": f"Bearer {c['api_key']}"},
-                       {"model": c["model"], "messages": [{"role": "user", "content": content + [{"type": "text", "text": prompt}]}],
-                        "max_completion_tokens": 32768, "thinking": {"type": "enabled"}}, timeout, opener, _gate)
-        text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
-    else:
-        root = re.sub(r"/(v1|v1beta/openai|openai)$", "", c["base_url"])
-        parts = [{"inline_data": {"mime_type": m, "data": d}} for m, d in media]
-        _, data = post(f"{root}/v1beta/models/{c['model']}:generateContent",
-                       {"Authorization": f"Bearer {c['api_key']}", "x-goog-api-key": c["api_key"]},
-                       {"contents": [{"role": "user", "parts": parts + [{"text": prompt}]}],
-                         "generationConfig": {"maxOutputTokens": 32768,
-                                              "thinkingConfig": {"thinkingLevel": "high"}}}, timeout, opener, _gate)
-        texts, thoughts = [], []
-        for cand in data.get("candidates") or []:
-            for part in (cand.get("content") or {}).get("parts") or []:
-                if isinstance(part, dict) and part.get("text"):
-                    (thoughts if part.get("thought") else texts).append(part["text"])
-        text = "\n".join(texts or thoughts).strip()
+    _, data = post(f"{c['base_url']}/chat/completions", {"Authorization": f"Bearer {c['api_key']}"},
+                   {"model": c["model"], "messages": [{"role": "user", "content": content + [{"type": "text", "text": prompt}]}],
+                    "max_completion_tokens": 32768, "thinking": {"type": "enabled"}}, timeout, opener, _gate)
+    text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
     if not text:
         err = data.get("error")
         raise FootageError("PROVIDER_ERROR", f"API error: {err.get('message') if isinstance(err, dict) else err}"
