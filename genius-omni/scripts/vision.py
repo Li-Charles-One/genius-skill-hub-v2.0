@@ -3,7 +3,8 @@
 Genius Omni (视听) — Image / video / audio / PDF analysis.
 
 Built-in providers:
-  mimo    (default) — Xiaomi MiMo (mimo-v2.6-pro) OpenAI-compatible chat.completions;
+  cpa     (default) — Gemini native generateContent via CPA (gemini-4-hydrogen-xhigh, thinkingLevel high)
+  mimo              — Xiaomi MiMo (mimo-v2.6-pro) OpenAI-compatible chat.completions;
                       MIMO_API_KEY / MIMO_BASE_URL are shared with genius-voice's scripts/.env
 
 Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
@@ -12,7 +13,8 @@ Custom providers: set {NAME}_BASE_URL / {NAME}_API_KEY / {NAME}_MODEL
 Usage:
     python3 vision.py --list-providers
     python3 vision.py --check
-    python3 vision.py <file_or_url> <mode> [--provider mimo|custom]
+    python3 vision.py <file_or_url> <mode> [--provider cpa|mimo|custom]
+    python3 vision.py https://www.youtube.com/watch?v=... video-summary
     python3 vision.py report.pdf ocr
     python3 vision.py long.mp4 video-summary   # auto segment when long
 
@@ -344,7 +346,7 @@ def check_system() -> dict:
     return {
         "ffmpeg": ff or "MISSING",
         "ffprobe": fp or "MISSING",
-        "pdftoppm": shutil.which("pdftoppm") or "MISSING (needed for PDF on the default mimo provider and other OpenAI-style providers)",
+        "pdftoppm": shutil.which("pdftoppm") or "MISSING (needed for PDF on mimo and other OpenAI-style providers)",
         "active_provider": _active_provider(),
         "providers": providers,
         "video_encoder": _first_listed_encoder(),
@@ -744,6 +746,14 @@ def make_image_proxy(src: str, max_edge: int | None = None) -> tuple[str, str]:
 #   openai  → /chat/completions (image_url / video_url / input_audio)
 
 BUILTIN_PROVIDERS = {
+    "cpa": {
+        "base_url": "https://cpa-jp.charles-ai.space/v1",
+        "model": "gemini-4-hydrogen-xhigh",  # images / PDF
+        "media_model": "gemini-4-hydrogen-xhigh",  # video / audio
+        "api_style": "gemini",
+        "key_envs": ("CPA_API_KEY", "VISION_CPA_API_KEY", "VISION_API_KEY"),
+        "note": "CPA Gemini relay (native generateContent)",
+    },
     "mimo": {
         "base_url": "https://api.xiaomimimo.com/v1",
         "model": "mimo-v2.6-pro",
@@ -752,7 +762,7 @@ BUILTIN_PROVIDERS = {
         "note": "Xiaomi MiMo (OpenAI-compatible); key shared with genius-voice",
     },
 }
-DEFAULT_PROVIDER = "mimo"
+DEFAULT_PROVIDER = "cpa"
 
 
 @lru_cache(maxsize=None)
@@ -1093,7 +1103,8 @@ def _call_model_once(conf: dict, media: list, prompt: str, timeout: float, show_
         data = _post_json(
             f"{_gemini_api_root(conf['base_url'])}/v1beta/models/{model}:generateContent",
             {"Authorization": f"Bearer {key}", "x-goog-api-key": key},
-            {"contents": [{"role": "user", "parts": parts}], "generationConfig": {"maxOutputTokens": max_out}},
+            {"contents": [{"role": "user", "parts": parts}],
+             "generationConfig": {"maxOutputTokens": max_out, "thinkingConfig": {"thinkingLevel": "high"}}},
             timeout,
         )
         return _extract_gemini_text(data, show_think)
@@ -1283,7 +1294,7 @@ def analyze_media(
             f"Set {' / '.join(conf['key_envs'])} or create scripts/.env.",
         )
     if is_youtube_url(media_input) and conf["api_style"] != "gemini":
-        raise OmniError("UNSUPPORTED_FORMAT", "YouTube links are not supported: MiMo cannot fetch them. Download the video and pass the local file.")
+        raise OmniError("UNSUPPORTED_FORMAT", "YouTube links need a Gemini-style provider (cpa); this one cannot fetch them. Use --provider cpa, or download the video and pass the local file.")
 
     # PDF: whole-document or page-by-page path (before generic image pipeline)
     if kind == "pdf" and is_local:
@@ -1397,7 +1408,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Genius Omni (视听) — multimodal analysis. "
-            "Built-in provider: mimo (default). "
+            "Built-in providers: cpa (default), mimo. "
             "Custom: set {NAME}_BASE_URL / _API_KEY / _MODEL."
         )
     )
@@ -1409,7 +1420,7 @@ def main():
         "--output", "-o", choices=["text", "json"], default="text", help="Output format (default: text)",
     )
     parser.add_argument(
-        "--provider", "-p", default=None, help="Provider id: mimo or custom name (default: mimo)",
+        "--provider", "-p", default=None, help="Provider id: cpa, mimo or custom name (default: cpa)",
     )
     parser.add_argument("--model", "-m", default=None, help="Model override")
     parser.add_argument("--base-url", default=None, help="API base URL override")
