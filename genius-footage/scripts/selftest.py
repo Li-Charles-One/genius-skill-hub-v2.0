@@ -106,6 +106,14 @@ def test_lines() -> None:
     check("segments over shots may not", footage.validate(doc), ["G02 与上一分段重叠"])
     doc["segments"] = [seg("G01", 10, 50, us=["U001"]), seg("G02", 49, 90, us=["U002"])]
     check("a real overlap of lines is still caught", footage.validate(doc), ["G02 与上一分段重叠"])
+    doc["segments"] = [seg("G01", 10, 50, us=["U001"]), seg("G02", 50, 90, us=["U002"])]
+    doc["utterances"] = [{"id": u["id"], "first": u["first"], "last": u["last"], "shots": ["S001"]} for u in utts]
+    doc["highlights"] = {"visual_events": [{"u": "U001–U002"}], "retakes": [{"us": ["U001", "U001-U002"], "pick": "U002"}]}
+    check("refs may be ranges of existing lines", footage.validate(doc), [])
+    doc["highlights"] = {"visual_events": [{"u": "U002–U003"}], "retakes": [{"us": ["U009"], "pick": "U001"}]}
+    check("a range past the last line is caught", footage.validate(doc),
+          ["引用了不存在的编号 U002–U003", "引用了不存在的编号 U009"])
+    doc["utterances"], doc["highlights"] = [], {}
     check("id_range", footage.id_range("S003–S005, S007", "S"), ["S003", "S004", "S005", "S007"])
     check("_short_ids", footage._short_ids(["S003", "S004", "S005", "S007"]), "S003–S005, S007")
 

@@ -511,7 +511,9 @@ def validate(doc: dict) -> list[str]:
     for e in doc.get("edit") or []:
         if not (0 <= e["first"] <= e["last"] < n):
             errs.append(f"精剪建议 {e['id']} 帧超出素材范围")
-    errs += [f"引用了不存在的编号 {x}" for x in refs if x and x not in ids]
+    # a ref may be a range or list ("U007–U008"): fine when every ID in it exists
+    errs += [f"引用了不存在的编号 {x}" for x in refs
+             if x and not ((r := id_range(x, str(x)[:1])) and all(i in ids for i in r))]
     # 5. no estimates in precise fields (frames / timecode are generated, so check model-supplied ranges)
     errs += [f"{g['id']} 的镜头范围含估计值" for g in doc["segments"] if "~" in "".join(g["shots"])]
     # 6. every shot described or listed as uncertain
