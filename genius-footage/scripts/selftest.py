@@ -150,7 +150,9 @@ def test_client_request(tmp: Path) -> None:
     class Opener:
         def open(self, req, timeout):
             requests.append((req.full_url, json.loads(req.data)))
-            resp = io.BytesIO(json.dumps({"choices": [{"message": {"content": "ok", "reasoning_content": "x"}}]}).encode())
+            resp = io.BytesIO(json.dumps({"choices": [{"message": {"content": "ok", "reasoning_content": "x"}}],
+                                          "candidates": [{"content": {"parts": [{"text": "x", "thought": True},
+                                                                               {"text": "ok"}]}}]}).encode())
             resp.headers = {}
             return resp
 
@@ -174,6 +176,13 @@ def test_client_request(tmp: Path) -> None:
             elif files:
                 check("call: video", (content[0]["video_url"]["url"][:22], content[0]["fps"]),
                       ("data:video/mp4;base64,", client.PROXY_FPS))
+            c = {"model": "gemini-4-hydrogen-xhigh", "base_url": "https://example.invalid/v1", "api_key": "test"}
+            check("call: gemini response", client.call(c, files, "test", 30), "ok")
+            url, body = requests[-1]
+            check("call: gemini route", url, "https://example.invalid/v1beta/models/gemini-4-hydrogen-xhigh:generateContent")
+            check("call: gemini thinking", body["generationConfig"],
+                  {"maxOutputTokens": 32768, "thinkingConfig": {"thinkingLevel": "high"}})
+            check("call: gemini parts", len(body["contents"][0]["parts"]), len(files) + 1)
 
 
 def test_client(tmp: Path) -> None:

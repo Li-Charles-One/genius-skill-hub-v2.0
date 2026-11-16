@@ -2,7 +2,7 @@
 name: genius-footage
 description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；口播（一镜到底、单人对镜头讲）可加口播模式，另出停顿、语气词、句内重复起头和按字精确到帧的精剪建议；拉片模式给一条或几条参考片（本地文件或链接）出拉片报告：结构与叙事、节奏数据与剪辑手法、视听语言、包装和可借鉴手法，几条一起拉时另出一份汇总对比；多条素材并行；视频下载模式只下载链接（B 站、抖音、小红书等）；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这条口播帮我出说明书和精剪建议」「口播里哪些停顿、口误、重复要剪掉」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」「帮我拉一下这几条参考片」「拉片，看看人家怎么剪的」「这几条素材一起跑说明书」「把这几个链接的视频下下来」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于实际剪辑、拼时间线、导出或生成视频（口播模式只给精剪建议）。"
 metadata:
-  version: "2.10.0"
+  version: "2.11.0"
 ---
 
 # Genius Footage（素材说明书）
@@ -29,10 +29,11 @@ python3 "<skill_dir>/scripts/overlays.py" <clip> [--fps 1] [--model M] [--output
 python3 "<skill_dir>/scripts/selftest.py"     # offline check after editing the scripts: no network, no keys
 ```
 
-`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; no Python packages. The model is Xiaomi MiMo (`FOOTAGE_MODEL`, default `mimo-v2.6-pro`). Its key, `MIMO_API_KEY`, and optional `MIMO_BASE_URL` (default `https://api.xiaomimimo.com/v1`) are shared with genius-voice and read from its `scripts/.env` like the Doubao key below; the environment or this `scripts/.env` overrides them. Never put a key in the package. Speech needs `DOUBAO_API_KEY` (Doubao file ASR 2.0 at `https://openspeech.bytedance.com/api/v3/auc/bigmodel/`, `scripts/asr.py`): the key belongs to genius-voice and is read from its `scripts/.env` (next to this skill, or `GENIUS_VOICE_DIR`); a `DOUBAO_API_KEY` in the environment or this `scripts/.env` overrides it; without it the transcript is skipped and the status is `needs_review`.
+`<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; no Python packages. The model is Gemini 4 on the CPA relay (`FOOTAGE_MODEL`, default `gemini-4-hydrogen-xhigh`); its key lives in `scripts/.env`, never in the package: `FOOTAGE_API_KEY` (or `CPA_API_KEY`), optional `FOOTAGE_BASE_URL` (default `https://cpa-jp.charles-ai.space/v1`). A `FOOTAGE_MODEL` / `--model` starting with `mimo-` (e.g. `mimo-v2.6-pro`) goes to Xiaomi MiMo instead: its key, `MIMO_API_KEY`, and optional `MIMO_BASE_URL` (default `https://api.xiaomimimo.com/v1`) are shared with genius-voice and read from its `scripts/.env` like the Doubao key below; the environment or this `scripts/.env` overrides them. Speech needs `DOUBAO_API_KEY` (Doubao file ASR 2.0 at `https://openspeech.bytedance.com/api/v3/auc/bigmodel/`, `scripts/asr.py`): the key belongs to genius-voice and is read from its `scripts/.env` (next to this skill, or `GENIUS_VOICE_DIR`); a `DOUBAO_API_KEY` in the environment or this `scripts/.env` overrides it; without it the transcript is skipped and the status is `needs_review`.
 
 - Local video, or an `http(s)` link, downloaded first (see Download). The folder next to the clip must be writable; otherwise it fails with `UNSUPPORTED_FORMAT`.
-- Every model request goes to MiMo's OpenAI-style `chat/completions` with `thinking: {"type": "enabled"}` (MiMo has no thinking level), images as `image_url` and the whole-clip proxy as `video_url` at 2 fps, all inline as base64. Thinking counts against the 32768-token output budget: a storyboard answer that thinks through all of it comes back empty and is asked once more (`references/field-notes.md`).
+- Gemini: every request goes to `generateContent` and explicitly sends `generationConfig.thinkingConfig.thinkingLevel: "high"`, including image, video and text-only requests; the `-xhigh` model-name suffix is not a substitute. Files go inline as base64.
+- MiMo (`mimo-*`): OpenAI-style `chat/completions` with `thinking: {"type": "enabled"}` (no thinking level), images as `image_url` and the whole-clip proxy as `video_url` at 2 fps. Thinking counts against the 32768-token output budget: a storyboard answer that thinks through all of it comes back empty and is asked once more. About 4.5× slower than Gemini on the default mode (`references/field-notes.md`).
 - `--script`: a script or keyword file (names, brands, models). The model uses it to flag likely mishearings.
 - Steps: `measure.py` (cuts frame by frame) → doubtful cuts judged by the model on a storyboard → every shot described from its first / middle / last frames → `asr.py` with speaker labels (words → frame ranges and cut points: pause ≥4 frames is a clean cut, <2 frames at punctuation is run-together) → one whole-clip request (summary, people, segments, highlights, retakes, unusable shots, suspect words) → validate.
 - A model request that fails or comes back short is asked once more by the script. One that fails twice leaves a hole instead of failing the clip: the brief is still written, the hole is listed in 待确认 and the status is `needs_review`. Only when the model returned nothing at all does the clip fail.
@@ -103,7 +104,7 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 - `scripts/measure.py`: frame-by-frame cut measurement; the shot list on its own.
 - `scripts/overlays.py`: the overlay sheet (花字表), end to end, and its agent check (`--look`, `--fix`).
 - `scripts/asr.py`: Doubao file ASR with word times and speaker labels.
-- `scripts/client.py`: model requests (Xiaomi MiMo), the shared key lookup, the retry loop, storyboard questions asked side by side with one re-ask, the per-file cache and the compressed whole-clip proxy.
+- `scripts/client.py`: model requests (Gemini on the CPA relay, or Xiaomi MiMo), the shared key lookup, the retry loop, storyboard questions asked side by side with one re-ask, the per-file cache and the compressed whole-clip proxy.
 - `scripts/storyboard.py`: exact-frame storyboard sheets with drawn-in labels.
 - `scripts/download.py`: links → local mp4 (RedFox, yt-dlp, ego browser).
 - `scripts/selftest.py`: offline self-test on a built clip.

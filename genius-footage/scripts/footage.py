@@ -1075,7 +1075,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.1 footage brief (or 拉片 breakdown) for one or more clips")
     parser.add_argument("files", nargs="*", help="Local video files, or links (downloaded with yt-dlp)")
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
-    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or mimo-v2.6-pro)")
+    parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-hydrogen-xhigh)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     parser.add_argument("--jobs", "-j", type=int, default=JOBS, help=f"Clips at once (default {JOBS})")
     parser.add_argument("--max-requests", type=int, default=None,
@@ -1109,7 +1109,7 @@ def main() -> None:
     if not args.files:
         parser.error("at least one file or link is required (unless --check)")
     if not c["api_key"] and not args.download_only:
-        print("Error [PROVIDER_ERROR]: API key not found: set MIMO_API_KEY in scripts/.env or genius-voice's scripts/.env", file=sys.stderr)
+        print("Error [PROVIDER_ERROR]: API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env; mimo-* models use MIMO_API_KEY", file=sys.stderr)
         sys.exit(client.EXIT_CODES["PROVIDER_ERROR"])
     script = Path(args.script).read_text(encoding="utf-8") if args.script else None
     many = len(args.files) > 1
