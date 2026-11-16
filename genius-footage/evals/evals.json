@@ -212,17 +212,15 @@
       ]
     },
     {
-      "id": "download-links",
+      "id": "download-near-miss",
       "prompt": "把这几个抖音和小红书链接的视频下下来，先不用分析",
-      "trigger_expected": true,
-      "expected_output": "Runs footage.py --download-only with all links in one command; 抖音 goes through the ego browser automatically; reports the saved paths.",
-      "files": [
-        "SKILL.md"
-      ],
+      "trigger_expected": false,
+      "expected_output": "Uses genius-download (download.py with all links), not footage.py.",
+      "files": [],
       "assertions": [
         {
-          "type": "contains",
-          "value": "--download-only"
+          "type": "not_contains",
+          "value": "footage.py"
         }
       ]
     }

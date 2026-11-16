@@ -1,8 +1,8 @@
 ---
 name: genius-footage
-description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；口播（一镜到底、单人对镜头讲）可加口播模式，另出停顿、语气词、句内重复起头和按字精确到帧的精剪建议；拉片模式给一条或几条参考片（本地文件或链接）出拉片报告：结构与叙事、节奏数据与剪辑手法、视听语言、包装和可借鉴手法，几条一起拉时另出一份汇总对比；多条素材并行；视频下载模式只下载链接（B 站、抖音、小红书等）；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这条口播帮我出说明书和精剪建议」「口播里哪些停顿、口误、重复要剪掉」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」「帮我拉一下这几条参考片」「拉片，看看人家怎么剪的」「这几条素材一起跑说明书」「把这几个链接的视频下下来」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于实际剪辑、拼时间线、导出或生成视频（口播模式只给精剪建议）。"
+description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；口播（一镜到底、单人对镜头讲）可加口播模式，另出停顿、语气词、句内重复起头和按字精确到帧的精剪建议；拉片模式给一条或几条参考片（本地文件或链接）出拉片报告：结构与叙事、节奏数据与剪辑手法、视听语言、包装和可借鉴手法，几条一起拉时另出一份汇总对比；多条素材并行，素材可以是本地文件或视频链接；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这条口播帮我出说明书和精剪建议」「口播里哪些停顿、口误、重复要剪掉」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」「帮我拉一下这几条参考片」「拉片，看看人家怎么剪的」「这几条素材一起跑说明书」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于只下载视频不分析（用 genius-download），不要用于实际剪辑、拼时间线、导出或生成视频（口播模式只给精剪建议）。"
 metadata:
-  version: "2.11.0"
+  version: "2.12.0"
 ---
 
 # Genius Footage（素材说明书）
@@ -23,7 +23,6 @@ Format: AG_FOOTAGE/1.1, produced by `scripts/footage.py`. Cut detection rules: `
 ```bash
 python3 "<skill_dir>/scripts/footage.py" --check
 python3 "<skill_dir>/scripts/footage.py" <clip|url> [<clip|url> …] [--talking-head | --breakdown] [--script script.txt] [--jobs 6] [--max-requests 8] [--model M] [--output text|json]
-python3 "<skill_dir>/scripts/footage.py" --download-only <url> [<url> …] [--download-dir DIR]   # 视频下载 only, no analysis
 python3 "<skill_dir>/scripts/measure.py" <clip> [--output json]     # shot list only: no model, no brief
 python3 "<skill_dir>/scripts/overlays.py" <clip> [--fps 1] [--model M] [--output text|json]   # overlay sheet only
 python3 "<skill_dir>/scripts/selftest.py"     # offline check after editing the scripts: no network, no keys
@@ -31,7 +30,7 @@ python3 "<skill_dir>/scripts/selftest.py"     # offline check after editing the 
 
 `<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`; no Python packages. The model is Gemini 4 on the CPA relay (`FOOTAGE_MODEL`, default `gemini-4-hydrogen-xhigh`); its key lives in `scripts/.env`, never in the package: `FOOTAGE_API_KEY` (or `CPA_API_KEY`), optional `FOOTAGE_BASE_URL` (default `https://cpa-jp.charles-ai.space/v1`). A `FOOTAGE_MODEL` / `--model` starting with `mimo-` (e.g. `mimo-v2.6-pro`) goes to Xiaomi MiMo instead: its key, `MIMO_API_KEY`, and optional `MIMO_BASE_URL` (default `https://api.xiaomimimo.com/v1`) are shared with genius-voice and read from its `scripts/.env` like the Doubao key below; the environment or this `scripts/.env` overrides them. Speech needs `DOUBAO_API_KEY` (Doubao file ASR 2.0 at `https://openspeech.bytedance.com/api/v3/auc/bigmodel/`, `scripts/asr.py`): the key belongs to genius-voice and is read from its `scripts/.env` (next to this skill, or `GENIUS_VOICE_DIR`); a `DOUBAO_API_KEY` in the environment or this `scripts/.env` overrides it; without it the transcript is skipped and the status is `needs_review`.
 
-- Local video, or an `http(s)` link, downloaded first (see Download). The folder next to the clip must be writable; otherwise it fails with `UNSUPPORTED_FORMAT`.
+- Local video, or an `http(s)` link (or a whole share message), downloaded first (see Links). The folder next to the clip must be writable; otherwise it fails with `UNSUPPORTED_FORMAT`.
 - Gemini: every request goes to `generateContent` and explicitly sends `generationConfig.thinkingConfig.thinkingLevel: "high"`, including image, video and text-only requests; the `-xhigh` model-name suffix is not a substitute. Files go inline as base64.
 - MiMo (`mimo-*`): OpenAI-style `chat/completions` with `thinking: {"type": "enabled"}` (no thinking level), images as `image_url` and the whole-clip proxy as `video_url` at 2 fps. Thinking counts against the 32768-token output budget: a storyboard answer that thinks through all of it comes back empty and is asked once more. About 4.5× slower than Gemini on the default mode (`references/field-notes.md`).
 - `--script`: a script or keyword file (names, brands, models). The model uses it to flag likely mishearings.
@@ -62,16 +61,9 @@ Pass several clips (or links) to one command: they run `--jobs` (default 6) at a
 - Several films with `--breakdown` also get `拉片汇总-<YYYYMMDD-HHMM>.md` next to the first one: a measured side-by-side table, then one text-only model request over the breakdowns (共同套路, 各自特色, 节奏对比, 可复用的结构模板, 拍摄与剪辑清单). `--no-compare` skips it; a failed comparison only warns.
 - Report the 拉片 path(s) and the 汇总 path; do not paste the report unless asked.
 
-## Download（视频下载）
+## Links
 
-Fully automatic, in the script: `--download-only` when the user only wants the files; any other mode downloads links first by itself. Files go to `--download-dir` (default `~/Downloads/genius-footage/`), named `<title ≤60 bytes> [<id>].mp4`; a link already there is not downloaded again. A whole share message (「7.12 复制打开抖音… https://v.douyin.com/… 复制此链接」) works as input.
-
-- B 站 and other sites: `yt-dlp` (≤1080p; `--cookies-from-browser chrome` when a login is needed). Without `yt-dlp` a link fails with `DEPENDENCY_MISSING`; ask before installing it (`brew install yt-dlp`).
-- 抖音 / 小红书: RedFox first, a paid API (about ¥0.03 a call; links sent there leave this machine). Its key lives in `scripts/.env` as `REDFOX_API_KEY`: the user writes it, never ask for it in chat. Without it, or when it fails, the script falls back by itself to yt-dlp (小红书) and the logged-in ego browser.
-- A 小红书 link must carry `xsec_token` (copied from search results or the share button); without it the site shows nothing and the script refuses.
-- A login or verification wall in the browser route fails with a hint: ask the user to log in in ego, then rerun.
-
-Routes per site, measurements and why the simpler routes do not work: `references/download.md`.
+A link, or a whole share message (「7.12 复制打开抖音… https://v.douyin.com/… 复制此链接」), is downloaded first through the genius-download skill (found next to this skill, in a usual skill folder, or at `GENIUS_DOWNLOAD_DIR`; `--check` shows which), then analysed like a local file. `--download-dir` and `--cookies-from-browser` are passed on; files land in genius-download's folder by default. Without genius-download a link fails with `DEPENDENCY_MISSING`. When the user only wants the files, use genius-download itself.
 
 ## Overlay Sheet（花字表）
 
@@ -100,12 +92,11 @@ Failures print `Error [CODE]: …` with a non-zero exit: `INPUT_NOT_FOUND` 3, `U
 
 ## Resource Map
 
-- `scripts/footage.py`: the brief (or 拉片 breakdown and comparison), end to end, one or several clips; `--download-only`; `--check`.
+- `scripts/footage.py`: the brief (or 拉片 breakdown and comparison), end to end, one or several clips or links; `--check`.
 - `scripts/measure.py`: frame-by-frame cut measurement; the shot list on its own.
 - `scripts/overlays.py`: the overlay sheet (花字表), end to end, and its agent check (`--look`, `--fix`).
 - `scripts/asr.py`: Doubao file ASR with word times and speaker labels.
 - `scripts/client.py`: model requests (Gemini on the CPA relay, or Xiaomi MiMo), the shared key lookup, the retry loop, storyboard questions asked side by side with one re-ask, the per-file cache and the compressed whole-clip proxy.
 - `scripts/storyboard.py`: exact-frame storyboard sheets with drawn-in labels.
-- `scripts/download.py`: links → local mp4 (RedFox, yt-dlp, ego browser).
 - `scripts/selftest.py`: offline self-test on a built clip.
-- `references/measurement.md`, `references/lexicon.md`, `references/overlays.md`, `references/download.md`, `references/field-notes.md`, `evals/evals.json`, `agents/openai.yaml`.
+- `references/measurement.md`, `references/lexicon.md`, `references/overlays.md`, `references/field-notes.md`, `evals/evals.json`, `agents/openai.yaml`.

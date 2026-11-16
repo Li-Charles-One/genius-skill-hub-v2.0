@@ -13,7 +13,7 @@ whole-clip request also returns keep[] (line ID + verbatim first / last words), 
 --breakdown (拉片): a reference film; the whole-clip request answers how it is built (structure, editing,
 picture and sound, packaging, takeaways) and rhythm figures are computed from the measured shots; several
 films also get one comparison (拉片汇总). Several clips run --jobs at a time; model requests share one cap.
-Speech via asr.py (DOUBAO_API_KEY); models via client.py; links via download.py. One failed model request
+Speech via asr.py (DOUBAO_API_KEY); models via client.py; links via the genius-download skill. One failed model request
 does not lose the clip: what is missing goes to 待确认 and the status is needs_review.
 Protocol: AG_FOOTAGE/1.1 (the spec, AG_FOOTAGE.md, is kept in the ArtisticCut project, not in this package).
 """
@@ -25,6 +25,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from bisect import bisect_left, bisect_right
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -33,7 +34,6 @@ from pathlib import Path
 
 import asr
 import client
-import download
 import measure
 import storyboard
 from asr import SpeechError
@@ -1053,17 +1053,44 @@ def render_result(res: dict) -> str:
 
 # ── CLI ───────────────────────────────────────────────────────────────────
 
+def download_py() -> Path | None:
+    """genius-download's download.py: GENIUS_DOWNLOAD_DIR, next to this skill, or a usual skill folder."""
+    env = os.environ.get("GENIUS_DOWNLOAD_DIR")
+    here = Path(__file__).resolve().parents[1]
+    for d in ([Path(env)] if env else []) + [here.parent / "genius-download", Path(__file__).parents[1].parent / "genius-download",
+              Path.home() / ".claude/skills/genius-download", Path.home() / ".agents/skills/genius-download",
+              Path.home() / ".config/opencode/skills/genius-download"]:
+        if (d / "scripts/download.py").is_file():
+            return d / "scripts/download.py"
+    return None
+
+
+def fetch_link(text: str, args) -> str:
+    """A link (or a share message with one) → a local mp4, through genius-download (its progress goes to stderr)."""
+    dl = download_py()
+    if not dl:
+        raise FootageError("DEPENDENCY_MISSING", "链接要用 genius-download 技能下载：装好它（或设 GENIUS_DOWNLOAD_DIR），或者先下载再传本地文件")
+    cmd = [sys.executable, str(dl), text, "--output", "json"] + (["--dir", args.download_dir] if args.download_dir else []) + \
+          (["--cookies-from-browser", args.cookies_from_browser] if args.cookies_from_browser else [])
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+    try:
+        r = json.loads(p.stdout)[0]
+    except (ValueError, IndexError) as e:
+        raise FootageError("PROVIDER_ERROR", f"genius-download 没有返回结果（exit {p.returncode}）：{text[:80]}") from e
+    if "error" in r:
+        raise FootageError(r["error"]["code"], r["error"]["message"])
+    return r["path"]
+
+
 def _one(item: str, c: dict, args, script: str | None, tag: str | None) -> tuple[str, dict | None, FootageError | None]:
     client.ctx.tag = tag
     try:
         if not Path(item).is_file() and re.search(r"https?://", item):
-            item = download.fetch(item, Path(args.download_dir).expanduser(), args.cookies_from_browser)
+            item = fetch_link(item, args)
         if not Path(item).is_file():
             raise FootageError("INPUT_NOT_FOUND", f"File not found: {item}")
         if Path(item).suffix.lower() not in client.VIDEO_EXTENSIONS:
             raise FootageError("UNSUPPORTED_FORMAT", f"footage needs a local video file: {item}")
-        if args.download_only:
-            return item, {"mode": "download", "path": item}, None
         return item, run(item, c, script, args.talking_head, args.breakdown), None
     except FootageError as e:
         return item, None, e
@@ -1075,7 +1102,7 @@ def _one(item: str, c: dict, args, script: str | None, tag: str | None) -> tuple
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AG_FOOTAGE/1.1 footage brief (or 拉片 breakdown) for one or more clips")
-    parser.add_argument("files", nargs="*", help="Local video files, or links (downloaded with yt-dlp)")
+    parser.add_argument("files", nargs="*", help="Local video files, or links (downloaded through genius-download)")
     parser.add_argument("--script", default=None, help="Script or keyword file (correct spellings of names, brands)")
     parser.add_argument("--model", "-m", default=None, help="Model override (default FOOTAGE_MODEL or gemini-4-hydrogen-xhigh)")
     parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
@@ -1087,9 +1114,8 @@ def main() -> None:
                       help="口播 / one take: skip the doubtful-cut check, add pauses, fillers, restarts and a keep[] edit")
     mode.add_argument("--breakdown", action="store_true",
                       help="拉片: how a reference film is built; several films also get one comparison (拉片汇总)")
-    mode.add_argument("--download-only", action="store_true", help="视频下载: only download the links, no analysis")
     parser.add_argument("--no-compare", action="store_true", help="--breakdown with several films: skip the comparison")
-    parser.add_argument("--download-dir", default="~/Downloads/genius-footage", help="Where links are downloaded")
+    parser.add_argument("--download-dir", default=None, help="Where links are downloaded (default genius-download's)")
     parser.add_argument("--cookies-from-browser", default=None, help="yt-dlp cookies for links that need a login (chrome, safari…)")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and the ASR key")
     args = parser.parse_args()
@@ -1101,16 +1127,14 @@ def main() -> None:
         print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
               f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
               f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}\n"
-              f"yt-dlp:       {shutil.which('yt-dlp') or 'not installed (links unsupported)'}\n"
-              f"redfox:       key={'yes' if client._env('REDFOX_API_KEY') else 'no (抖音 / 小红书 via the ego browser)'}\n"
-              f"ego-browser:  {shutil.which('ego-browser') or 'not installed'}\n"
+              f"links:        {download_py() or 'genius-download not found (links unsupported)'}\n"
               f"cache:        {client.CACHE_DIR} (whole-clip proxies, measured cuts, transcripts; delete to start fresh)")
         ok = bool(ff and c["api_key"] and asr_key)
         print("ok" if ok else "NOT READY")
         sys.exit(0 if ok else 2)
     if not args.files:
         parser.error("at least one file or link is required (unless --check)")
-    if not c["api_key"] and not args.download_only:
+    if not c["api_key"]:
         print("Error [PROVIDER_ERROR]: API key not found: set FOOTAGE_API_KEY (or CPA_API_KEY) in scripts/.env; mimo-* models use MIMO_API_KEY", file=sys.stderr)
         sys.exit(client.EXIT_CODES["PROVIDER_ERROR"])
     script = Path(args.script).read_text(encoding="utf-8") if args.script else None
@@ -1140,8 +1164,7 @@ def main() -> None:
         out = [{"file": f, **(r or {}), **({"error": {"code": e.code, "message": str(e)}} if e else {})} for f, r, e in results]
         print(json.dumps(out[0] if not many else {"clips": out, "compare_md": summary}, ensure_ascii=False, indent=2))
     else:
-        show = lambda r: f"已下载：`{r['path']}`" if r.get("mode") == "download" else render_result(r)
-        blocks = [f"## {f if args.download_only else Path(f).name if many else 'Footage'}\n\n" + (show(r) if r else f"Error [{e.code}]: {e}")
+        blocks = [f"## {Path(f).name if many else 'Footage'}\n\n" + (render_result(r) if r else f"Error [{e.code}]: {e}")
                   for f, r, e in results]
         if summary:
             blocks.append(f"## 拉片汇总\n\n`{summary}`")

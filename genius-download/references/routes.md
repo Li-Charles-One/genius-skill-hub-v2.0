@@ -1,8 +1,8 @@
-# Video download (`download.py`)
+# Download routes (`scripts/download.py`)
 
-Routes per site, what was measured, and why the simpler routes do not work. The code is `scripts/download.py`; `footage.py` calls it for every link.
+Routes per site, what was measured, and why the simpler routes do not work. genius-footage calls `scripts/download.py` for every link it is given.
 
-Fully automatic, in the script: `--download-only` when the user only wants the files; any other mode downloads links first by itself. Files go to `--download-dir` (default `~/Downloads/genius-footage/`), named `<title ≤60 bytes> [<id>].mp4`; a link already there is not downloaded again. Several links download `--jobs` at a time.
+Files go to `--dir` (default `~/Downloads/genius-download/`), named `<title ≤60 bytes> [<id>].mp4`; a link already there is not downloaded again. Several links download `--jobs` at a time (default 4).
 
 | Site | Route | Checked 2026-11-11 |
 |---|---|---|
@@ -12,7 +12,7 @@ Fully automatic, in the script: `--download-only` when the user only wants the f
 
 A whole share message (「7.12 复制打开抖音… https://v.douyin.com/… 复制此链接」) works as input: it goes to RedFox as-is, and its link to the other routes.
 
-RedFox（红狐数据, redfox.hk）: a paid API, about ¥0.03 a call, `POST https://redfox.hk/story/api/parseWork/videoDownload/{douyin|xhs}` with header `REDFOX_API_KEY` and body `{"url": "<link or share message>"}`; success is `code` 2000 with `data.videoUrl` (or a `resources[]` item of `type` video). The key lives in `scripts/.env` as `REDFOX_API_KEY` (the user writes it; never ask for it in chat). Measured: 4 links in parallel in 11 s. No key, an error code (3201 = balance used up; each call costs 0.6 points), a note without video, or a failed file download falls back silently to the next route; `--check` shows whether the key is set. Links sent there leave this machine.
+RedFox（红狐数据, redfox.hk）: a paid API, about ¥0.03 a call, `POST https://redfox.hk/story/api/parseWork/videoDownload/{douyin|xhs}` with header `REDFOX_API_KEY` and body `{"url": "<link or share message>"}`; success is `code` 2000 with `data.videoUrl` (or a `resources[]` item of `type` video). The key lives in `scripts/.env` as `REDFOX_API_KEY` (the user writes it; never ask for it in chat). Measured: 4 links in parallel in 11 s. No key, an error code (3201 = balance used up; each call costs 0.6 points), a note without video, or a failed file download falls back silently to the next route; `download.py --check` shows whether the key is set. Links sent there leave this machine.
 
 The browser route needs ego lite (`ego-browser` on PATH) with the user logged in to the site; each download opens its own task space and closes it. 抖音: the 精选 player (`jingxuan?modal_id=<id>`) is opened, and the file the player requests (a `douyinvod.com` URL carrying `__vid=<id>`) is saved from that page. 小红书: the file comes from the note data, `window.__INITIAL_STATE__.note.noteDetailMap[<id>].note.video.media.stream` (highest `height`). A login or verification wall fails with a hint: ask the user to log in in ego, then rerun.
 

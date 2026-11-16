@@ -1,0 +1,93 @@
+{
+  "skill_name": "genius-download",
+  "evals": [
+    {
+      "id": "download-links",
+      "prompt": "把这几个抖音和小红书链接的视频下下来，先不用分析",
+      "trigger_expected": true,
+      "expected_output": "Runs download.py once with all links; 抖音 / 小红书 go through RedFox or the ego browser automatically; reports the saved paths.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "download.py"
+        }
+      ]
+    },
+    {
+      "id": "share-message",
+      "prompt": "7.12 复制打开抖音，看看【某某的作品】这个改装太狠了 https://v.douyin.com/abcdEFG/ 复制此链接，打开Dou音搜索，直接观看视频！ 帮我把这个视频存下来",
+      "trigger_expected": true,
+      "expected_output": "Passes the whole share message, quoted, as one argument to download.py and reports the saved path.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "download.py"
+        }
+      ]
+    },
+    {
+      "id": "bilibili-login",
+      "prompt": "这个 B 站视频要登录才能看高清，帮我下到 ~/Movies/refs 里",
+      "trigger_expected": true,
+      "expected_output": "Runs download.py with --dir ~/Movies/refs and --cookies-from-browser chrome.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "--cookies-from-browser"
+        },
+        {
+          "type": "contains",
+          "value": "--dir"
+        }
+      ]
+    },
+    {
+      "id": "near-miss-summary",
+      "prompt": "这个抖音视频讲了什么，帮我总结一下",
+      "trigger_expected": false,
+      "expected_output": "Does not use genius-download as the answer; content summary belongs to genius-omni (downloading first is only a step).",
+      "files": [],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "video-summary"
+        }
+      ]
+    },
+    {
+      "id": "near-miss-breakdown",
+      "prompt": "帮我拉一下这几条抖音参考片，看看人家怎么剪的",
+      "trigger_expected": false,
+      "expected_output": "Uses genius-footage --breakdown with the links; genius-footage downloads them through genius-download by itself.",
+      "files": [],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "--breakdown"
+        }
+      ]
+    },
+    {
+      "id": "near-miss-netdisk",
+      "prompt": "把夸克网盘里那个视频文件夹下载到本地",
+      "trigger_expected": false,
+      "expected_output": "Uses quarkclouddrive, not genius-download.",
+      "files": [],
+      "assertions": [
+        {
+          "type": "not_contains",
+          "value": "download.py"
+        }
+      ]
+    }
+  ]
+}

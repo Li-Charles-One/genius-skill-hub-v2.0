@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genius Download"
+  short_description: "Video links to local mp4: B 站, 抖音, 小红书, YouTube"
+  default_prompt: "Use $genius-download to download these video links (or share messages) to local mp4 files: pass every link to one download.py command and report the saved paths."

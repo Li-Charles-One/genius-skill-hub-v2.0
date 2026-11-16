@@ -32,6 +32,7 @@
 | [genius-design](./genius-design/) | DESIGN.md brand systems (templates or reverse-engineer) |
 | [genius-omni](./genius-omni/) | Analyze images, video/audio, and OCR（视听） |
 | [genius-footage](./genius-footage/) | Footage brief for editors (`.footage.md`): frame-accurate shots, lines with cut points（素材说明书） |
+| [genius-download](./genius-download/) | Video links to local mp4: B 站, 抖音, 小红书, YouTube; share messages as input（视频下载） |
 | [genius-voice](./genius-voice/) | Speech-to-text via Doubao, text-to-speech via Xiaomi MiMo, audio generation via Doubao Seed Audio（语音） |
 | [genius-subtitle](./genius-subtitle/) | Subtitles for a finished video: from a genius-sound project, ASR or SRT; bilingual layout, Netflix line/speed checks, SRT/ASS, burn-in（字幕） |
 | [genius-sound](./genius-sound/) | Film sound post, module by module: spotting, dialogue & narration, foley, SFX & ambience, music, mix & master to delivery specs with DME stems and M&E（声音后期） |
@@ -51,6 +52,7 @@
 ```
 genius-skill-hub-v2.0/
 ├── genius-design/
+├── genius-download/
 ├── genius-footage/
 ├── genius-omni/
 ├── genius-openscreen/
