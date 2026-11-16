@@ -263,6 +263,44 @@ def is_youtube_url(url: str) -> bool:
     } or "youtube.com" in host
 
 
+VIDEO_SITES = re.compile(r"https?://([\w-]+\.)*(bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com|xiaohongshu\.com|xhslink\.com)/")
+
+
+def download_py() -> Path | None:
+    """genius-download's download.py: GENIUS_DOWNLOAD_DIR, next to this skill, or a usual skill folder."""
+    env = os.environ.get("GENIUS_DOWNLOAD_DIR")
+    here = Path(__file__).resolve().parents[1]
+    for d in ([Path(env)] if env else []) + [here.parent / "genius-download", Path(__file__).parents[1].parent / "genius-download",
+              Path.home() / ".claude/skills/genius-download", Path.home() / ".agents/skills/genius-download",
+              Path.home() / ".config/opencode/skills/genius-download"]:
+        if (d / "scripts/download.py").is_file():
+            return d / "scripts/download.py"
+    return None
+
+
+def fetch_link(text: str, api_style: str) -> str:
+    """A video-site link (B 站, 抖音, 小红书; YouTube when the provider cannot fetch it) or a whole share message
+    → a local mp4 through genius-download. Anything else (local files, direct media URLs, YouTube on a
+    Gemini-style provider) is returned unchanged."""
+    if Path(text).is_file():
+        return text
+    m = re.search(r"https?://[^\s，。！]+", text)
+    if not m or (m.group(0) == text.strip() and not VIDEO_SITES.match(text)
+                 and not (is_youtube_url(text) and api_style != "gemini")):
+        return text
+    dl = download_py()
+    if not dl:
+        raise OmniError("DEPENDENCY_MISSING", "这类链接要先用 genius-download 技能下载：装好它（或设 GENIUS_DOWNLOAD_DIR），或者先下载再传本地文件")
+    p = subprocess.run([sys.executable, str(dl), text, "--output", "json"], stdout=subprocess.PIPE, text=True)
+    try:
+        r = json.loads(p.stdout)[0]
+    except (ValueError, IndexError) as e:
+        raise OmniError("PROVIDER_ERROR", f"genius-download 没有返回结果（exit {p.returncode}）：{text[:80]}") from e
+    if "error" in r:
+        raise OmniError(r["error"]["code"], r["error"]["message"])
+    return r["path"]
+
+
 def media_kind(path_or_url: str) -> str:
     """Return 'video' | 'audio' | 'image' | 'pdf' from extension (works for URLs too)."""
     if is_youtube_url(path_or_url):
@@ -1412,7 +1450,8 @@ def main():
             "Custom: set {NAME}_BASE_URL / _API_KEY / _MODEL."
         )
     )
-    parser.add_argument("file", nargs="?", default=None, help="Image/video/audio/PDF path or URL")
+    parser.add_argument("file", nargs="?", default=None,
+                        help="Image/video/audio/PDF path or URL; B 站 / 抖音 / 小红书 links and share messages go through genius-download")
     parser.add_argument(
         "mode", nargs="?", default="describe", choices=list(PROMPTS.keys()), help="Analysis mode",
     )
@@ -1517,6 +1556,9 @@ def main():
 
         if args.no_long_video:
             os.environ["VISION_LONG_VIDEO"] = "0"
+
+        args.file = fetch_link(args.file, provider_conf(args.provider, model=args.model, base_url=args.base_url,
+                                                        api_key=args.api_key, kind="video")["api_style"])
 
         if args.proxy_only:
             kind = media_kind(args.file)

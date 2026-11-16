@@ -25,10 +25,11 @@ python3 "<skill_dir>/scripts/vision.py" screenshot.png ui-review
 python3 "<skill_dir>/scripts/vision.py" document.jpg ocr --output json
 python3 "<skill_dir>/scripts/vision.py" before.png compare --compare-with after.png
 
-# Video / YouTube (long local media is split by the computed plan)
+# Video / YouTube / B 站 / 抖音 / 小红书 (long local media is split by the computed plan)
 python3 "<skill_dir>/scripts/vision.py" meeting.mp4 video-summary
 python3 "<skill_dir>/scripts/vision.py" lecture-2h.mp4 video-summary --no-long-video
 python3 "<skill_dir>/scripts/vision.py" "https://www.youtube.com/watch?v=..." video-summary
+python3 "<skill_dir>/scripts/vision.py" "https://www.bilibili.com/video/BV..." video-summary   # downloaded via genius-download first
 
 # Audio
 python3 "<skill_dir>/scripts/vision.py" clip.mp3 describe          # → audio-summary
@@ -86,7 +87,7 @@ Other errors exit 1; `--check` with missing tools exits 2.
 | **`cpa`（默认）** | `gemini` native | `gemini-4-hydrogen-xhigh` for every media kind | `https://cpa-jp.charles-ai.space/v1` | `CPA_API_KEY` |
 | `mimo` | `openai` | `mimo-v2.6-pro` | `MIMO_BASE_URL` (default `https://api.xiaomimimo.com/v1`) | `MIMO_API_KEY` (falls back to genius-voice's `scripts/.env`) |
 
-- `mimo` (Xiaomi MiMo) takes images, video with its audio track (2 frames per second) and audio (`mp3` / `wav` / `flac` / `m4a` / `ogg`), all inline as base64; it thinks before every answer, and the thinking counts against `VISION_MAX_TOKENS`. It does not read YouTube links (the script stops with `UNSUPPORTED_FORMAT`) or whole PDFs (pages are rendered with `pdftoppm` and read one by one). Download YouTube videos first.
+- `mimo` (Xiaomi MiMo) takes images, video with its audio track (2 frames per second) and audio (`mp3` / `wav` / `flac` / `m4a` / `ogg`), all inline as base64; it thinks before every answer, and the thinking counts against `VISION_MAX_TOKENS`. It does not fetch YouTube links (the script downloads them through genius-download first) or read whole PDFs (pages are rendered with `pdftoppm` and read one by one).
 - CPA uses `gemini-4-hydrogen-xhigh` for every media kind and sends `generationConfig.thinkingConfig.thinkingLevel: "high"` on every request; the `-xhigh` model-name suffix alone does not set the level. `--model`, `CPA_MODEL` or `VISION_MODEL` override the model.
 - `gemini` → `POST {root}/v1beta/models/{model}:generateContent`; local media `inline_data`, YouTube / URLs `file_data.file_uri`, PDF `application/pdf`.
 - `openai` → `POST {base}/chat/completions`; `image_url` / `video_url` / `input_audio`.
@@ -128,7 +129,7 @@ One-off override without editing `.env`: `--provider <name> --base-url <url> --a
 | Kind | Extensions |
 |---|---|
 | Image | jpg / png / gif / webp / bmp (SVG: convert to PNG first) |
-| Video | mp4 / mov / avi / mkv / webm / flv / wmv / m4v / YouTube |
+| Video | mp4 / mov / avi / mkv / webm / flv / wmv / m4v / YouTube; B 站 / 抖音 / 小红书 links and share messages (downloaded through genius-download) |
 | Audio | mp3 / wav / flac / m4a / ogg / aac / wma / opus / aiff (wma / aiff are converted to AAC first) |
 | PDF | pdf |
 

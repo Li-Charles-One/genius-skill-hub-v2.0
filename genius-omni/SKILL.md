@@ -2,7 +2,7 @@
 name: genius-omni
 description: "Genius 多模态视听分析：用于图像理解、UI 界面分析、文档/PDF OCR 文字提取，以及音视频总结、制作点评与声景分析。不要用于语音转文字（含带时间轴/说话人的逐字转写）、朗读配音或声音克隆（用 genius-voice）；不要用于逐帧精确的镜头表或给剪辑做素材说明书 .footage.md（用 genius-footage）。"
 metadata:
-  version: "4.4.0"
+  version: "4.5.0"
 ---
 
 # Genius Omni（视听）
@@ -23,7 +23,7 @@ Config, providers, proxy and verification: `references/usage.md`. Trigger checks
 | Read a chart | `chart-data` |
 | List objects in a picture | `object-detect` |
 | Diff two pictures | `compare` (`--compare-with <second>`) |
-| What happened in this video / YouTube | `video-summary` |
+| What happened in this video / YouTube / B 站 / 抖音 / 小红书 link | `video-summary` |
 | Text visible in a video | `video-ocr` |
 | Critique a recording | `video-review` |
 | What is in this audio | `audio-summary` |
@@ -41,6 +41,7 @@ python3 "<skill_dir>/scripts/vision.py" --check
 
 `<skill_dir>` is this skill folder; on Windows use `python`. Needs `ffmpeg` / `ffprobe`, plus `pdftoppm` only for page-mode PDF. No Python packages to install. Keys live in `scripts/.env`, never in the package.
 
+- B 站 / 抖音 / 小红书 links and whole share messages (「复制打开抖音… https://v.douyin.com/…」, quoted as one argument) are downloaded first through the genius-download skill, then analysed as a local file; YouTube too on `mimo` and other OpenAI-style providers. Direct media URLs and YouTube on CPA are passed as-is. Without genius-download such a link fails with `DEPENDENCY_MISSING`.
 - Note the video length or PDF page count before running. A missing local file fails with `INPUT_NOT_FOUND`; URLs are not pre-checked.
 - Local audio/video of any size or codec needs no preparation: the script probes it, prints `plan: …` (as-is, one proxy, or N segments), encodes once and caches the proxy. Do not transcode or split it yourself.
 - PDF: CPA reads the whole document in one request; OpenAI-style providers such as `mimo` (or `VISION_PDF_PAGES=1`) render pages and analyze them one by one.
@@ -61,6 +62,6 @@ Failures print `Error [CODE]: …` with a non-zero exit. Report the code and mes
 
 ## Gotchas
 
-- YouTube works on Gemini-style providers (CPA); on `mimo` and other OpenAI-style providers the script stops with `UNSUPPORTED_FORMAT`: download the video and pass the file.
+- YouTube is fetched by Gemini-style providers (CPA) directly; on `mimo` and other OpenAI-style providers it is downloaded through genius-download first.
 - MiMo always thinks first and the thinking counts against `VISION_MAX_TOKENS`: an answer that comes back empty usually ran out of output budget.
 - Proxy, PDF page and segment index files live under system TEMP (`genius-omni-proxy/`, `genius-omni-index/`) and are purged after 30 days.
