@@ -2,7 +2,7 @@
 name: genius-footage
 description: "Genius 素材说明书：给一条视频（素材或成片）生成剪辑用的 .footage.md：逐帧精确的镜头表、带说话人和可下刀点的台词表、人物、内容分段、金句、重拍与废片、可能听错的词；口播（一镜到底、单人对镜头讲）可加口播模式，另出停顿、语气词、句内重复起头和按字精确到帧的精剪建议；拉片模式给一条或几条参考片（本地文件或链接）出拉片报告：结构与叙事、节奏数据与剪辑手法、视听语言、包装和可借鉴手法，几条一起拉时另出一份汇总对比；多条素材并行，素材可以是本地文件或视频链接；也可只出逐帧精确的镜头表，或只出花字表（成片里每个花字、人名条的原文、入点出点、位置和出场方式）。用户说「给这条素材做说明书」「帮我筛一下这条素材」「这条素材能用哪些、哪句可以下刀」「一共几个镜头、每个镜头第几帧到第几帧」「先把这个片子逐帧过一遍」「这条口播帮我出说明书和精剪建议」「口播里哪些停顿、口误、重复要剪掉」「这片子一共多少花字、每个什么时候出现」「把花字时间扒出来，我要重做花字」「帮我拉一下这几条参考片」「拉片，看看人家怎么剪的」「这几条素材一起跑说明书」时使用。不要用于一般的视频总结或点评（用 genius-omni），不要用于单纯语音转文字（用 genius-voice），不要用于只下载视频不分析（用 genius-download），不要用于实际剪辑、拼时间线、导出或生成视频（口播模式只给精剪建议）。"
 metadata:
-  version: "2.12.0"
+  version: "2.12.1"
 ---
 
 # Genius Footage（素材说明书）
@@ -51,7 +51,7 @@ Use `--talking-head` when the clip is one person talking to camera in one take (
 
 ## Several Clips（并行）
 
-Pass several clips (or links) to one command: they run `--jobs` (default 6) at a time, and the text report has one section per clip. Do not start several commands at once instead: the cap on model requests in flight, `--max-requests` (default `FOOTAGE_MAX_REQUESTS` or 8), is per process, and more risks 429 / 5xx from the provider (retried after 5 / 15 / 30 s; lower the cap if retries pile up). One clip failing does not stop the others; its section shows `Error [CODE]` and the exit code is the first failure's.
+Pass several clips (or links) to one command: they run `--jobs` (default 6) at a time, and the text report has one section per clip. Do not start several commands at once instead: the cap on model requests in flight, `--max-requests` (default `FOOTAGE_MAX_REQUESTS` or 8), is per process, and more risks 429 / 5xx from the provider (retried after 5 / 15 / 30 s; lower the cap if retries pile up). Of those, requests carrying a whole-clip video (~30MB each) are capped at `FOOTAGE_MAX_VIDEO_REQUESTS` (default 2): more at once ran the CPA relay out of memory. One clip failing does not stop the others; its section shows `Error [CODE]` and the exit code is the first failure's.
 
 ## Breakdown（拉片）
 

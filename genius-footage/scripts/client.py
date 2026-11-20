@@ -9,6 +9,7 @@ cuts, transcript). Config comes from the environment or scripts/.env, else geniu
     MIMO_API_KEY                       required for mimo-* models
     MIMO_BASE_URL                      default https://api.xiaomimimo.com/v1
     FOOTAGE_MAX_REQUESTS               model requests in flight across all clips of one run (default 8)
+    FOOTAGE_MAX_VIDEO_REQUESTS         of those, requests carrying a video (default 2)
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ PROXY_FPS, PROXY_SCALE, AUDIO_KBPS = 2, 1280, 64
 BUDGET_BYTES = 30 * 1024 * 1024        # one inline request
 MAX_VIDEO_SEC = 1800                   # longer clips skip the whole-clip step
 MAX_REQUESTS = 8                       # all clips of one run share this cap
+MAX_VIDEO_REQUESTS = 2                 # of those, ~30MB video requests: more at once ran the CPA relay out of memory
 EXIT_CODES = {"INPUT_NOT_FOUND": 3, "UNSUPPORTED_FORMAT": 4, "DEPENDENCY_MISSING": 5,
               "PROVIDER_ERROR": 6, "TIMEOUT": 7}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mxf"}
@@ -107,6 +109,19 @@ def set_limit(n: int) -> None:
 
 
 set_limit(int(_env("FOOTAGE_MAX_REQUESTS") or MAX_REQUESTS))
+_video_gate = threading.BoundedSemaphore(max(1, int(_env("FOOTAGE_MAX_VIDEO_REQUESTS") or MAX_VIDEO_REQUESTS)))
+
+
+class _Gates:
+    """Holds a video slot, then a slot of the overall cap; reusable across retries."""
+
+    def __enter__(self):
+        _video_gate.acquire()
+        _gate.acquire()
+
+    def __exit__(self, *exc):
+        _gate.release()
+        _video_gate.release()
 
 
 def conf(model: str | None = None) -> dict:
@@ -190,13 +205,14 @@ def call(c: dict, files: list[str], prompt: str, timeout: float) -> str:
     proxy = next((os.environ[n] for n in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY",
                                           "all_proxy") if os.environ.get(n)), None)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy} if proxy else {}))
+    gate = _Gates() if any(m.startswith("video/") for m, _ in media) else _gate
     if c["model"].startswith("mimo-"):
         content = [{"type": "video_url", "video_url": {"url": f"data:{m};base64,{d}"}, "fps": PROXY_FPS}
                    if m.startswith("video/") else {"type": "image_url", "image_url": {"url": f"data:{m};base64,{d}"}}
                    for m, d in media]
         _, data = post(f"{c['base_url']}/chat/completions", {"Authorization": f"Bearer {c['api_key']}"},
                        {"model": c["model"], "messages": [{"role": "user", "content": content + [{"type": "text", "text": prompt}]}],
-                        "max_completion_tokens": 32768, "thinking": {"type": "enabled"}}, timeout, opener, _gate)
+                        "max_completion_tokens": 32768, "thinking": {"type": "enabled"}}, timeout, opener, gate)
         text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
     else:
         root = re.sub(r"/(v1|v1beta/openai|openai)$", "", c["base_url"])
@@ -205,7 +221,7 @@ def call(c: dict, files: list[str], prompt: str, timeout: float) -> str:
                        {"Authorization": f"Bearer {c['api_key']}", "x-goog-api-key": c["api_key"]},
                        {"contents": [{"role": "user", "parts": parts + [{"text": prompt}]}],
                         "generationConfig": {"maxOutputTokens": 32768,
-                                             "thinkingConfig": {"thinkingLevel": "high"}}}, timeout, opener, _gate)
+                                             "thinkingConfig": {"thinkingLevel": "high"}}}, timeout, opener, gate)
         texts, thoughts = [], []
         for cand in data.get("candidates") or []:
             for part in (cand.get("content") or {}).get("parts") or []:
