@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Offline self-test for genius-footage: no network, no model, no keys. Needs ffmpeg.
+Offline self-test for genius-footage: no network, no language model, no keys. Needs ffmpeg and the local
+TransNetV2 set up by setup.py.
 
     python3 selftest.py
 
 Builds a 7.4 s test clip (hard cut, fade through black, dissolve) and checks that measure.py puts the cuts on
-the built frames, that storyboard.grab returns exactly the frames asked for (against one ffmpeg per frame),
+the built frames, how frame differences and TransNetV2 are combined (agreed cuts, flash clusters, one-sided
+cuts, skipped suspects), the timecode rate of a 24p picture on a 60 timebase,
+that storyboard.grab returns exactly the frames asked for (against one ffmpeg per frame),
 the frame arithmetic of lines, cut points, talking-head marks and keep[], the overlay enter / leave wording,
 client.ask / client.cached, and footage.run end to end with a scripted model and transcript. Run it after
 editing any script here.
@@ -21,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from fractions import Fraction
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,6 +34,7 @@ import footage
 import measure
 import overlays
 import storyboard
+import transnet
 
 FPS, SIZE = 25, "320x180"
 failures = []
@@ -52,6 +57,33 @@ def build_clip(path: Path) -> None:
                     "-pix_fmt", "yuv420p", str(path)], check=True)
 
 
+def test_fuse() -> None:
+    """Frame differences against TransNetV2 on made-up scores: an agreed cut, a flash cluster TransNetV2 places
+    inside, a cluster it does not see, a transition only it sees, a fade through black, a suspect it scores ~0
+    (skipped) and one it scores 0.3 (kept)."""
+    n = 100
+    d1, single, many = [1.0] * n, [0.0] * n, [0.0] * n
+    single[19] = single[39] = 0.9
+    for f in range(45, 50):
+        many[f] = 0.9
+    for f in range(80, 84):
+        many[f] = 0.7
+    many[91] = 0.3
+    starts = {20: "cut", 40: "cut", 41: "cut", 42: "cut", 50: "black", 60: "cut", 62: "cut"}
+    suspects = [{"first": 10, "last": 10, "kind": "weak-cut", "change": 4.0},
+                {"first": 90, "last": 92, "kind": "gradual", "change": 20.0}]
+    got_starts, got_spans, got, stats = measure.fuse(starts, {50: (45, 49)}, suspects, d1, single, many)
+    check("fuse: confirmed", (got_starts, got_spans), ({20: "cut", 40: "cut", 50: "black"}, {50: (45, 49)}))
+    check("fuse: suspects", [(s["first"], s["last"], s["kind"], s["by"], s.get("cuts"), s.get("check")) for s in got],
+          [(10, 10, "weak-cut", "frames", None, "skipped"), (60, 62, "weak-cut", "frames", [60, 62], None),
+           (80, 83, "gradual", "transnet", None, None), (90, 92, "gradual", "frames", None, None)])
+    check("fuse: stats", stats, {"agreed": 2, "one_sided": 1, "added": 1, "skipped": 1})
+    check("tc rate: 24p on a 60 timebase", measure.tc_rate({"fps": Fraction(60), "avg_fps": Fraction(43260, 1801)}), 24)
+    check("tc rate: constant and phone VFR", [measure.tc_rate({"fps": Fraction(a), "avg_fps": Fraction(b)}) for a, b in
+                                              (("25", "25"), ("30", "2960/100"), ("30000/1001", "30000/1001"))], [25, 30, 30])
+    check("tc at 24 fps", measure.frames_to_tc(126, 24, False), "00:00:05:06")
+
+
 def one_frame(path: str, seek: list, frame: int, crop=None) -> bytes:
     """The reference grab: one ffmpeg per frame."""
     w, h = storyboard.CELL
@@ -68,12 +100,16 @@ def test_measure_and_grab(tmp: Path) -> None:
     r = measure.measure(clip)
     check("frames", r["frames"], 185)
     check("shot starts", [(s["first"], s["via"]) for s in r["shots"]], [(0, "start"), (50, "cut"), (102, "black")])
-    check("dissolve is a suspect", [s["kind"] for s in r["suspects"] if s["first"] <= 149 and s["last"] >= 135], ["gradual"])
+    check("dissolve is a suspect", [(s["kind"], s["by"]) for s in r["suspects"] if s["first"] <= 149 and s["last"] >= 135],
+          [("gradual", "both")])
+    check("hard cut confirmed by both detectors", (r["transnet"]["agreed"], r["transnet"]["added"]), (1, 0))
     proxy = tmp / "proxy.mp4"   # the whole-clip proxy from the same decode must not change what is measured
     both = measure.measure(clip, (client.PROXY_VF, client.proxy_output(500, client.PROXY_ENCODERS[-1], proxy)))
     check("measure with a second output", (both == r, proxy.stat().st_size > 0), (True, True))
     measure.add_boundaries(r, {135: "storyboard"})
     check("added boundary", [s["id"] for s in r["shots"] if s["first"] == 135], ["S004"])
+    r["suspects"].append({"first": 120, "last": 120, "kind": "weak-cut", "cuts": [120]})
+    check("measured cuts restored", [s["first"] for s in measure.restore_measured_cuts(r)["shots"]], [0, 50, 102, 120, 135])
 
     seek = measure.frame_times(clip, for_seek=True)
     crop = (40, 20, 160, 90)
@@ -261,6 +297,12 @@ def test_run(tmp: Path) -> None:
 
 
 def main() -> int:
+    transnet.reexec()
+    reason = transnet.missing()
+    if reason:
+        print(f"FAILED: TransNetV2 not ready: {reason}")
+        return 1
+    test_fuse()
     with tempfile.TemporaryDirectory() as d:
         test_measure_and_grab(Path(d))
         test_lines()

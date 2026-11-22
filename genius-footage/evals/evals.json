@@ -66,6 +66,21 @@
       ]
     },
     {
+      "id": "transnet-not-set-up",
+      "prompt": "给 clip.mp4 做素材说明书（这台机器第一次用，footage.py 报 Error [DEPENDENCY_MISSING]: TransNetV2: onnxruntime is not installed (run scripts/setup.py)）",
+      "trigger_expected": true,
+      "expected_output": "Runs scripts/setup.py once, then reruns footage.py on the clip; does not skip shot detection or install packages into the system Python.",
+      "files": [
+        "SKILL.md"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "setup.py"
+        }
+      ]
+    },
+    {
       "id": "summary-near-miss",
       "prompt": "这个视频讲了什么，帮我总结一下 talk.mp4",
       "trigger_expected": false,

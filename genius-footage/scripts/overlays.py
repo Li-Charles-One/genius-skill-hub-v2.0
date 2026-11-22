@@ -28,6 +28,7 @@ from pathlib import Path
 
 import client
 import measure
+import transnet
 import storyboard
 from client import VIDEO_EXTENSIONS, FootageError
 
@@ -386,12 +387,12 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS) -> dict:
     if targets:
         edges(src, c, v, seek, out_dir, targets)
     try:
-        r = cuts_job.result()
+        r = measure.restore_measured_cuts(cuts_job.result())  # no suspect check here: every measured cut counts
     except measure.MeasureError as e:
-        raise FootageError("UNSUPPORTED_FORMAT", str(e))
+        raise FootageError("DEPENDENCY_MISSING" if isinstance(e, measure.MissingDependency) else "UNSUPPORTED_FORMAT", str(e))
     bg.shutdown()
     v["warnings"] += list(dict.fromkeys(f"模型请求失败 [{e.code}]：{e}" for e in v["errors"]))
-    _, tc, _, times = measure._clock(src, str(info["fps"]), info["timecode"])
+    _, tc, _, times = measure._clock(src, str(info["fps"]), info["timecode"], measure.tc_rate(info))
     last = r["frames"] - 1
     t_of = lambda f: times[f] if f < len(times) else f / fps  # noqa: E731
     counter = {"花字": 0, "人名条": 0}
@@ -414,7 +415,7 @@ def run(src: str, c: dict, fps_find: float = FIND_FPS) -> dict:
     review = [f"{t['id']}：{x}" for t in targets for x in t["review"]]
     doc = {"tool": "genius-footage overlays.py", "file": clip.name, "generated":
            datetime.now().astimezone().isoformat(timespec="seconds"), "model": c["model"],
-           "width": v["width"], "height": v["height"], "fps": round(fps, 3), "frames": r["frames"],
+           "width": v["width"], "height": v["height"], "fps": round(fps, 3), "tc_fps": measure.tc_rate(info), "frames": r["frames"],
            "duration": r["duration"], "timecode_start": info["timecode"], "sample_every_frames": step,
            "edge_every_frames": every, "cuts": [s["first"] for s in r["shots"][1:]], "check_sheets": checks,
            "status": "needs_review" if review or v["warnings"] else "ok",
@@ -479,7 +480,7 @@ def fix(src: str, edits: list[str]) -> dict:
     timecode, duration and enter / leave wording, and record the check. No edits: checked, nothing to change."""
     path, doc = _load(src)
     fps, last = doc["fps"], doc["frames"] - 1
-    nominal = round(fps)
+    nominal = doc.get("tc_fps") or round(fps)
     start, df = measure.tc_to_frames(doc["timecode_start"], nominal) if doc.get("timecode_start") else (0, False)
     edges_ = [0] + doc["cuts"] + [doc["frames"]]
     shots = [{"first": a, "last": b - 1} for a, b in zip(edges_, edges_[1:])]
@@ -600,6 +601,7 @@ def main() -> None:
                         help="Agent check: frames cropped to overlay ID ('full' = whole frame), labelled with frame numbers")
     parser.add_argument("--fix", nargs="*", metavar="EDIT",
                         help="Agent check: apply 'ID in=N' / 'ID out=N' / 'ID text=…' / 'ID drop'; none = checked, no change")
+    transnet.reexec()
     args = parser.parse_args()
     c = client.conf(args.model)
     try:

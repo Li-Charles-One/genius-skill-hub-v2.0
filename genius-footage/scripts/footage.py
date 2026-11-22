@@ -5,7 +5,8 @@ Genius Footage — AG_FOOTAGE/1.1 brief for one clip (`<clip>.footage.md` + `.fo
     python3 footage.py <clip|url> [<clip|url> …] [--talking-head | --breakdown] [--jobs 6] [--script FILE]
     python3 footage.py --check
 
-Steps: measure.py (cuts frame by frame) → storyboard check of doubtful cuts → per-shot description from
+Steps: measure.py (cuts frame by frame, frame differences checked against TransNetV2) → storyboard check of
+doubtful cuts → per-shot description from
 storyboards → asr.py, Doubao ASR with speakers (words → frames, cut points) → one whole-clip request where
 the model answers with IDs only (S001, U001, P1, G01) → IDs converted to frames and timecode → validate.
 --talking-head (口播): doubtful cuts are not checked; pauses, fillers and restarts come from word times; the
@@ -36,6 +37,7 @@ import asr
 import client
 import measure
 import storyboard
+import transnet
 from asr import SpeechError
 from client import FootageError
 
@@ -342,7 +344,7 @@ def build(r: dict, utts: list, ov: dict, asr_note: str | None, tools: dict, fing
         uncertain.append(f"台词缺失：{asr_note}")
     doc = {"protocol": PROTOCOL, "file": Path(r["file"]).name, "fingerprint": fingerprint, "generated": generated,
            "tools": tools,
-           "video": {k: r[k] for k in ("width", "height", "codec", "fps", "fps_rational", "frames", "duration",
+           "video": {k: r[k] for k in ("width", "height", "codec", "fps", "fps_rational", "tc_fps", "frames", "duration",
                                        "timecode_start", "drop_frame")},
            "audio": audio, "summary": ov.get("summary", ""), "footage": ov.get("footage", ""), "people": people, "segments": segments,
            "shots": r["shots"], "utterances": utts, "highlights": ov.get("highlights") or {},
@@ -462,7 +464,7 @@ def _render_talking_head(doc: dict, tc) -> list[str]:
 
 def _tc(doc: dict):
     v = doc["video"]
-    nominal = round(v["fps"])
+    nominal = v.get("tc_fps") or round(v["fps"])
     start, df = measure.tc_to_frames(v["timecode_start"], nominal) if v["timecode_start"] else (0, False)
     return lambda i: measure.frames_to_tc(start + i, nominal, df)
 
@@ -583,11 +585,13 @@ SHOT_MIDDLE_SEC = 4.0  # shots at least this long get a middle frame on the stor
 def check_suspects(src: str, c: dict, r: dict, seek: list, out_dir: Path) -> None:
     """1. Suspects: a one-frame jump gets six frames each side, a sustained change nine frames per second
     across it. The model judges: what changes, on which cell, and whether a new shot starts there. A new shot
-    starts on the cell it points to; unsure ones stay unresolved for review."""
-    if not r["suspects"]:
+    starts on the cell it points to; unsure ones stay unresolved for review. Suspects measure.py marked skipped
+    (TransNetV2 scored them below its skip level) are not sent."""
+    todo = [s for s in r["suspects"] if "check" not in s]
+    if not todo:
         return
     last = r["frames"] - 1
-    ids = {f"X{i:02d}": s for i, s in enumerate(r["suspects"], 1)}
+    ids = {f"X{i:02d}": s for i, s in enumerate(todo, 1)}
     groups, span_of, cells = [], {}, {}  # cells: label → frame
     for x, s in ids.items():
         if s["kind"] == "weak-cut":
@@ -649,7 +653,7 @@ def measured(src: str, duration: float) -> dict:
     try:
         return client.cached(src, "measure", fresh, measure.__file__)
     except measure.MeasureError as e:
-        raise FootageError("DEPENDENCY_MISSING" if "not found on PATH" in str(e) else "UNSUPPORTED_FORMAT", str(e))
+        raise FootageError("DEPENDENCY_MISSING" if isinstance(e, measure.MissingDependency) else "UNSUPPORTED_FORMAT", str(e))
 
 
 def shots(src: str, c: dict, r: dict, out_dir: Path, seek: list, talking_head: bool = False) -> dict:
@@ -661,10 +665,12 @@ def shots(src: str, c: dict, r: dict, out_dir: Path, seek: list, talking_head: b
     r["storyboards"] = []
     r["measured_shots"] = r["shot_count"]
     if talking_head:  # one take with a hand-held camera: weak suspects are shake, not cuts
+        measure.restore_measured_cuts(r)  # every measured hard cut counts, as before TransNetV2
+        weak = [s for s in r["suspects"] if not s.get("cuts")]
         for s in r["suspects"]:
-            s.update(check="skipped")
-        if r["suspects"]:
-            r["warnings"].append(f"口播模式：{len(r['suspects'])} 处弱疑似切点未核对，镜头只按测得的硬切划分")
+            s.setdefault("check", "skipped")
+        if weak:
+            r["warnings"].append(f"口播模式：{len(weak)} 处弱疑似切点未核对，镜头只按测得的硬切划分")
     else:
         check_suspects(src, c, r, seek, out_dir)
 
@@ -1007,7 +1013,7 @@ def run(src: str, c: dict, script: str | None = None, talking_head: bool = False
         raise r["errors"][0]  # the model gave nothing at all (bad key, gateway down): fail as before
     r["warnings"] += list(dict.fromkeys(f"模型请求失败 [{e.code}]：{e}（缺的部分见待确认，重跑可补）" for e in r["errors"]))
     doc = build(r, utts, ov, asr_note,
-                {"measure": "genius-footage measure.py", "asr": asr_model, "storyboard": c["model"],
+                {"measure": "genius-footage measure.py + TransNetV2", "asr": asr_model, "storyboard": c["model"],
                  "overview": c["model"] if ov else None},
                 client.fingerprint(src), datetime.now().astimezone().isoformat(timespec="seconds"),
                 audio_info(src), marks)
@@ -1117,19 +1123,21 @@ def main() -> None:
     parser.add_argument("--no-compare", action="store_true", help="--breakdown with several films: skip the comparison")
     parser.add_argument("--download-dir", default=None, help="Where links are downloaded (default genius-download's)")
     parser.add_argument("--cookies-from-browser", default=None, help="yt-dlp cookies for links that need a login (chrome, safari…)")
-    parser.add_argument("--check", action="store_true", help="Check ffmpeg, the model key and the ASR key")
+    parser.add_argument("--check", action="store_true", help="Check ffmpeg, TransNetV2, the model key and the ASR key")
+    transnet.reexec()
     args = parser.parse_args()
     c = client.conf(args.model)
     if args.max_requests:
         client.set_limit(args.max_requests)
     if args.check:
-        ff, asr_key = shutil.which("ffmpeg") and shutil.which("ffprobe"), asr.find_key()
+        ff, asr_key, tn = shutil.which("ffmpeg") and shutil.which("ffprobe"), asr.find_key(), transnet.missing()
         print(f"ffmpeg:       {shutil.which('ffmpeg') or 'MISSING'}\n"
+              f"transnet:     {'MISSING: ' + tn if tn else transnet.MODEL}\n"
               f"model:        {c['model']} @ {c['base_url']} key={'yes' if c['api_key'] else 'no'}\n"
               f"asr:          {asr.ASR_MODEL} key={'yes' if asr_key else 'no (no transcript)'}\n"
               f"links:        {download_py() or 'genius-download not found (links unsupported)'}\n"
               f"cache:        {client.CACHE_DIR} (whole-clip proxies, measured cuts, transcripts; delete to start fresh)")
-        ok = bool(ff and c["api_key"] and asr_key)
+        ok = bool(ff and not tn and c["api_key"] and asr_key)
         print("ok" if ok else "NOT READY")
         sys.exit(0 if ok else 2)
     if not args.files:
